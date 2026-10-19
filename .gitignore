@@ -1,0 +1,33 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# testing
+/coverage
+
+# misc
+.DS_Store
+*.pem
+
+# env
+.env
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# deploy env (live infra ids - supplied to Amplify as env vars, not committed)
+.env.deploy
+
+# local build/verify logs
+*.log
+
+# local scratch
+_dev.txt

@@ -1,0 +1,1092 @@
+/* TripGenie Editorial + Glassmorphism + Motion - tokens mirror lib/design-system.ts */
+:root {
+  --ink: #1a1714;
+  --paper: #f4efe6;
+  --accent: #b84a2e;
+  --accent-alt: #363f2a;
+  --gold: #c49e45;
+  --font-display: Garamond, "Times New Roman", serif;
+  --font-body: Inter, system-ui, sans-serif;
+  /* Type scale (each step >= 1.25x the next) */
+  --type-display: 3rem;
+  --type-h1: 2.25rem;
+  --type-h2: 1.75rem;
+  --type-h3: 1.25rem;
+  --type-body: 1rem;
+  /* Glass opacity band 0.60-0.85 */
+  --glass-opacity: 0.72;
+  --surface-booking-opacity: 1.0;
+  /* Motion */
+  --motion-duration: 400ms;
+  --motion-reduced: 200ms;
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--type-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .display { font-family: var(--font-display); font-weight: 600; line-height: 1.1; letter-spacing: -0.01em; }
+.display { font-size: var(--type-display); }
+h1 { font-size: var(--type-h1); }
+h2 { font-size: var(--type-h2); }
+h3 { font-size: var(--type-h3); }
+
+/* Editorial layout */
+.shell { max-width: 1120px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+.eyebrow { font-family: var(--font-body); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.75rem; color: var(--accent); font-weight: 700; }
+.lead { font-size: 1.15rem; max-width: 54ch; color: color-mix(in srgb, var(--ink) 80%, var(--paper)); }
+
+/* Glass accent surface (accent only, <=30% of cards) */
+.glass {
+  background: color-mix(in srgb, #ffffff calc(var(--glass-opacity) * 100%), transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 18px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 40px rgba(26, 23, 20, 0.1);
+}
+
+/* Opaque booking surface (itinerary/payment/confirmation) - always 100% */
+.booking-surface {
+  background: #ffffff;
+  opacity: var(--surface-booking-opacity);
+  border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+  border-radius: 14px;
+  padding: 1.5rem;
+  color: var(--ink); /* >= 4.5:1 on white */
+}
+
+/* Motion: triggered, time-bounded */
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.motion-rise { animation: rise var(--motion-duration) var(--ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-rise { animation-duration: var(--motion-reduced); animation-name: fade; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+}
+
+.grid-2 { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1.5rem; margin-top: 2.5rem; }
+@media (max-width: 780px) { .grid-2 { grid-template-columns: 1fr; } }
+.cta { display: inline-block; margin-top: 1.5rem; background: var(--accent); color: #fff; padding: 0.75rem 1.25rem; border-radius: 10px; text-decoration: none; font-weight: 600; }
+.row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
+.row:last-child { border-bottom: 0; font-weight: 700; }
+
+/* Planner fields */
+.field { display:block; margin:0 0 1rem; }
+.field > span { display:block; font-size:0.8rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:color-mix(in srgb, var(--ink) 65%, var(--paper)); margin-bottom:0.35rem; }
+.field input { width:100%; padding:0.65rem 0.75rem; border:1px solid color-mix(in srgb, var(--ink) 20%, transparent); border-radius:10px; font:inherit; background:#fff; color:var(--ink); }
+.field input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+.field-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.cta { border:0; cursor:pointer; font:inherit; }
+h1 { margin:0.2rem 0 1.5rem; }
+
+/* ===========================================================================
+   Homepage (Req 22) — Hopper-style, warm editorial. No AI purple gradient.
+   Reuses palette, --type-*, glass (discovery/promo/AI), booking-surface (opaque
+   search panel), and motion-rise. No horizontal overflow at >=320px.
+   =========================================================================== */
+.home { display: flex; flex-direction: column; gap: 2.5rem; }
+.home-hero { max-width: 60ch; }
+
+/* Opaque search panel holding the tabs + active form */
+.home-panel { padding: 1.5rem; }
+
+/* Tab list: exactly one active; keyboard-reachable with visible focus */
+.tablist { display: flex; gap: 0.5rem; border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent); margin-bottom: 1.25rem; flex-wrap: wrap; }
+.tab {
+  appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit;
+  font-weight: 700; color: color-mix(in srgb, var(--ink) 60%, var(--paper));
+  padding: 0.6rem 1rem; border-radius: 10px 10px 0 0; border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover { color: var(--ink); }
+.tab-active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Search forms */
+.search-form { display: block; }
+.field select {
+  width: 100%; padding: 0.65rem 0.75rem; border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 10px; font: inherit; background: #fff; color: var(--ink);
+}
+.field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.field-error { display: block; color: var(--accent); font-size: 0.8rem; font-weight: 600; margin-top: 0.3rem; }
+
+.triptype { border: 0; padding: 0; margin: 0 0 1rem; display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; }
+.triptype legend { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); padding: 0; }
+.radio, .checkbox { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; cursor: pointer; }
+.checkbox { margin-bottom: 1rem; }
+.radio input:focus-visible, .checkbox input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Flights origin/destination swap row */
+.swap-row { grid-template-columns: 1fr auto 1fr; align-items: end; }
+.swap-btn {
+  appearance: none; border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent); background: #fff;
+  color: var(--ink); cursor: pointer; border-radius: 10px; width: 2.6rem; height: 2.7rem; font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+.swap-btn:hover { border-color: var(--accent); color: var(--accent); }
+.swap-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.age-field { max-width: 12rem; }
+
+/* AI planning prompt */
+.home-ai .ai-form { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; }
+.ai-field { flex: 1 1 18rem; margin-bottom: 0; }
+.home-ai .cta { margin-top: 0; }
+
+/* Discovery + popular + continue sections */
+.home-section { display: block; }
+.home-section > h2 { margin: 0 0 1rem; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.25rem; }
+.discovery-card { text-align: left; cursor: pointer; font: inherit; color: var(--ink); }
+.discovery-card h3 { margin: 0 0 0.35rem; }
+.discovery-card p { margin: 0; color: color-mix(in srgb, var(--ink) 75%, var(--paper)); }
+.discovery-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.chip {
+  appearance: none; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); background: #fff;
+  color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 0.5rem 0.9rem; border-radius: 999px;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.home-promo .cta { margin-top: 1rem; }
+
+/* Continue exploring */
+.recent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+.recent-link { display: block; text-decoration: none; color: var(--ink); font-weight: 600; }
+.recent-link:hover { color: var(--accent); }
+.recent-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.empty-state { text-align: left; }
+.empty-state p { margin: 0 0 0.75rem; }
+.empty-state .cta { margin-top: 0.25rem; }
+
+/* Accessible visually-hidden label */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* Keep forms single-column on narrow screens (no horizontal overflow at >=320px) */
+@media (max-width: 560px) {
+  .field-row { grid-template-columns: 1fr; }
+  .swap-row { grid-template-columns: 1fr; }
+  .swap-btn { margin: 0 0 1rem; width: 100%; }
+}
+
+/* ── Editorial focus-ring token (keyboard reachability, Req 21.8/28.7) ── */
+:root { --focus-ring: 2px solid var(--accent); --focus-offset: 2px; }
+
+/* Global keyboard focus fallback (Req 28.7): every interactive control is
+   reachable and shows a visible focus indicator, even any not individually
+   styled above. Mouse focus stays quiet via :focus-visible. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+[role="tab"]:focus-visible,
+[role="button"]:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: 6px;
+}
+
+/* Global_Navigation (Req 21) ─────────────────────────────────────────── */
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--paper) 92%, #ffffff);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.site-nav__bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+.site-nav__logo {
+  font-family: var(--font-display);
+  font-size: var(--type-h3);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-nav__controls {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-left: auto;
+}
+.site-nav__links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.site-nav__link {
+  color: color-mix(in srgb, var(--ink) 80%, var(--paper));
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.35rem 0;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.site-nav__link:hover { color: var(--ink); }
+.site-nav__link.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.site-nav__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.site-nav__account--signin {
+  background: var(--accent);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+}
+.site-nav__account--profile {
+  color: var(--accent-alt);
+  padding: 0.5rem 0;
+}
+.site-nav__account--profile span { color: var(--gold); font-size: 0.7rem; }
+
+/* Compact menu toggle: hidden on wide viewports, shown below 768px (Req 21.6). */
+.site-nav__toggle {
+  display: none;
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 10px;
+  padding: 0.4rem 0.6rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* Visible focus indicator for every nav control (Req 21.8). */
+.site-nav__logo:focus-visible,
+.site-nav__link:focus-visible,
+.site-nav__account:focus-visible,
+.site-nav__toggle:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: 6px;
+}
+
+@media (max-width: 767.98px) {
+  .site-nav__toggle { display: inline-flex; }
+  .site-nav__controls {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    margin-left: 0;
+    padding: 1rem 1.5rem 1.5rem;
+    background: var(--paper);
+    border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    box-shadow: 0 12px 32px rgba(26, 23, 20, 0.12);
+  }
+  .site-nav__controls.is-open { display: flex; }
+  .site-nav__links { flex-direction: column; align-items: stretch; gap: 0.25rem; }
+  .site-nav__link { padding: 0.6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
+  .site-nav__link.is-active { border-bottom-color: var(--accent); }
+  .site-nav__account--signin { text-align: center; }
+}
+
+/* Site_Footer (Req 29) ───────────────────────────────────────────────── */
+.site-footer {
+  margin-top: 4rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-body);
+}
+.site-footer__inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+  padding-top: 3rem;
+  padding-bottom: 2rem;
+}
+.site-footer__brand { flex: 1 1 240px; min-width: 220px; }
+.site-footer__wordmark {
+  font-family: var(--font-display);
+  font-size: var(--type-h2);
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--paper);
+}
+.site-footer__tagline {
+  margin: 0 0 1.25rem;
+  color: color-mix(in srgb, var(--paper) 70%, var(--ink));
+  max-width: 34ch;
+}
+.site-footer__account {
+  display: inline-block;
+  color: var(--gold);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.site-footer__account:hover { border-bottom-color: var(--gold); }
+.site-footer__sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+  flex: 2 1 360px;
+}
+.site-footer__section { min-width: 120px; }
+.site-footer__heading {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin: 0 0 0.9rem;
+}
+.site-footer__links { list-style: none; margin: 0; padding: 0; }
+.site-footer__links li { margin-bottom: 0.55rem; }
+.site-footer__link {
+  color: color-mix(in srgb, var(--paper) 82%, var(--ink));
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.site-footer__link:hover { color: var(--paper); }
+.site-footer__disclosure {
+  padding-top: 1.25rem;
+  padding-bottom: 2.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--paper) 18%, var(--ink));
+}
+.site-footer__disclosure p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--paper) 68%, var(--ink));
+  max-width: 70ch;
+}
+.site-footer__account:focus-visible,
+.site-footer__link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: var(--focus-offset);
+  border-radius: 6px;
+}
+
+/* ===========================================================================
+   Deals_Page (Req 26) — warm editorial. Editorial recommendations (glass accent
+   cards) are visibly separated from bookable offers (opaque booking-surface).
+   Reuses palette, --type-*, glass, booking-surface, motion-rise, chip, card-grid.
+   No horizontal overflow at >=320px.
+   =========================================================================== */
+.deals { display: flex; flex-direction: column; gap: 2.5rem; }
+.deals-hero { max-width: 60ch; }
+
+/* Category controls (reuse .chip / .chip-row; add a pressed/active state) */
+.deals-filters { display: block; }
+.chip-active { border-color: var(--accent); color: #fff; background: var(--accent); }
+.chip-active:hover { color: #fff; border-color: var(--accent); }
+
+/* A small tag that names each region, reinforcing the editorial/bookable split */
+.deals-region-tag {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-alt);
+  margin: 0 0 1rem;
+}
+.deals-region-tag--bookable { color: var(--accent); }
+
+/* Region separation (Req 26.2): editorial reads as a warm paper block; bookable
+   sits on a crisp card-like band so the two bodies are unmistakably distinct. */
+.deals-editorial {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: 1.75rem;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--gold) 12%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--accent-alt) 22%, transparent);
+}
+.deals-bookable {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.75rem;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--ink) 4%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.deals-section { display: block; }
+.deals-section > h2 { margin: 0 0 1rem; }
+.deals-empty { margin: 0; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+
+/* Editorial (non-bookable) accent cards */
+.editorial-card { display: block; }
+.editorial-card h3 { margin: 0 0 0.4rem; }
+.editorial-card p { margin: 0; color: color-mix(in srgb, var(--ink) 78%, var(--paper)); }
+
+/* Bookable offer cards (opaque booking-surface) */
+.offer-card { display: flex; flex-direction: column; gap: 0.5rem; }
+.offer-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.offer-card__head h3 { margin: 0; }
+.offer-card__cat {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--accent-alt);
+  white-space: nowrap;
+}
+.offer-card__detail { margin: 0; color: color-mix(in srgb, var(--ink) 72%, var(--paper)); }
+.offer-card__price { margin: 0; font-weight: 700; font-size: 1.1rem; }
+.offer-card__savings {
+  margin: 0;
+  font-weight: 700;
+  color: var(--accent-alt);
+  background: color-mix(in srgb, var(--gold) 26%, #ffffff);
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  align-self: flex-start;
+}
+.offer-card__code { color: var(--accent); letter-spacing: 0.04em; }
+
+/* Provenance label (OfferMeta, Req 26.5) */
+.offer-provenance {
+  margin-top: 0.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed color-mix(in srgb, var(--ink) 20%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.offer-provenance__badge {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: #fff; background: var(--accent-alt);
+  border-radius: 999px; padding: 0.2rem 0.6rem;
+}
+.offer-provenance--estimated .offer-provenance__badge { background: var(--accent); }
+.offer-provenance__provider { font-size: 0.82rem; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); }
+.offer-provenance__disclaimer {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--ink) 68%, var(--paper));
+}
+
+.offer-card__cta { margin-top: auto; align-self: flex-start; }
+.offer-card__cta:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+@media (max-width: 560px) {
+  .deals-editorial, .deals-bookable { padding: 1.25rem; }
+  .offer-card__head { flex-direction: column; align-items: flex-start; gap: 0.2rem; }
+}
+
+/* ===========================================================================
+   Results_Page + Detail_Page (Cars; shared with Stays/Flights) — Req 25.6-25.11.
+   Offer cards carry a mandatory provenance label; prices sit on opaque
+   booking-surface; no horizontal overflow at >=320px.
+   =========================================================================== */
+
+/* Inline text links reused across booking surfaces. */
+.inline-link { color: var(--accent); font-weight: 600; text-decoration: underline; }
+.inline-link:hover { color: color-mix(in srgb, var(--accent) 80%, var(--ink)); }
+.inline-link:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: 4px; }
+
+.results-summary { margin: 0.25rem 0 1.5rem; }
+.results-summary strong { font-weight: 700; }
+
+/* Sort + filter controls: wrap on narrow viewports, never overflow. */
+.results-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin: 0 0 2rem;
+  padding: 1rem 1.25rem;
+  background: color-mix(in srgb, #ffffff 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 14px;
+}
+.control-field { margin: 0; flex: 1 1 12rem; min-width: 0; }
+.control-submit { margin-top: 0; align-self: end; }
+
+/* Offer card list: responsive grid, single column below ~520px. */
+.offer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 1.5rem;
+}
+
+.offer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  text-decoration: none;
+  color: var(--ink);
+  height: 100%;
+}
+.offer-card:hover { box-shadow: 0 16px 48px rgba(26, 23, 20, 0.16); }
+.offer-card:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+.offer-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.offer-card__title { margin: 0; font-size: var(--type-h3); }
+.offer-card__tag {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--ink) 65%, var(--paper));
+  white-space: nowrap;
+}
+
+.offer-card__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+.offer-card__facts dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--ink) 55%, var(--paper));
+  margin: 0 0 0.2rem;
+}
+.offer-card__facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+
+/* Opaque price surface (Req 15.4/15.5). */
+.offer-card__price { padding: 0.9rem 1rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.5rem; }
+.offer-card__price-main { font-family: var(--font-display); font-size: var(--type-h2); font-weight: 600; }
+.offer-card__price-unit { color: color-mix(in srgb, var(--ink) 65%, var(--paper)); font-weight: 600; }
+.offer-card__price-total { flex-basis: 100%; font-size: 0.85rem; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+
+/* Provenance label (shared component) — always visible on every card. */
+.provenance { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; }
+.provenance__badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  background: #fff;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.provenance__badge[data-mode="live"] { color: var(--accent-alt); border-color: color-mix(in srgb, var(--accent-alt) 45%, transparent); }
+.provenance__badge[data-mode="estimated"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.provenance__note {
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--ink) 72%, var(--paper));
+  overflow-wrap: anywhere;
+}
+.provenance__note--estimated { color: var(--accent); font-weight: 600; }
+
+/* Detail_Page layout. */
+.detail-back { display: inline-block; margin: 0.25rem 0 1rem; text-decoration: none; }
+.detail-panel { margin: 1.5rem 0; }
+.detail-facts { margin: 0; }
+.detail-facts dt { font-weight: 600; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+.detail-facts dd { margin: 0; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
+.detail-facts .row { align-items: baseline; gap: 1rem; }
+.detail-provenance { margin: 0 0 1.5rem; }
+.detail-reviews { margin: 0 0 1.5rem; }
+.detail-reviews h2 { margin: 0 0 0.5rem; }
+
+@media (max-width: 520px) {
+  .offer-list { grid-template-columns: 1fr; }
+  .results-controls { padding: 1rem; }
+  .control-field { flex-basis: 100%; }
+}
+
+/* ===========================================================================
+   Booking_Site Results & Detail pages (Req 23, task 34.1). Reuses booking-surface
+   (opaque, ≥4.5:1 — price/detail), glass only for accent, motion-rise, --type-*.
+   No horizontal overflow at ≥320px (fluid grids + wrapping controls).
+   =========================================================================== */
+
+/* Provenance label + estimated disclosure styles are provided by the shared
+   offer-provenance component's CSS (.provenance / .estimated-notice), reused
+   here — not redefined, to avoid colliding with the shared definitions. */
+
+/* Results page */
+.results { display: flex; flex-direction: column; gap: 1.75rem; }
+.results__summary h1 { margin: 0.3rem 0 0.5rem; }
+.results__partial { margin: 0; color: color-mix(in srgb, var(--ink) 72%, var(--paper)); font-size: 0.92rem; }
+.results__edit { margin: 0.5rem 0 0; }
+.results__edit-link, .detail__back-link {
+  color: var(--accent); font-weight: 700; text-decoration: none; border-bottom: 2px solid transparent;
+}
+.results__edit-link:hover, .detail__back-link:hover { border-bottom-color: var(--accent); }
+.results__edit-link:focus-visible, .detail__back-link:focus-visible {
+  outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: 6px;
+}
+
+/* Sort + filter controls (opaque, legible) */
+.results__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+.results__controls .field { margin: 0; flex: 1 1 12rem; }
+.results__apply { margin-top: 0; }
+
+.results__error p, .results__empty p { margin: 0 0 0.75rem; }
+.results__error .cta, .results__empty .cta { margin-top: 0.25rem; }
+
+/* Fluid offer grid — collapses to one column well before 320px */
+.results__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+@media (max-width: 560px) {
+  .results__grid { grid-template-columns: 1fr; }
+  .results__controls { flex-direction: column; align-items: stretch; }
+}
+
+/* Offer card (opaque booking-surface) */
+.offer-card { display: flex; flex-direction: column; gap: 0.5rem; }
+.offer-card__link { text-decoration: none; color: var(--ink); }
+.offer-card__link:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: 6px; }
+.offer-card__title { margin: 0; }
+.offer-card__link:hover .offer-card__title { color: var(--accent); }
+.offer-card__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0.25rem 0;
+}
+.offer-card__facts dt {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+  color: color-mix(in srgb, var(--ink) 60%, var(--paper));
+}
+.offer-card__facts dd { margin: 0.1rem 0 0; font-weight: 600; }
+.offer-card__muted { font-weight: 400; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); font-size: 0.85rem; }
+.offer-card__note, .offer-card__reviews {
+  margin: 0; font-size: 0.85rem; color: color-mix(in srgb, var(--ink) 72%, var(--paper));
+}
+.offer-card__cta { align-self: flex-start; margin-top: 0.5rem; }
+
+/* Detail page (core booking surface — opaque, ≥4.5:1) */
+.detail { display: flex; flex-direction: column; gap: 1.25rem; }
+.detail__back { margin: 0; }
+.detail__panel { display: flex; flex-direction: column; gap: 1rem; }
+.detail__title { margin: 0.2rem 0 0.5rem; }
+.detail__image {
+  display: flex; align-items: flex-end; justify-content: flex-start;
+  min-height: 220px;
+  border-radius: 12px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--accent-alt) 60%, var(--paper)),
+    color-mix(in srgb, var(--accent) 45%, var(--paper)));
+  padding: 0.75rem;
+  overflow: hidden;
+}
+.detail__image-caption {
+  background: color-mix(in srgb, var(--ink) 70%, transparent);
+  color: var(--paper);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}
+.detail__description { margin: 0; max-width: 62ch; }
+.detail__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem 1.25rem;
+  margin: 0;
+}
+.detail__facts dt {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+  color: color-mix(in srgb, var(--ink) 60%, var(--paper));
+}
+.detail__facts dd { margin: 0.15rem 0 0; font-weight: 600; }
+.detail__amenities h2, .detail__reviews h2 { margin: 0 0 0.5rem; font-size: var(--type-h3); }
+.detail__amenities ul { margin: 0; padding-left: 1.1rem; }
+.detail__amenities li { margin-bottom: 0.25rem; }
+.detail__reviews p { margin: 0 0 0.25rem; }
+.detail__reviews-source { font-size: 0.85rem; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+.detail__no-reviews { margin: 0; font-size: 0.9rem; color: color-mix(in srgb, var(--ink) 68%, var(--paper)); font-style: italic; }
+
+/* ===========================================================================
+   My_Trips_Page (Req 27) — opaque booking-surface cards for each trip/booking,
+   glass accent for the sign-in / empty invitations, motion-rise entrances.
+   Confirmed bookings are visually distinct from self-created itineraries
+   (Req 27.8). Single-column and overflow-free at >=320px.
+   =========================================================================== */
+.my-trips { display: flex; flex-direction: column; gap: 1.75rem; }
+.my-trips h1 { margin: 0.2rem 0 0.75rem; }
+
+.my-trips__error { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+.my-trips__error .cta { margin-top: 0; }
+
+.my-trips__empty { max-width: 60ch; }
+.my-trips__empty-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+.my-trips__empty-actions .cta { margin-top: 0; }
+
+.my-trips__group { display: block; }
+.my-trips__group-title { margin: 0 0 1rem; }
+/* Confirmed bookings carry a visible accent rule distinguishing them from
+   planned itineraries (Req 27.8). */
+.my-trips__group--bookings .my-trips__group-title {
+  border-left: 4px solid var(--accent-alt);
+  padding-left: 0.75rem;
+}
+.my-trips__group-empty {
+  margin: 0 0 0.5rem;
+  color: color-mix(in srgb, var(--ink) 65%, var(--paper));
+}
+
+.my-trips__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+
+.my-trips__card { display: flex; flex-direction: column; gap: 1rem; }
+/* Itineraries vs confirmed bookings get a distinct left accent (Req 27.8). */
+.my-trips__card--itinerary { border-left: 4px solid var(--accent); }
+.my-trips__card--booking { border-left: 4px solid var(--accent-alt); }
+
+.my-trips__card-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.my-trips__card-title { margin: 0 0 0.4rem; }
+.my-trips__card-meta { margin: 0; display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+
+.my-trips__badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+.my-trips__badge--itinerary {
+  background: color-mix(in srgb, var(--accent) 14%, #fff);
+  color: var(--accent);
+}
+.my-trips__badge--booking {
+  background: color-mix(in srgb, var(--accent-alt) 16%, #fff);
+  color: var(--accent-alt);
+}
+.my-trips__updated { font-size: 0.85rem; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); }
+
+.my-trips__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.my-trips__action {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.45rem 0.9rem;
+  border-radius: 10px;
+  text-decoration: none;
+  line-height: 1.2;
+}
+.my-trips__action:hover { border-color: var(--accent); color: var(--accent); }
+.my-trips__action:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.my-trips__action:disabled { opacity: 0.6; cursor: not-allowed; }
+.my-trips__action--resume { background: var(--accent); color: #fff; border-color: var(--accent); }
+.my-trips__action--resume:hover { background: color-mix(in srgb, var(--accent) 88%, #000); color: #fff; }
+.my-trips__action--danger:hover { border-color: var(--accent); color: var(--accent); }
+
+.my-trips__detail {
+  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  padding-top: 1rem;
+}
+.my-trips__detail-list { margin: 0; }
+.my-trips__detail-list dt { font-weight: 700; }
+.my-trips__detail-list dd { margin: 0; text-align: right; word-break: break-word; }
+.my-trips__payload-empty { margin: 0; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); }
+
+/* No horizontal overflow at >=320px: stack card head/actions on narrow screens. */
+@media (max-width: 560px) {
+  .my-trips__card-head { flex-direction: column; }
+  .my-trips__actions { flex-direction: column; align-items: stretch; }
+  .my-trips__action { text-align: center; }
+  .my-trips__empty-actions { flex-direction: column; align-items: stretch; }
+  .my-trips__empty-actions .cta { text-align: center; }
+}
+
+/* ===========================================================================
+   Booking results + detail surfaces (Req 24) — Flights Results_Page and
+   flight Detail_Page. Fares render on opaque booking-surface (Req 15.4);
+   provenance is visible on every offer. No horizontal overflow at >=320px.
+   =========================================================================== */
+
+/* Results page scaffold */
+.results { display: flex; flex-direction: column; gap: 1.75rem; }
+.results__head h1 { margin: 0.2rem 0 0.5rem; }
+.results__summary {
+  margin: 0;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--ink) 75%, var(--paper));
+}
+
+/* Sort + filter control bar */
+.results__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+.results__control { margin: 0; min-width: 12rem; flex: 1 1 12rem; }
+.results__control > label > span {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--ink) 65%, var(--paper));
+  margin-bottom: 0.35rem;
+}
+.results__apply { margin-top: 0; white-space: nowrap; }
+
+.results__empty { margin: 0; }
+
+/* Offer list */
+.offer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* Offer card (opaque booking-surface so fares stay >= 4.5:1, Req 15.4) */
+.offer-card { display: flex; flex-direction: column; gap: 0.9rem; }
+.offer-card__link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  text-decoration: none;
+  color: var(--ink);
+  border-radius: 10px;
+}
+.offer-card__link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.offer-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.offer-card__route {
+  font-family: var(--font-display);
+  font-size: var(--type-h3);
+  font-weight: 600;
+  margin: 0;
+}
+.offer-card__sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.9rem;
+  color: color-mix(in srgb, var(--ink) 70%, var(--paper));
+}
+.offer-card__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0;
+}
+.offer-card__facts dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--ink) 55%, var(--paper));
+}
+.offer-card__facts dd { margin: 0.15rem 0 0; font-weight: 600; }
+.offer-card__fare {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.offer-card__fare-person { margin: 0; }
+.offer-card__fare-amount {
+  font-family: var(--font-display);
+  font-size: var(--type-h2);
+  font-weight: 600;
+  color: var(--accent);
+}
+.offer-card__fare-unit { font-weight: 600; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+.offer-card__fare-party {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: color-mix(in srgb, var(--ink) 75%, var(--paper));
+}
+
+/* Provenance label (visible on every offer card + detail, Req 24.9/24.11) */
+.provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  background: color-mix(in srgb, var(--paper) 70%, #ffffff);
+  color: color-mix(in srgb, var(--ink) 80%, var(--paper));
+  white-space: nowrap;
+}
+.provenance__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--gold);
+  flex: none;
+}
+.provenance--live .provenance__dot { background: var(--accent-alt); }
+.provenance--estimated .provenance__dot { background: var(--gold); }
+.provenance--cached .provenance__dot { background: color-mix(in srgb, var(--ink) 45%, var(--paper)); }
+.provenance--demo .provenance__dot { background: var(--accent); }
+
+/* Estimated no-payment / no-ticket disclosure (Req 24.12) */
+.estimated-notice {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+}
+
+/* Detail page */
+.detail { display: flex; flex-direction: column; gap: 1.5rem; }
+.detail__back {
+  align-self: flex-start;
+  text-decoration: none;
+  font-weight: 700;
+  color: var(--accent);
+}
+.detail__back:hover { text-decoration: underline; }
+.detail__back:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: 6px; }
+.detail__head h1 { margin: 0.2rem 0 0.4rem; }
+.detail__sub { margin: 0 0 0.75rem; font-weight: 600; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+.detail__body { display: flex; flex-direction: column; gap: 1.25rem; }
+.detail__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem 1.5rem;
+  margin: 0;
+}
+.detail__facts dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--ink) 55%, var(--paper));
+}
+.detail__facts dd { margin: 0.2rem 0 0; font-weight: 600; }
+.detail__fare {
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.detail__fare-person { margin: 0; }
+.detail__fare-party { margin: 0.3rem 0 0; color: color-mix(in srgb, var(--ink) 75%, var(--paper)); }
+.detail__review h2 { margin: 0 0 0.4rem; font-size: var(--type-h3); }
+.detail__review p { margin: 0; }
+
+@media (max-width: 560px) {
+  .offer-list { grid-template-columns: 1fr; }
+  .results__control { min-width: 0; flex-basis: 100%; }
+}
+
+/* ===========================================================================
+   Route-level loading skeletons (Req 28.2) — shown by each route's loading.tsx
+   while the Results_Page awaits the Search_API. Opaque, legible placeholders on
+   the warm paper palette; a gentle shimmer that honors reduced-motion. No
+   horizontal overflow at >=320px (fluid grid, 100% max-width blocks).
+   =========================================================================== */
+.skeleton { display: flex; flex-direction: column; gap: 1.75rem; }
+.skeleton__block {
+  background: color-mix(in srgb, var(--ink) 10%, var(--paper));
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  max-width: 100%;
+}
+.skeleton__block--eyebrow { width: 8rem; height: 0.9rem; }
+.skeleton__block--title { width: min(100%, 24rem); height: 2.25rem; }
+.skeleton__block--line { width: min(100%, 40rem); height: 1rem; }
+.skeleton__controls { height: 4.5rem; border-radius: 14px; }
+.skeleton__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 1.25rem;
+}
+.skeleton__card { height: 12rem; border-radius: 14px; }
+
+/* Shimmer sweep — a triggered, continuous loading affordance (Req 15.6). */
+.skeleton__block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, #ffffff 55%, transparent),
+    transparent
+  );
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
+
+/* Reduced-motion (Req 28.8 / 15.8): suppress the sweep; keep a static tint. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__block::after { animation: none; }
+}

@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: TripGenie compute/API layer - Lambda handlers + HTTP API + Cognito JWT authorizer.
+
+Parameters:
+  ProfilesTable:
+    Type: String
+    Default: tripgenie-profiles
+  TripsTable:
+    Type: String
+    Default: tripgenie-trips
+  UserPoolId:
+    Type: String
+    Default: ap-south-1_zwNRjgYl8
+  UserPoolClientId:
+    Type: String
+    Default: 1uitrschuc3inufk423c9534ak
+  OwnerTag:
+    Type: String
+    Default: seshathri.y@ingrammicro.com
+  ActivityTag:
+    Type: String
+    Default: tripgenie
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Handler: index.handler
+    MemorySize: 256
+    Timeout: 10
+    Tracing: Active
+    Environment:
+      Variables:
+        TRIPGENIE_PROFILES_TABLE: !Ref ProfilesTable
+        TRIPGENIE_TRIPS_TABLE: !Ref TripsTable
+        TRIPGENIE_TRIPS_OWNER_DRAFT_INDEX: owner-draft
+        TRIPGENIE_TRIPS_OWNER_UPDATED_INDEX: owner-updated
+    Tags:
+      owner: !Ref OwnerTag
+      activity: !Ref ActivityTag
+      Name: Seshathri Y
+      Purpose: TripGenie - AI-powered travel planning concierge
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      Auth:
+        Authorizers:
+          CognitoJwt:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}
+              audience:
+                - !Ref UserPoolClientId
+        DefaultAuthorizer: CognitoJwt
+
+  TripsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: handlers/trips/
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:DeleteItem
+              Resource:
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TripsTable}
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TripsTable}/index/*
+      Events:
+        SaveTrip:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /trips
+            Method: POST
+        ListTrips:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /trips
+            Method: GET
+
+  ProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: handlers/profile/
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ProfilesTable}
+      Events:
+        GetProfile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /profile
+            Method: GET
+        PutProfile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /profile
+            Method: PUT
+
+  BookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: handlers/book/
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+              Resource:
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TripsTable}
+      Events:
+        ConfirmBooking:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /book
+            Method: POST
+
+Outputs:
+  ApiBaseUrl:
+    Description: Base URL of the TripGenie HTTP API
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod
