@@ -33,19 +33,26 @@
  *     with a visible distinction, keyed on the stored `status` (Req 27.8).
  *   • The Site_Footer is rendered by the layout (Req 27.9) — not added here.
  *
- * Surfaces use the editorial tokens: opaque `booking-surface` for each trip /
- * booking card (legible detail, never glass), a `glass` accent for the
- * sign-in / empty invitations, and `motion-rise` for triggered entrance motion.
- * Layout stays single-column and overflow-free at ≥320px.
+ * Surfaces use the minimalist Design_System tokens (ui-redesign Req 13): clean
+ * white `card` surfaces for each trip / booking card, a light `card` for the
+ * sign-in / empty invitations, and `motion-rise` for the one-time entrance
+ * motion. The itinerary-vs-booking distinction is carried as a light accent
+ * (a left border + badge), not a heavy treatment. Layout stays single-column
+ * and overflow-free at ≥320px.
  *
  * Requirements: 27.1, 27.2, 27.3, 27.4, 27.5, 27.6, 27.7, 27.8, 27.9.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import AuthLanding from "@/components/auth-landing";
+import { illustration } from "@/lib/illustrations";
 import type { IdentityProviderPolicy, IdentitySession } from "@/lib/identity";
 import type { StoredTrip } from "@/lib/trip-retention";
+
+/** A single restrained header accent reused across the page states (Req 13.1). */
+const HEADER_ILLUSTRATION = illustration("suitcase");
 
 /**
  * The one browser-local key the stubbed session source reads. A real hosted-UI
@@ -272,17 +279,31 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
 
   return (
     <main className="shell my-trips">
-      <p className="eyebrow">Your trips</p>
-      <h1 className="display">
-        {firstName ? `${firstName}'s trips` : "My Trips"}
-      </h1>
+      <header className="my-trips__header">
+        <div>
+          <p className="eyebrow">Your trips</p>
+          <h1 className="display">
+            {firstName ? `${firstName}'s trips` : "My Trips"}
+          </h1>
+        </div>
+        {/* Restrained single header accent from the Illustration_Library (Req 13.1). */}
+        <Image
+          className="my-trips__header-art"
+          src={HEADER_ILLUSTRATION.src}
+          width={HEADER_ILLUSTRATION.width}
+          height={HEADER_ILLUSTRATION.height}
+          alt=""
+          aria-hidden="true"
+          priority={false}
+        />
+      </header>
 
       {load.phase === "loading" && (
         <p className="lead" aria-live="polite">Loading your trips…</p>
       )}
 
       {load.phase === "error" && (
-        <section className="booking-surface my-trips__error" role="alert">
+        <section className="card my-trips__error" role="alert">
           <p>{load.message}</p>
           <button
             type="button"
@@ -296,14 +317,14 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
 
       {load.phase === "ready" && trips.length === 0 && (
         // Signed-in with no trips: invite a search or the Planner (Req 27.3).
-        <section className="glass motion-rise my-trips__empty" aria-labelledby="empty-heading">
-          <h2 id="empty-heading" style={{ marginTop: 0 }}>No trips yet</h2>
+        <section className="card motion-rise my-trips__empty" aria-labelledby="empty-heading">
+          <h2 id="empty-heading" className="my-trips__empty-title">No trips yet</h2>
           <p>Start exploring stays or let the AI Travel Assistant plan something for you.</p>
           <div className="my-trips__empty-actions">
+            {/* Primary_Action (orange) — discovery route (Req 13.4). */}
             <Link href="/stays" className="cta">Start a search</Link>
-            <Link href="/plan" className="cta" style={{ background: "var(--accent-alt)" }}>
-              Open the Planner
-            </Link>
+            {/* Secondary neutral action — planning route (Req 13.4). */}
+            <Link href="/plan" className="btn">Open the Planner</Link>
           </div>
         </section>
       )}
@@ -371,7 +392,7 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
   );
 }
 
-/** A single trip / booking card. Opaque booking-surface, fully legible. */
+/** A single trip / booking card — a clean white surface, fully legible. */
 function TripCard({
   trip,
   kind,
@@ -394,9 +415,13 @@ function TripCard({
   const detailId = `trip-detail-${trip.tripId}`;
   const updated = formatDate(trip.updatedAt);
 
+  // Each card surfaces exactly one orange Primary_Action (Req 13.2): "Resume in
+  // Planner" when the itinerary is resumable, otherwise the "View" control.
+  const viewIsPrimary = !resumeHref;
+
   return (
     <article
-      className={`booking-surface motion-rise my-trips__card my-trips__card--${kind}`}
+      className={`card motion-rise my-trips__card my-trips__card--${kind}`}
     >
       <div className="my-trips__card-head">
         <div>
@@ -413,7 +438,11 @@ function TripCard({
       <div className="my-trips__actions">
         <button
           type="button"
-          className="my-trips__action"
+          className={
+            viewIsPrimary
+              ? "my-trips__action my-trips__action--primary"
+              : "my-trips__action"
+          }
           onClick={onView}
           aria-expanded={open}
           aria-controls={detailId}

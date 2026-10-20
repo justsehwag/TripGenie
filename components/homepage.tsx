@@ -11,11 +11,13 @@
  * results route (Req 22.2, 23/24/25). Invalid submit shows field-level messages
  * and blocks navigation.
  *
- * Also renders: a destination discovery section that populates the active form's
- * destination (Req 22.3/22.4), a sign-in-for-savings promo (Req 22.5), an AI
- * planning prompt entry routing to /plan?q=... (Req 22.6/22.7), a popular
- * destinations section (Req 22.8), and a continue-exploring section backed by
- * browser-local recently-viewed with a clean empty state (Req 22.9/22.10).
+ * Visually this is a Hopper-style landing: a full-bleed photographic hero with a
+ * glass search panel overlapping its lower edge, a horizontally-scrolling popular
+ * destinations rail (each card populates the active form via `selectDestination`,
+ * Req 22.3/22.4/22.8), an editorial "exclusive deals" row clearly labelled as
+ * illustrative (Req 4 honesty), a mobile-app band, and a feature-icons row. The
+ * destination discovery + continue-exploring behaviours (recently-viewed from
+ * browser-local storage, Req 22.9/22.10) are preserved.
  *
  * The Global_Navigation and Site_Footer are rendered by app/layout.tsx
  * (concurrent task 32.1) — NOT here (Req 22.11 satisfied by the layout).
@@ -33,6 +35,8 @@ import {
   type CarsCriteria,
   type FlightTripType,
 } from "@/lib/search-criteria";
+import { DestinationImageLayer } from "@/components/destination-image";
+import { illustration } from "@/lib/illustrations";
 
 type BookingTab = "stays" | "flights" | "cars";
 
@@ -42,15 +46,113 @@ const TABS: { id: BookingTab; label: string }[] = [
   { id: "cars", label: "Cars" },
 ];
 
-/** Editorial destination set reused for discovery + populate-on-select. */
-const DISCOVERY = [
-  { name: "Goa", blurb: "Slow coastal mornings and sunset drives." },
-  { name: "Udaipur", blurb: "Lake palaces and old-city lanes." },
-  { name: "Kyoto", blurb: "Temple gardens and quiet tea houses." },
-  { name: "Lisbon", blurb: "Tiled hills and Atlantic light." },
+/** Small inline magnifier used on the finder submit button (no emoji, Req 17.6). */
+function SearchGlyph() {
+  return (
+    <svg
+      className="trip-finder__glyph"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.8" />
+      <line
+        x1="10.8"
+        y1="10.8"
+        x2="14"
+        y2="14"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Popular destinations rail — selecting a card populates the active form.
+ *
+ * `blurb` is a short, generic editorial tagline (not live inventory data) so
+ * each discovery card can show a brief description alongside name + country
+ * (Req 6.1).
+ */
+const POPULAR_DESTINATIONS: { name: string; country: string; blurb: string }[] = [
+  { name: "Santorini", country: "Greece", blurb: "Whitewashed cliffs and sunset calderas" },
+  { name: "Bali", country: "Indonesia", blurb: "Rice terraces, temples and warm surf" },
+  { name: "Tokyo", country: "Japan", blurb: "Neon districts and quiet garden corners" },
+  { name: "Dubai", country: "UAE", blurb: "Desert adventure meets modern skyline" },
+  { name: "Paris", country: "France", blurb: "Classic boulevards and corner cafes" },
+  { name: "New York", country: "USA", blurb: "Big-city energy around every block" },
 ];
 
-const POPULAR = ["Goa", "Jaipur", "Bali", "Paris", "Tokyo", "Dubai", "Singapore", "Rome"];
+/** Feature icon keys — map to small inline SVGs (no emoji, Req 17.6). */
+type FeatureIcon = "sparkle" | "compare" | "calendar" | "support";
+
+/** Feature highlights shown in the icon row above the footer. */
+const FEATURES: { icon: FeatureIcon; title: string; copy: string }[] = [
+  { icon: "sparkle", title: "AI-powered recommendations", copy: "Personalized for your travel style" },
+  { icon: "compare", title: "Best price comparison", copy: "Find the best deals" },
+  { icon: "calendar", title: "Flexible booking options", copy: "Plans that fit your needs" },
+  { icon: "support", title: "24/7 travel support", copy: "We're here for you" },
+];
+
+/** Small inline line-icons for the feature row (decorative, no emoji). */
+function FeatureGlyph({ name }: { name: FeatureIcon }) {
+  const common = {
+    width: 28,
+    height: 28,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true as const,
+    focusable: "false" as const,
+  };
+  switch (name) {
+    case "sparkle":
+      return (
+        <svg {...common}>
+          <path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z" />
+          <path d="M18.5 3.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6L16.3 5.7l1.6-.6z" />
+        </svg>
+      );
+    case "compare":
+      return (
+        <svg {...common}>
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <line x1="15.5" y1="15.5" x2="21" y2="21" />
+        </svg>
+      );
+    case "calendar":
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+          <line x1="3.5" y1="9.5" x2="20.5" y2="9.5" />
+          <line x1="8" y1="3" x2="8" y2="6.5" />
+          <line x1="16" y1="3" x2="16" y2="6.5" />
+        </svg>
+      );
+    case "support":
+      return (
+        <svg {...common}>
+          <path d="M12 21s-7-4.3-7-9.4A4.6 4.6 0 0112 8.4 4.6 4.6 0 0119 11.6C19 16.7 12 21 12 21z" />
+        </svg>
+      );
+  }
+}
+
+/** Example prompts for the AI planner promo (approachable, not technical). */
+const PLANNER_PROMPTS: string[] = [
+  "A relaxed 4-day Goa trip for two",
+  "A week of food and temples in Kyoto",
+  "A budget island escape in the Philippines",
+  "A long weekend of art and cafes in Paris",
+];
 
 const RECENT_KEY = "tripgenie:recently-viewed";
 
@@ -85,7 +187,7 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   );
 }
 
-export default function Homepage() {
+export default function Homepage({ showHero = true }: { showHero?: boolean } = {}) {
   const router = useRouter();
   const [active, setActive] = useState<BookingTab>("stays");
 
@@ -132,6 +234,9 @@ export default function Homepage() {
 
   // ---- AI planning prompt --------------------------------------------------
   const [aiPrompt, setAiPrompt] = useState("");
+
+  // ---- "I'm flexible with dates" (visual preference; does not alter submit) --
+  const [flexibleDates, setFlexibleDates] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -225,66 +330,79 @@ export default function Homepage() {
 
   const isRoundTrip = flights.tripType === "round-trip";
 
-  const popular = useMemo(() => POPULAR, []);
+  const popular = useMemo(() => POPULAR_DESTINATIONS, []);
 
   return (
-    <main className="shell home">
-      {/* Hero — editorial, glass-accent proportion preserved from the old landing */}
-      <section className="motion-rise home-hero">
-        <p className="eyebrow">AWS-native travel concierge</p>
-        <h1 className="display">Find the trip. Book it calm.</h1>
-        <p className="lead">
-          Search stays, flights, and cars from one warm, editorial home — then let
-          the planner turn a sentence into a day-by-day itinerary.
-        </p>
-      </section>
+    <main className="home">
+      {/*
+        ── 1. HERO — asymmetric two-column white layout (Req 5.1–5.4) ─────
+        Gated behind `showHero` (Req 21.2): when Homepage is rendered as a
+        secondary section under the AI concierge on `/`, the concierge is the
+        sole lead hero, so this inline hero + tabbed trip-finder is suppressed.
+        The code is preserved (not deleted) so Homepage still works standalone
+        with its full search submit/validation/navigation when `showHero` is
+        true. The tab-search submit paths remain reachable via Global_Navigation
+        (/stays, /flights, /cars) and the concierge (/plan).
+      */}
+      {showHero && (
+      <section className="home-hero home-hero2" aria-label="TripGenie">
+        <div className="home-hero__inner shell">
+          <div className="home-hero2__grid grid-2">
+            {/* LEFT: serif heading + paragraph + compact trip-finder form. */}
+            <div className="home-hero2__col home-hero2__col--content motion-rise">
+              <div className="home-hero__copy home-hero2__copy">
+                <h1 className="display home-hero__title">Your intelligent travel companion.</h1>
+                <p className="home-hero__sub">
+                  TripGenie AI discovers destinations, compares stays, flights and
+                  cars, and plans full itineraries for you — so every journey comes
+                  together in one place.
+                </p>
+              </div>
 
-      {/* Booking panel: tabs + the active search form (opaque, fully legible) */}
-      <section className="booking-surface home-panel motion-rise" aria-label="Search travel">
-        <div className="tablist" role="tablist" aria-label="Booking categories">
-          {TABS.map((t) => {
-            const selected = active === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                id={`tab-${t.id}`}
-                aria-selected={selected}
-                aria-controls={`panel-${t.id}`}
-                tabIndex={selected ? 0 : -1}
-                className={`tab${selected ? " tab-active" : ""}`}
-                onClick={() => setActive(t.id)}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
+              <div className="home-search trip-finder" aria-label="Search travel">
+          <div className="tablist" role="tablist" aria-label="Booking categories">
+            {TABS.map((t) => {
+              const selected = active === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  id={`tab-${t.id}`}
+                  aria-selected={selected}
+                  aria-controls={`panel-${t.id}`}
+                  tabIndex={selected ? 0 : -1}
+                  className={`tab tab-pill${selected ? " tab-active" : ""}`}
+                  onClick={() => setActive(t.id)}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
 
-        {/* Stays form */}
-        {active === "stays" && (
-          <form
-            id="panel-stays"
-            role="tabpanel"
-            aria-labelledby="tab-stays"
-            className="search-form"
-            onSubmit={submitStays}
-            noValidate
-          >
-            <label className="field">
-              <span>Destination</span>
-              <input
-                type="text"
-                value={stays.destination ?? ""}
-                aria-invalid={!!staysErrors.destination}
-                aria-describedby="err-stays-destination"
-                onChange={(e) => setStays({ ...stays, destination: e.target.value })}
-                placeholder="Where to?"
-              />
-              <FieldError id="err-stays-destination" message={staysErrors.destination} />
-            </label>
-            <div className="field-row">
+          {/* Stays form */}
+          {active === "stays" && (
+            <form
+              id="panel-stays"
+              role="tabpanel"
+              aria-labelledby="tab-stays"
+              className="search-form search-row"
+              onSubmit={submitStays}
+              noValidate
+            >
+              <label className="field">
+                <span>Destination</span>
+                <input
+                  type="text"
+                  value={stays.destination ?? ""}
+                  aria-invalid={!!staysErrors.destination}
+                  aria-describedby="err-stays-destination"
+                  onChange={(e) => setStays({ ...stays, destination: e.target.value })}
+                  placeholder="Where to?"
+                />
+                <FieldError id="err-stays-destination" message={staysErrors.destination} />
+              </label>
               <label className="field">
                 <span>Check-in</span>
                 <input
@@ -307,8 +425,6 @@ export default function Homepage() {
                 />
                 <FieldError id="err-stays-checkout" message={staysErrors.checkOut} />
               </label>
-            </div>
-            <div className="field-row">
               <label className="field">
                 <span>Guests</span>
                 <input
@@ -320,328 +436,398 @@ export default function Homepage() {
                 />
                 <FieldError id="err-stays-guests" message={staysErrors.guests} />
               </label>
-              <label className="field">
-                <span>Rooms</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={stays.rooms ?? 1}
-                  aria-invalid={!!staysErrors.rooms}
-                  onChange={(e) => setStays({ ...stays, rooms: Number(e.target.value) })}
-                />
-                <FieldError id="err-stays-rooms" message={staysErrors.rooms} />
-              </label>
-            </div>
-            <button className="cta" type="submit" disabled={submitting}>
-              Search stays
-            </button>
-          </form>
-        )}
-
-        {/* Flights form */}
-        {active === "flights" && (
-          <form
-            id="panel-flights"
-            role="tabpanel"
-            aria-labelledby="tab-flights"
-            className="search-form"
-            onSubmit={submitFlights}
-            noValidate
-          >
-            <fieldset className="triptype">
-              <legend>Trip type</legend>
-              <label className="radio">
-                <input
-                  type="radio"
-                  name="tripType"
-                  checked={flights.tripType === "round-trip"}
-                  onChange={() => setFlights({ ...flights, tripType: "round-trip" })}
-                />
-                Round-trip
-              </label>
-              <label className="radio">
-                <input
-                  type="radio"
-                  name="tripType"
-                  checked={flights.tripType === "one-way"}
-                  onChange={() => setFlights({ ...flights, tripType: "one-way" })}
-                />
-                One-way
-              </label>
-            </fieldset>
-            <div className="field-row swap-row">
-              <label className="field">
-                <span>Origin</span>
-                <input
-                  type="text"
-                  value={flights.origin ?? ""}
-                  aria-invalid={!!flightsErrors.origin}
-                  aria-describedby="err-flights-origin"
-                  onChange={(e) => setFlights({ ...flights, origin: e.target.value })}
-                  placeholder="From"
-                />
-                <FieldError id="err-flights-origin" message={flightsErrors.origin} />
-              </label>
-              <button
-                type="button"
-                className="swap-btn"
-                onClick={swapFlights}
-                aria-label="Swap origin and destination"
-                title="Swap origin and destination"
-              >
-                ⇄
+              <button className="cta search-cta" type="submit" disabled={submitting}>
+                <SearchGlyph /> Search
               </button>
-              <label className="field">
-                <span>Destination</span>
-                <input
-                  type="text"
-                  value={flights.destination ?? ""}
-                  aria-invalid={!!flightsErrors.destination}
-                  aria-describedby="err-flights-destination"
-                  onChange={(e) => setFlights({ ...flights, destination: e.target.value })}
-                  placeholder="To"
-                />
-                <FieldError id="err-flights-destination" message={flightsErrors.destination} />
-              </label>
-            </div>
-            <div className="field-row">
-              <label className="field">
-                <span>Depart</span>
-                <input
-                  type="date"
-                  value={flights.departDate ?? ""}
-                  aria-invalid={!!flightsErrors.departDate}
-                  aria-describedby="err-flights-depart"
-                  onChange={(e) => setFlights({ ...flights, departDate: e.target.value })}
-                />
-                <FieldError id="err-flights-depart" message={flightsErrors.departDate} />
-              </label>
-              {isRoundTrip && (
+            </form>
+          )}
+
+          {/* Flights form */}
+          {active === "flights" && (
+            <form
+              id="panel-flights"
+              role="tabpanel"
+              aria-labelledby="tab-flights"
+              className="search-form"
+              onSubmit={submitFlights}
+              noValidate
+            >
+              <fieldset className="triptype">
+                <legend>Trip type</legend>
+                <label className="radio">
+                  <input
+                    type="radio"
+                    name="tripType"
+                    checked={flights.tripType === "round-trip"}
+                    onChange={() => setFlights({ ...flights, tripType: "round-trip" })}
+                  />
+                  Round-trip
+                </label>
+                <label className="radio">
+                  <input
+                    type="radio"
+                    name="tripType"
+                    checked={flights.tripType === "one-way"}
+                    onChange={() => setFlights({ ...flights, tripType: "one-way" })}
+                  />
+                  One-way
+                </label>
+              </fieldset>
+              <div className="search-row">
                 <label className="field">
-                  <span>Return</span>
+                  <span>Origin</span>
+                  <input
+                    type="text"
+                    value={flights.origin ?? ""}
+                    aria-invalid={!!flightsErrors.origin}
+                    aria-describedby="err-flights-origin"
+                    onChange={(e) => setFlights({ ...flights, origin: e.target.value })}
+                    placeholder="From"
+                  />
+                  <FieldError id="err-flights-origin" message={flightsErrors.origin} />
+                </label>
+                <button
+                  type="button"
+                  className="swap-btn"
+                  onClick={swapFlights}
+                  aria-label="Swap origin and destination"
+                  title="Swap origin and destination"
+                >
+                  {"\u21C4"}
+                </button>
+                <label className="field">
+                  <span>Destination</span>
+                  <input
+                    type="text"
+                    value={flights.destination ?? ""}
+                    aria-invalid={!!flightsErrors.destination}
+                    aria-describedby="err-flights-destination"
+                    onChange={(e) => setFlights({ ...flights, destination: e.target.value })}
+                    placeholder="To"
+                  />
+                  <FieldError id="err-flights-destination" message={flightsErrors.destination} />
+                </label>
+                <label className="field">
+                  <span>Depart</span>
                   <input
                     type="date"
-                    value={flights.returnDate ?? ""}
-                    aria-invalid={!!flightsErrors.returnDate}
-                    aria-describedby="err-flights-return"
-                    onChange={(e) => setFlights({ ...flights, returnDate: e.target.value })}
+                    value={flights.departDate ?? ""}
+                    aria-invalid={!!flightsErrors.departDate}
+                    aria-describedby="err-flights-depart"
+                    onChange={(e) => setFlights({ ...flights, departDate: e.target.value })}
                   />
-                  <FieldError id="err-flights-return" message={flightsErrors.returnDate} />
+                  <FieldError id="err-flights-depart" message={flightsErrors.departDate} />
                 </label>
-              )}
-            </div>
-            <div className="field-row">
-              <label className="field">
-                <span>Travellers</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={flights.travellers ?? 1}
-                  aria-invalid={!!flightsErrors.travellers}
-                  onChange={(e) => setFlights({ ...flights, travellers: Number(e.target.value) })}
-                />
-                <FieldError id="err-flights-travellers" message={flightsErrors.travellers} />
-              </label>
-              <label className="field">
-                <span>Cabin</span>
-                <select
-                  value={flights.cabin ?? "economy"}
-                  aria-invalid={!!flightsErrors.cabin}
-                  onChange={(e) => setFlights({ ...flights, cabin: e.target.value })}
-                >
-                  <option value="economy">Economy</option>
-                  <option value="premium">Premium economy</option>
-                  <option value="business">Business</option>
-                  <option value="first">First</option>
-                </select>
-                <FieldError id="err-flights-cabin" message={flightsErrors.cabin} />
-              </label>
-            </div>
-            <button className="cta" type="submit" disabled={submitting}>
-              Search flights
-            </button>
-          </form>
-        )}
+                {isRoundTrip && (
+                  <label className="field">
+                    <span>Return</span>
+                    <input
+                      type="date"
+                      value={flights.returnDate ?? ""}
+                      aria-invalid={!!flightsErrors.returnDate}
+                      aria-describedby="err-flights-return"
+                      onChange={(e) => setFlights({ ...flights, returnDate: e.target.value })}
+                    />
+                    <FieldError id="err-flights-return" message={flightsErrors.returnDate} />
+                  </label>
+                )}
+                <label className="field">
+                  <span>Travellers</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={flights.travellers ?? 1}
+                    aria-invalid={!!flightsErrors.travellers}
+                    onChange={(e) => setFlights({ ...flights, travellers: Number(e.target.value) })}
+                  />
+                  <FieldError id="err-flights-travellers" message={flightsErrors.travellers} />
+                </label>
+                <label className="field">
+                  <span>Cabin</span>
+                  <select
+                    value={flights.cabin ?? "economy"}
+                    aria-invalid={!!flightsErrors.cabin}
+                    onChange={(e) => setFlights({ ...flights, cabin: e.target.value })}
+                  >
+                    <option value="economy">Economy</option>
+                    <option value="premium">Premium economy</option>
+                    <option value="business">Business</option>
+                    <option value="first">First</option>
+                  </select>
+                  <FieldError id="err-flights-cabin" message={flightsErrors.cabin} />
+                </label>
+                <button className="cta search-cta" type="submit" disabled={submitting}>
+                  <SearchGlyph /> Search
+                </button>
+              </div>
+            </form>
+          )}
 
-        {/* Cars form */}
-        {active === "cars" && (
-          <form
-            id="panel-cars"
-            role="tabpanel"
-            aria-labelledby="tab-cars"
-            className="search-form"
-            onSubmit={submitCars}
-            noValidate
-          >
-            <label className="field">
-              <span>Pickup location</span>
-              <input
-                type="text"
-                value={cars.pickupLocation ?? ""}
-                aria-invalid={!!carsErrors.pickupLocation}
-                aria-describedby="err-cars-pickup"
-                onChange={(e) => setCars({ ...cars, pickupLocation: e.target.value })}
-                placeholder="City or airport"
-              />
-              <FieldError id="err-cars-pickup" message={carsErrors.pickupLocation} />
-            </label>
-            <label className="checkbox">
+          {/* Cars form */}
+          {active === "cars" && (
+            <form
+              id="panel-cars"
+              role="tabpanel"
+              aria-labelledby="tab-cars"
+              className="search-form"
+              onSubmit={submitCars}
+              noValidate
+            >
+              <div className="search-row">
+                <label className="field">
+                  <span>Pickup location</span>
+                  <input
+                    type="text"
+                    value={cars.pickupLocation ?? ""}
+                    aria-invalid={!!carsErrors.pickupLocation}
+                    aria-describedby="err-cars-pickup"
+                    onChange={(e) => setCars({ ...cars, pickupLocation: e.target.value })}
+                    placeholder="City or airport"
+                  />
+                  <FieldError id="err-cars-pickup" message={carsErrors.pickupLocation} />
+                </label>
+                {carsDifferentDropoff && (
+                  <label className="field">
+                    <span>Drop-off location</span>
+                    <input
+                      type="text"
+                      value={cars.dropoffLocation ?? ""}
+                      onChange={(e) => setCars({ ...cars, dropoffLocation: e.target.value })}
+                      placeholder="Drop-off city or airport"
+                    />
+                  </label>
+                )}
+                <label className="field">
+                  <span>Pickup date</span>
+                  <input
+                    type="date"
+                    value={cars.pickupDate ?? ""}
+                    aria-invalid={!!carsErrors.pickupDate}
+                    aria-describedby="err-cars-pickup-date"
+                    onChange={(e) => setCars({ ...cars, pickupDate: e.target.value })}
+                  />
+                  <FieldError id="err-cars-pickup-date" message={carsErrors.pickupDate} />
+                </label>
+                <label className="field">
+                  <span>Pickup time</span>
+                  <input
+                    type="time"
+                    value={cars.pickupTime ?? ""}
+                    aria-invalid={!!carsErrors.pickupTime}
+                    aria-describedby="err-cars-pickup-time"
+                    onChange={(e) => setCars({ ...cars, pickupTime: e.target.value })}
+                  />
+                  <FieldError id="err-cars-pickup-time" message={carsErrors.pickupTime} />
+                </label>
+                <label className="field">
+                  <span>Return date</span>
+                  <input
+                    type="date"
+                    value={cars.returnDate ?? ""}
+                    aria-invalid={!!carsErrors.returnDate}
+                    aria-describedby="err-cars-return-date"
+                    onChange={(e) => setCars({ ...cars, returnDate: e.target.value })}
+                  />
+                  <FieldError id="err-cars-return-date" message={carsErrors.returnDate} />
+                </label>
+                <label className="field">
+                  <span>Return time</span>
+                  <input
+                    type="time"
+                    value={cars.returnTime ?? ""}
+                    aria-invalid={!!carsErrors.returnTime}
+                    aria-describedby="err-cars-return-time"
+                    onChange={(e) => setCars({ ...cars, returnTime: e.target.value })}
+                  />
+                  <FieldError id="err-cars-return-time" message={carsErrors.returnTime} />
+                </label>
+                <label className="field age-field">
+                  <span>Driver age</span>
+                  <input
+                    type="number"
+                    min={18}
+                    value={cars.driverAge ?? 18}
+                    aria-invalid={!!carsErrors.driverAge}
+                    aria-describedby="err-cars-age"
+                    onChange={(e) => setCars({ ...cars, driverAge: Number(e.target.value) })}
+                  />
+                  <FieldError id="err-cars-age" message={carsErrors.driverAge} />
+                </label>
+                <button className="cta search-cta" type="submit" disabled={submitting}>
+                  <SearchGlyph /> Search
+                </button>
+              </div>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={carsDifferentDropoff}
+                  onChange={(e) => setCarsDifferentDropoff(e.target.checked)}
+                />
+                Return to a different location
+              </label>
+            </form>
+          )}
+
+          <div className="home-search__footrow">
+            <label className="checkbox home-search__flex">
               <input
                 type="checkbox"
-                checked={carsDifferentDropoff}
-                onChange={(e) => setCarsDifferentDropoff(e.target.checked)}
+                checked={flexibleDates}
+                onChange={(e) => setFlexibleDates(e.target.checked)}
               />
-              Return to a different location
+              I&apos;m flexible with dates
             </label>
-            {carsDifferentDropoff && (
-              <label className="field">
-                <span>Drop-off location</span>
-                <input
-                  type="text"
-                  value={cars.dropoffLocation ?? ""}
-                  onChange={(e) => setCars({ ...cars, dropoffLocation: e.target.value })}
-                  placeholder="Drop-off city or airport"
-                />
+            <form className="home-search__ai" onSubmit={submitAiPrompt}>
+              <label className="sr-only" htmlFor="home-ai-input">
+                Describe your trip for AI recommendations
               </label>
-            )}
-            <div className="field-row">
-              <label className="field">
-                <span>Pickup date</span>
-                <input
-                  type="date"
-                  value={cars.pickupDate ?? ""}
-                  aria-invalid={!!carsErrors.pickupDate}
-                  aria-describedby="err-cars-pickup-date"
-                  onChange={(e) => setCars({ ...cars, pickupDate: e.target.value })}
-                />
-                <FieldError id="err-cars-pickup-date" message={carsErrors.pickupDate} />
-              </label>
-              <label className="field">
-                <span>Pickup time</span>
-                <input
-                  type="time"
-                  value={cars.pickupTime ?? ""}
-                  aria-invalid={!!carsErrors.pickupTime}
-                  aria-describedby="err-cars-pickup-time"
-                  onChange={(e) => setCars({ ...cars, pickupTime: e.target.value })}
-                />
-                <FieldError id="err-cars-pickup-time" message={carsErrors.pickupTime} />
-              </label>
-            </div>
-            <div className="field-row">
-              <label className="field">
-                <span>Return date</span>
-                <input
-                  type="date"
-                  value={cars.returnDate ?? ""}
-                  aria-invalid={!!carsErrors.returnDate}
-                  aria-describedby="err-cars-return-date"
-                  onChange={(e) => setCars({ ...cars, returnDate: e.target.value })}
-                />
-                <FieldError id="err-cars-return-date" message={carsErrors.returnDate} />
-              </label>
-              <label className="field">
-                <span>Return time</span>
-                <input
-                  type="time"
-                  value={cars.returnTime ?? ""}
-                  aria-invalid={!!carsErrors.returnTime}
-                  aria-describedby="err-cars-return-time"
-                  onChange={(e) => setCars({ ...cars, returnTime: e.target.value })}
-                />
-                <FieldError id="err-cars-return-time" message={carsErrors.returnTime} />
-              </label>
-            </div>
-            <label className="field age-field">
-              <span>Driver age</span>
               <input
-                type="number"
-                min={18}
-                value={cars.driverAge ?? 18}
-                aria-invalid={!!carsErrors.driverAge}
-                aria-describedby="err-cars-age"
-                onChange={(e) => setCars({ ...cars, driverAge: Number(e.target.value) })}
+                id="home-ai-input"
+                type="text"
+                className="home-search__ai-input"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="A relaxed 4-day Goa trip for two"
+                aria-label="Describe your trip for AI recommendations"
               />
-              <FieldError id="err-cars-age" message={carsErrors.driverAge} />
-            </label>
-            <button className="cta" type="submit" disabled={submitting}>
-              Search cars
-            </button>
-          </form>
-        )}
+              <button type="submit" className="home-search__ai-link">
+                Search with AI — Get personalized recommendations
+              </button>
+            </form>
+          </div>
+              </div>
+            </div>
+
+            {/* RIGHT: large original green travel illustration (orange accents). */}
+            <div className="home-hero2__col home-hero2__col--art" aria-hidden="true">
+              {(() => {
+                const art = illustration("traveler-globe");
+                return (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    className="illustration home-hero2__art"
+                    src={art.src}
+                    width={art.width}
+                    height={art.height}
+                    alt={art.alt}
+                  />
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {/* ── 2. FEATURED EXPLORATION — asymmetric illustration + text (Req 5.5) ── */}
+      <section className="shell home-feature-explore" aria-labelledby="explore-heading">
+        <div className="home-feature-explore__grid grid-2">
+          <div className="home-feature-explore__art" aria-hidden="true">
+            {(() => {
+              const art = illustration("winding-path");
+              return (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="illustration home-feature-explore__img"
+                  src={art.src}
+                  width={art.width}
+                  height={art.height}
+                  alt={art.alt}
+                />
+              );
+            })()}
+          </div>
+          <div className="home-feature-explore__copy motion-rise">
+            <h2 id="explore-heading" className="section-title">A new way to explore the world</h2>
+            <p className="section-sub">
+              TripGenie AI learns what you love — the pace, the places, the little
+              detours — and turns it into a journey that feels made for you. Discover
+              fresh destinations and shape a personalized plan without the busywork.
+            </p>
+            <a className="cta home-feature-explore__cta" href="/plan">
+              Start exploring {"\u2192"}
+            </a>
+          </div>
+        </div>
       </section>
 
-      {/* AI planning prompt entry (Req 22.6/22.7) */}
-      <section className="glass home-ai motion-rise" aria-label="AI travel assistant">
-        <h2>Describe your trip</h2>
-        <p>Tell the planner in a sentence and we will draft a day-by-day itinerary.</p>
-        <form className="ai-form" onSubmit={submitAiPrompt}>
-          <label className="field ai-field">
-            <span className="sr-only">Trip request</span>
-            <input
-              type="text"
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              placeholder="A relaxed 4-day Goa trip from Delhi for two"
-              aria-label="Trip request"
-            />
-          </label>
-          <button className="cta" type="submit">
-            Plan with AI
-          </button>
-        </form>
-      </section>
-
-      {/* Destination discovery (selectable → populates active form) (Req 22.3/22.4) */}
-      <section className="home-section" aria-labelledby="discovery-heading">
-        <h2 id="discovery-heading">Discover a destination</h2>
-        <div className="card-grid">
-          {DISCOVERY.map((d) => (
+      {/* ── 4. POPULAR DESTINATIONS ───────────────────────────────────────── */}
+      <section className="shell home-section" aria-labelledby="popular-heading">
+        <header className="section-head">
+          <div>
+            <h2 id="popular-heading" className="section-title">Popular destinations</h2>
+            <p className="section-sub">Explore handpicked destinations for your next adventure</p>
+          </div>
+          <a className="section-link" href="/stays">View all {"\u2192"}</a>
+        </header>
+        <div className="dest-rail" role="list">
+          {popular.map((d, i) => (
             <button
               key={d.name}
               type="button"
-              className="glass discovery-card"
+              role="listitem"
+              className="dest-card"
               onClick={() => selectDestination(d.name)}
+              aria-label={`Choose ${d.name}, ${d.country}`}
             >
-              <h3>{d.name}</h3>
-              <p>{d.blurb}</p>
+              <DestinationImageLayer query={d.name} slot={i} />
+              <span className="dest-card__scrim" aria-hidden="true" />
+              <span className="dest-card__meta">
+                <span className="dest-card__name">{d.name}</span>
+                <span className="dest-card__country">{d.country}</span>
+                <span className="dest-card__blurb">{d.blurb}</span>
+                <span className="dest-card__tag">Popular now</span>
+              </span>
+              <span className="dest-card__go" aria-hidden="true">{"\u2192"}</span>
             </button>
           ))}
         </div>
       </section>
 
-      {/* Sign-in-for-savings promo (Req 22.5) */}
-      <section className="glass home-promo motion-rise" aria-labelledby="promo-heading">
-        <h2 id="promo-heading">Sign in for savings</h2>
-        <p>
-          Members unlock better prices and keep every trip in one place. Sign in to
-          start saving.
-        </p>
-        <a className="cta" href="/">
-          Sign in for savings
-        </a>
+      {/* ── 7. FEATURE ICONS ROW ──────────────────────────────────────────── */}
+      <section className="shell home-features" aria-label="Why TripGenie">
+        <ul className="feature-row">
+          {FEATURES.map((f) => (
+            <li key={f.title} className="feature">
+              <span className="feature__icon" aria-hidden="true">
+                <FeatureGlyph name={f.icon} />
+              </span>
+              <h3 className="feature__title">{f.title}</h3>
+              <p className="feature__copy">{f.copy}</p>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      {/* Popular destinations (selectable) (Req 22.8) */}
-      <section className="home-section" aria-labelledby="popular-heading">
-        <h2 id="popular-heading">Popular destinations</h2>
-        <div className="chip-row">
-          {popular.map((name) => (
-            <button
-              key={name}
-              type="button"
-              className="chip"
-              onClick={() => selectDestination(name)}
-            >
-              {name}
-            </button>
-          ))}
+      {/* ── 8. AI PLANNER PROMO — heading + copy + example prompts (Req 5.7) ── */}
+      <section className="shell home-planner-promo" aria-labelledby="planner-promo-heading">
+        <div className="home-planner-promo__inner">
+          <h2 id="planner-promo-heading" className="section-title">Plan it with a sentence</h2>
+          <p className="section-sub">
+            Tell TripGenie AI the trip you are dreaming about and watch a day-by-day
+            plan take shape. No forms, no tabs — just describe it in your own words.
+          </p>
+          <ul className="home-prompt-chips" aria-label="Example prompts">
+            {PLANNER_PROMPTS.map((p) => (
+              <li key={p}>
+                <a
+                  className="home-prompt-chip"
+                  href={`/plan?q=${encodeURIComponent(p)}`}
+                >
+                  {p}
+                </a>
+              </li>
+            ))}
+          </ul>
+          <a className="cta home-planner-promo__cta" href="/plan">
+            Plan with TripGenie AI {"\u2192"}
+          </a>
         </div>
       </section>
 
       {/* Continue exploring: recently viewed/saved, else empty state (Req 22.9/22.10) */}
-      <section className="home-section" aria-labelledby="continue-heading">
-        <h2 id="continue-heading">Continue exploring</h2>
+      <section className="shell home-section" aria-labelledby="continue-heading">
+        <h2 id="continue-heading" className="section-title">Continue exploring</h2>
         {recent.length > 0 ? (
           <ul className="recent-list">
             {recent.map((item, i) => (

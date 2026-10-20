@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" role="img">
+  <!-- soft mint backdrop -->
+  <circle cx="120" cy="120" r="96" fill="#E8FAF2"/>
+  <!-- handle -->
+  <path d="M100 76v-10c0 -6 5 -11 11 -11h18c6 0 11 5 11 11v10" stroke="#087F63" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <!-- case body -->
+  <rect x="68" y="76" width="104" height="92" rx="14" fill="#16B982" stroke="#087F63" stroke-width="3"/>
+  <!-- inner panel -->
+  <rect x="84" y="90" width="72" height="64" rx="8" fill="#C8F2DF" stroke="#087F63" stroke-width="3"/>
+  <!-- straps -->
+  <path d="M106 76v92" stroke="#087F63" stroke-width="3"/>
+  <path d="M134 76v92" stroke="#087F63" stroke-width="3"/>
+  <!-- buckle accents (restrained orange) -->
+  <rect x="101" y="112" width="10" height="10" rx="2" fill="#FF901F"/>
+  <rect x="129" y="112" width="10" height="10" rx="2" fill="#FF901F"/>
+  <!-- feet -->
+  <path d="M84 168v8" stroke="#087F63" stroke-width="3" stroke-linecap="round"/>
+  <path d="M156 168v8" stroke="#087F63" stroke-width="3" stroke-linecap="round"/>
+</svg>

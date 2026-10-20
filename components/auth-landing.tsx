@@ -32,6 +32,7 @@ import {
   type Provider,
   type SignInControl,
 } from "@/lib/identity";
+import { illustration } from "@/lib/illustrations";
 
 export interface AuthLandingProps {
   /** Enabled-provider policy; its order/contents decide which controls render. */
@@ -143,9 +144,13 @@ export default function AuthLanding({
     }
   }
 
+  // Restrained illustration accent for the identity surface (aria-hidden; the
+  // alt text lives in the registry but the mark here is purely decorative).
+  const suitcase = illustration("suitcase");
+
   return (
-    <main className="shell">
-      <section className="motion-rise">
+    <main className="shell auth">
+      <section className="motion-rise auth__intro">
         <p className="eyebrow">Your account</p>
         <h1 className="display">{heading}</h1>
         <p className="lead">
@@ -155,32 +160,26 @@ export default function AuthLanding({
       </section>
 
       <div className="grid-2">
-        {/* Opaque surface: sign-in controls stay fully legible, never glass. */}
-        <section
-          className="booking-surface"
-          aria-labelledby="auth-signin-heading"
-        >
-          <h2 id="auth-signin-heading" style={{ marginTop: 0 }}>
+        {/* White surface: sign-in controls stay fully legible, never glass. */}
+        <section className="surface" aria-labelledby="auth-signin-heading">
+          <h2 id="auth-signin-heading" className="auth__heading">
             Sign in
           </h2>
 
           {authError && (
-            <p role="alert" style={{ color: "var(--accent)", fontWeight: 600 }}>
+            <p role="alert" className="notice notice--error auth__error">
               {authError}
             </p>
           )}
 
           {/* Exactly one control per enabled provider; omitted when disabled. */}
-          <ul
-            style={{ listStyle: "none", margin: 0, padding: 0 }}
-            aria-label="Available sign-in options"
-          >
+          <ul className="auth__options" aria-label="Available sign-in options">
             {controls.map((control) => (
-              <li key={control.provider} style={{ marginBottom: "0.75rem" }}>
+              <li key={control.provider} className="auth__option">
+                {/* Submit control is the orange Primary_Action (Req 14.2). */}
                 <button
                   type="button"
-                  className="cta"
-                  style={{ width: "100%", marginTop: 0 }}
+                  className="cta auth__cta"
                   data-provider={control.provider}
                   aria-label={control.label}
                   onClick={() => startSignIn(control.provider)}
@@ -191,25 +190,34 @@ export default function AuthLanding({
             ))}
           </ul>
 
-          <p style={{ fontSize: "0.85rem", color: "color-mix(in srgb, var(--ink) 65%, var(--paper))", marginBottom: 0 }}>
+          <p className="auth__note">
             We never see or store your password. Sign-in is handled by our
             secure hosted account service.
           </p>
         </section>
 
-        {/* Glass accent surface: the guest/anonymous path (non-booking). */}
-        <aside className="glass motion-rise" aria-labelledby="auth-guest-heading">
-          <h2 id="auth-guest-heading" style={{ marginTop: 0 }}>
+        {/* White surface: the guest/anonymous path (secondary, non-orange). */}
+        <aside className="card motion-rise auth__guest" aria-labelledby="auth-guest-heading">
+          <img
+            className="illustration auth__art"
+            src={suitcase.src}
+            width={suitcase.width}
+            height={suitcase.height}
+            alt=""
+            aria-hidden="true"
+          />
+          <h2 id="auth-guest-heading" className="auth__heading">
             Just exploring?
           </h2>
           <p>
             Continue without an account. Your trip stays on this device until
             you choose to sign in - nothing is lost.
           </p>
+          {/* Secondary action — neutral .btn so the orange Primary_Action is
+              reserved for sign-in (Req 14.2). */}
           <button
             type="button"
-            className="cta"
-            style={{ background: "var(--accent-alt)" }}
+            className="btn"
             onClick={continueAsGuest}
             aria-label="Continue without signing in"
           >

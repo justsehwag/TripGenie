@@ -59,7 +59,7 @@ export function FlightOfferCard({
   const href = `/flights/${encodeURIComponent(offer.id)}${query ? `?${query}` : ""}`;
 
   return (
-    <li className="offer-card booking-surface motion-rise">
+    <li className="offer-card card motion-rise">
       <Link className="offer-card__link" href={href}>
         <div className="offer-card__head">
           <div>

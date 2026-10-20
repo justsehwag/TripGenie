@@ -112,7 +112,7 @@ export default async function FlightDetailPage({
         <ProvenanceLabel meta={offer.meta} />
       </header>
 
-      <section className="detail__body booking-surface motion-rise">
+      <section className="detail__body card motion-rise">
         <dl className="detail__facts">
           <div>
             <dt>Flight</dt>

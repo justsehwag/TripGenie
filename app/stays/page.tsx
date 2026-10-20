@@ -117,7 +117,7 @@ export default async function StaysResultsPage({
       </section>
 
       {result.error ? (
-        <section className="booking-surface results__error" role="alert">
+        <section className="card results__error" role="alert">
           <p>{result.error}</p>
           <Link className="cta" href={`/stays?${criteriaQuery}`}>
             Retry search
@@ -127,7 +127,7 @@ export default async function StaysResultsPage({
         <>
           {/* Sort + filter controls — a GET form so the server re-renders the
               same criteria with the chosen view params (Req 23.6, 28.1). */}
-          <form className="booking-surface results__controls" method="get" action="/stays">
+          <form className="card results__controls" method="get" action="/stays">
             {/* Preserve the parsed criteria across control submissions. */}
             <input type="hidden" name="destination" value={criteria.destination} />
             <input type="hidden" name="checkIn" value={criteria.checkIn} />
@@ -163,7 +163,7 @@ export default async function StaysResultsPage({
           </form>
 
           {offers.length === 0 ? (
-            <section className="booking-surface results__empty">
+            <section className="card results__empty">
               <p>No stays matched your search.</p>
               <p>Try a different destination or adjust your dates.</p>
               <Link className="cta" href="/">

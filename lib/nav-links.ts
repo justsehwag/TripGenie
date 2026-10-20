@@ -20,12 +20,11 @@ export interface NavLink {
 }
 
 export const NAV_LINKS: readonly NavLink[] = [
-  { label: "Stays", href: "/stays" },
-  { label: "Flights", href: "/flights" },
-  { label: "Cars", href: "/cars" },
-  { label: "Deals", href: "/deals" },
-  { label: "My Trips", href: "/trips" },
   { label: "AI Travel Assistant", href: "/plan" },
+  { label: "Discover", href: "/" },
+  { label: "Flights", href: "/flights" },
+  { label: "Stays", href: "/stays" },
+  { label: "My Trips", href: "/trips" },
 ] as const;
 
 /** The account landing route the sign-in control resolves to (Req 29.4). */

@@ -134,7 +134,7 @@ export default async function FlightsResultsPage({
           <p className="eyebrow">Flights</p>
           <h1>We couldn&rsquo;t load flights for {routeLabel}</h1>
         </header>
-        <section className="booking-surface results__error" role="alert">
+        <section className="card results__error" role="alert">
           <p>{result.error}</p>
           <Link className="cta" href={`/flights${query ? `?${query}` : ""}`}>
             Retry search
@@ -157,7 +157,7 @@ export default async function FlightsResultsPage({
         </p>
       </header>
 
-      <form className="results__controls booking-surface" method="get">
+      <form className="results__controls card" method="get">
         {/* Preserve the Search_Criteria across control submits (Req 28.1). */}
         <HiddenCriteria criteria={criteria} />
 
@@ -193,7 +193,7 @@ export default async function FlightsResultsPage({
       </form>
 
       {offers.length === 0 ? (
-        <p className="results__empty booking-surface">
+        <p className="results__empty card">
           No flights match these criteria. Try widening the stops filter or
           editing your search.
         </p>

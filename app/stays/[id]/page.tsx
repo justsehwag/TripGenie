@@ -9,10 +9,10 @@
  * is rendered ONLY when attributable review data exists, i.e. when
  * `meta.reviewSummary` is present (Req 23.9, 4.12/4.13).
  *
- * Detail is a core booking surface: it renders on opaque `booking-surface`
- * panels at ≥4.5:1 contrast (Req 15.4/15.5). Nothing shown here is fabricated —
- * all fields, the provenance, and any rating come from the server-produced
- * offer (Req 4 honesty).
+ * Detail renders on a clean white `.card` surface with green accents and
+ * subtle dividers (Req 7.1), text at >=4.5:1 contrast. Nothing shown here is
+ * fabricated — all fields, the provenance, and any rating come from the
+ * server-produced offer (Req 4 honesty).
  */
 
 import Link from "next/link";
@@ -97,7 +97,7 @@ export default async function StayDetailPage({
   if (!offer) {
     return (
       <main className="shell detail">
-        <section className="booking-surface detail__notfound" role="alert">
+        <section className="card detail__notfound" role="alert">
           <h1>Stay not found</h1>
           <p>We couldn&apos;t find that stay for the current search.</p>
           <Link className="cta" href={`/stays?${criteriaQuery}`}>
@@ -121,7 +121,7 @@ export default async function StayDetailPage({
         </Link>
       </p>
 
-      <section className="booking-surface detail__panel motion-rise">
+      <section className="card detail__panel motion-rise">
         <p className="eyebrow">{offer.destination}</p>
         <h1 className="detail__title">{propertyName}</h1>
 

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" role="img">
+  <!-- soft mint backdrop -->
+  <circle cx="120" cy="120" r="96" fill="#E8FAF2"/>
+  <!-- globe body -->
+  <circle cx="120" cy="120" r="70" fill="#C8F2DF" stroke="#087F63" stroke-width="3"/>
+  <!-- latitude / longitude lines -->
+  <path d="M50 120h140" stroke="#16B982" stroke-width="3" stroke-linecap="round"/>
+  <path d="M120 50v140" stroke="#16B982" stroke-width="3" stroke-linecap="round"/>
+  <path d="M120 50c-30 20 -30 120 0 140" stroke="#16B982" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M120 50c30 20 30 120 0 140" stroke="#16B982" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M60 96c38 20 102 20 140 0" stroke="#16B982" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path d="M60 144c38 -20 102 -20 140 0" stroke="#16B982" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <!-- a stylized landmass -->
+  <path d="M96 92c14 -6 26 2 24 14c-2 12 -20 10 -22 22c-2 12 14 16 10 28" stroke="#087F63" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- traveler flag / route accent (restrained orange) -->
+  <path d="M168 60v44" stroke="#087F63" stroke-width="3" stroke-linecap="round"/>
+  <path d="M168 60l26 8l-26 10z" fill="#FF901F"/>
+  <!-- journey dot -->
+  <circle cx="168" cy="118" r="6" fill="#FF901F"/>
+</svg>

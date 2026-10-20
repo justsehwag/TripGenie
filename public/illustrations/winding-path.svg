@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" role="img">
+  <!-- soft mint backdrop -->
+  <circle cx="120" cy="120" r="96" fill="#E8FAF2"/>
+  <!-- map frame -->
+  <rect x="54" y="58" width="132" height="124" rx="16" fill="#C8F2DF" stroke="#087F63" stroke-width="3"/>
+  <!-- winding dashed route -->
+  <path d="M80 160c20 -2 24 -28 44 -30c22 -2 24 -30 44 -40" stroke="#16B982" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 12" fill="none"/>
+  <!-- start marker -->
+  <circle cx="80" cy="160" r="9" fill="#16B982" stroke="#087F63" stroke-width="3"/>
+  <!-- end marker pin (restrained orange accent) -->
+  <path d="M168 80c-11 0 -20 9 -20 20c0 14 20 32 20 32s20 -18 20 -32c0 -11 -9 -20 -20 -20z" fill="#FF901F" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="168" cy="100" r="6" fill="#E8FAF2"/>
+</svg>

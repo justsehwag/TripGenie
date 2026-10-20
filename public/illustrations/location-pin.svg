@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" role="img">
+  <!-- soft mint backdrop -->
+  <circle cx="120" cy="120" r="96" fill="#E8FAF2"/>
+  <!-- ground shadow -->
+  <ellipse cx="120" cy="196" rx="40" ry="10" fill="#C8F2DF"/>
+  <!-- main pin -->
+  <path d="M120 54c-28 0 -50 22 -50 50c0 34 50 84 50 84s50 -50 50 -84c0 -28 -22 -50 -50 -50z" fill="#16B982" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <!-- inner dot -->
+  <circle cx="120" cy="104" r="18" fill="#E8FAF2" stroke="#087F63" stroke-width="3"/>
+  <!-- restrained orange accent dot -->
+  <circle cx="120" cy="104" r="7" fill="#FF901F"/>
+  <!-- small floating companion pin -->
+  <path d="M176 70c-12 0 -22 10 -22 22c0 15 22 37 22 37s22 -22 22 -37c0 -12 -10 -22 -22 -22z" fill="#C8F2DF" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="176" cy="90" r="6" fill="#16B982"/>
+</svg>

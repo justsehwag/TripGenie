@@ -16,10 +16,13 @@ export const metadata = { title: "Car detail - TripGenie" };
  * same `Search_Criteria` carried on the URL — so the detail page reproduces the
  * identical offer the Results_Page produced (Req 25.6 / 28.1 discipline). It
  * renders the full car offer detail and the mandatory `OfferMeta` provenance
- * label (Req 25.10); when the provenance is estimated the page states no payment
- * is taken and no valid rental is issued (Req 25.11). A detail page is a core
- * booking surface, so it renders opaque at ≥4.5:1 contrast via `booking-surface`
- * (Req 15.4/15.5).
+ * label (Req 25.10 / 9.4); when the provenance is estimated the page states no
+ * payment is taken and no valid rental is issued (Req 25.11).
+ *
+ * UI redesign (Req 9.1-9.5): the detail page uses the shared minimalist
+ * Design_System classes (`.shell`, `.card`, `.detail-facts`, `.provenance`,
+ * `.cta`) on white surfaces with green accents — no legacy glass/dark/emoji/
+ * hardcoded colors; search and detail navigation behavior is preserved.
  */
 
 type RouteParams = Promise<{ id: string }>;
@@ -115,8 +118,8 @@ export default async function CarDetailPage({
         {offer.seats} seats · {offer.days} {offer.days === 1 ? "day" : "days"}
       </p>
 
-      {/* Full offer detail on an opaque, legible surface (Req 15.4/15.5, 25.10). */}
-      <section className="booking-surface detail-panel" aria-label="Rental car detail">
+      {/* Full offer detail on a clean white surface (Req 9.1, 25.10). */}
+      <section className="card detail-panel" aria-label="Rental car detail">
         <dl className="detail-facts">
           <div className="row">
             <dt>Car class</dt>
@@ -162,7 +165,7 @@ export default async function CarDetailPage({
       </div>
 
       {offer.meta.reviewSummary ? (
-        <section className="booking-surface detail-reviews" aria-label="Reviews">
+        <section className="card detail-reviews" aria-label="Reviews">
           <h2>Reviews</h2>
           <p>
             {offer.meta.reviewSummary.rating.toFixed(1)} / 5 from{" "}

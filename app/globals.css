@@ -1,25 +1,112 @@
-/* TripGenie Editorial + Glassmorphism + Motion - tokens mirror lib/design-system.ts */
+/* TripGenie — Minimalist illustration-led identity.
+ *
+ * The :root block below mirrors lib/design-system.ts `tokenEntries()` 1:1:
+ * every color, type, font, space, focus, and motion custom
+ * property here corresponds to exactly one entry returned by tokenEntries(),
+ * with an identical serialized value. The task-4 consistency test asserts this
+ * bijection, so DO NOT add or remove token-group custom properties without
+ * updating design-system.ts in lockstep. Non-token helpers (radius, shadow)
+ * live under a different prefix and are intentionally outside the mirror.
+ */
 :root {
-  --ink: #1a1714;
-  --paper: #f4efe6;
-  --accent: #b84a2e;
-  --accent-alt: #363f2a;
-  --gold: #c49e45;
-  --font-display: Garamond, "Times New Roman", serif;
-  --font-body: Inter, system-ui, sans-serif;
-  /* Type scale (each step >= 1.25x the next) */
-  --type-display: 3rem;
-  --type-h1: 2.25rem;
-  --type-h2: 1.75rem;
-  --type-h3: 1.25rem;
-  --type-body: 1rem;
-  /* Glass opacity band 0.60-0.85 */
-  --glass-opacity: 0.72;
-  --surface-booking-opacity: 1.0;
-  /* Motion */
-  --motion-duration: 400ms;
+  /* ── Colors (COLOR_TOKENS) ─────────────────────────────────────────── */
+  --color-background: #FFFFFF;
+  --color-primary-text: #26332F;
+  --color-secondary-text: #7B8580;
+  --color-action-orange: #FF901F;
+  --color-orange-hover: #F47D0B;
+  --color-primary-green: #16B982;
+  --color-deep-emerald: #087F63;
+  --color-pale-mint: #E8FAF2;
+  --color-soft-green: #C8F2DF;
+  --color-light-border: #E8ECE9;
+  --color-muted-bg: #F8FBF9;
+
+  /* ── Typography scale (TYPOGRAPHY_SCALE) ───────────────────────────── */
+  --type-hero-size: 56px;
+  --type-hero-line: 1.1;
+  --type-hero-weight: 400;
+  --type-hero-spacing: -0.02em;
+
+  --type-section-size: 40px;
+  --type-section-line: 1.15;
+  --type-section-weight: 400;
+  --type-section-spacing: -0.01em;
+
+  --type-page-title-size: 32px;
+  --type-page-title-line: 1.2;
+  --type-page-title-weight: 400;
+  --type-page-title-spacing: -0.01em;
+
+  --type-card-title-size: 20px;
+  --type-card-title-line: 1.3;
+  --type-card-title-weight: 700;
+  --type-card-title-spacing: 0em;
+
+  --type-body-size: 16px;
+  --type-body-line: 1.6;
+  --type-body-weight: 400;
+  --type-body-spacing: 0em;
+
+  --type-label-size: 14px;
+  --type-label-line: 1.4;
+  --type-label-weight: 700;
+  --type-label-spacing: 0.01em;
+
+  --type-helper-size: 13px;
+  --type-helper-line: 1.5;
+  --type-helper-weight: 400;
+  --type-helper-spacing: 0em;
+
+  --type-button-size: 15px;
+  --type-button-line: 1.2;
+  --type-button-weight: 700;
+  --type-button-spacing: 0.01em;
+
+  --type-nav-size: 15px;
+  --type-nav-line: 1.4;
+  --type-nav-weight: 400;
+  --type-nav-spacing: 0em;
+
+  /* ── Font faces (TYPOGRAPHY_FACES fallback stacks) ─────────────────────
+   * Value equals the module's `fallback` string exactly so the task-4
+   * consistency test passes. next/font (app/layout.tsx) loads the serif
+   * display face as var(--font-display-face) and the sans body face as
+   * var(--font-body-face); each token references its face variable first and
+   * falls back to the system stack while the webfont loads or if it fails. */
+  --font-display: var(--font-display-face), Georgia, 'Times New Roman', serif;
+  --font-body: var(--font-body-face), system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* ── Spacing scale (SPACING, px) ───────────────────────────────────── */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-xxl: 48px;
+
+  /* ── Focus policy (FOCUS) ──────────────────────────────────────────── */
+  --focus-ring-color: #16B982;
+  --focus-ring-width: 2px;
+  --focus-offset: 2px;
+
+  /* ── Motion durations (ms) ─────────────────────────────────────────── */
+  --motion-min: 120ms;
+  --motion-max: 400ms;
+  --motion-normal: 400ms;
   --motion-reduced: 200ms;
-  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+
+  /* ── Non-token helpers (OUTSIDE the token mirror; different prefix) ──── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(38, 51, 47, 0.06);
+  --shadow-md: 0 6px 20px rgba(38, 51, 47, 0.08);
+  --shadow-lg: 0 16px 40px rgba(38, 51, 47, 0.1);
+  /* Easing helper — intentionally NOT under the --motion- token prefix so it
+     stays out of the token<->CSS mirror (task-4 consistency bijection). */
+  --ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 * { box-sizing: border-box; }
@@ -27,171 +114,717 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--color-background);
+  color: var(--color-primary-text);
   font-family: var(--font-body);
-  font-size: var(--type-body);
-  line-height: 1.55;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  letter-spacing: var(--type-body-spacing);
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, .display { font-family: var(--font-display); font-weight: 600; line-height: 1.1; letter-spacing: -0.01em; }
-.display { font-size: var(--type-display); }
-h1 { font-size: var(--type-h1); }
-h2 { font-size: var(--type-h2); }
-h3 { font-size: var(--type-h3); }
-
-/* Editorial layout */
-.shell { max-width: 1120px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
-.eyebrow { font-family: var(--font-body); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.75rem; color: var(--accent); font-weight: 700; }
-.lead { font-size: 1.15rem; max-width: 54ch; color: color-mix(in srgb, var(--ink) 80%, var(--paper)); }
-
-/* Glass accent surface (accent only, <=30% of cards) */
-.glass {
-  background: color-mix(in srgb, #ffffff calc(var(--glass-opacity) * 100%), transparent);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  border-radius: 18px;
-  padding: 1.5rem;
-  box-shadow: 0 10px 40px rgba(26, 23, 20, 0.1);
+/* Serif display headings on the new scale. */
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  color: var(--color-primary-text);
 }
-
-/* Opaque booking surface (itinerary/payment/confirmation) - always 100% */
-.booking-surface {
-  background: #ffffff;
-  opacity: var(--surface-booking-opacity);
-  border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
-  border-radius: 14px;
-  padding: 1.5rem;
-  color: var(--ink); /* >= 4.5:1 on white */
+.display {
+  font-size: var(--type-hero-size);
+  line-height: var(--type-hero-line);
+  font-weight: var(--type-hero-weight);
+  letter-spacing: var(--type-hero-spacing);
+  margin: 0 0 var(--space-md);
 }
-
-/* Motion: triggered, time-bounded */
-@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-.motion-rise { animation: rise var(--motion-duration) var(--ease) both; }
-
-@media (prefers-reduced-motion: reduce) {
-  .motion-rise { animation-duration: var(--motion-reduced); animation-name: fade; }
-  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+h1 {
+  font-size: var(--type-page-title-size);
+  line-height: var(--type-page-title-line);
+  font-weight: var(--type-page-title-weight);
+  letter-spacing: var(--type-page-title-spacing);
+  margin: 0.2rem 0 var(--space-lg);
 }
-
-.grid-2 { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1.5rem; margin-top: 2.5rem; }
-@media (max-width: 780px) { .grid-2 { grid-template-columns: 1fr; } }
-.cta { display: inline-block; margin-top: 1.5rem; background: var(--accent); color: #fff; padding: 0.75rem 1.25rem; border-radius: 10px; text-decoration: none; font-weight: 600; }
-.row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); }
-.row:last-child { border-bottom: 0; font-weight: 700; }
-
-/* Planner fields */
-.field { display:block; margin:0 0 1rem; }
-.field > span { display:block; font-size:0.8rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:color-mix(in srgb, var(--ink) 65%, var(--paper)); margin-bottom:0.35rem; }
-.field input { width:100%; padding:0.65rem 0.75rem; border:1px solid color-mix(in srgb, var(--ink) 20%, transparent); border-radius:10px; font:inherit; background:#fff; color:var(--ink); }
-.field input:focus { outline:2px solid var(--accent); outline-offset:1px; }
-.field-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
-.cta { border:0; cursor:pointer; font:inherit; }
-h1 { margin:0.2rem 0 1.5rem; }
+h2 {
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: var(--type-section-weight);
+  letter-spacing: var(--type-section-spacing);
+}
+h3 {
+  font-size: var(--type-card-title-size);
+  line-height: var(--type-card-title-line);
+  font-weight: var(--type-card-title-weight);
+  letter-spacing: var(--type-card-title-spacing);
+}
 
 /* ===========================================================================
-   Homepage (Req 22) — Hopper-style, warm editorial. No AI purple gradient.
-   Reuses palette, --type-*, glass (discovery/promo/AI), booking-surface (opaque
-   search panel), and motion-rise. No horizontal overflow at >=320px.
+   Minimalist shared utilities (replace legacy glass/editorial surfaces).
    =========================================================================== */
-.home { display: flex; flex-direction: column; gap: 2.5rem; }
-.home-hero { max-width: 60ch; }
-
-/* Opaque search panel holding the tabs + active form */
-.home-panel { padding: 1.5rem; }
-
-/* Tab list: exactly one active; keyboard-reachable with visible focus */
-.tablist { display: flex; gap: 0.5rem; border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent); margin-bottom: 1.25rem; flex-wrap: wrap; }
-.tab {
-  appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit;
-  font-weight: 700; color: color-mix(in srgb, var(--ink) 60%, var(--paper));
-  padding: 0.6rem 1rem; border-radius: 10px 10px 0 0; border-bottom: 3px solid transparent;
-  margin-bottom: -1px;
+.shell { max-width: 1120px; margin: 0 auto; padding: var(--space-xxl) var(--space-lg) 4rem; }
+.eyebrow {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: var(--type-label-size);
+  color: var(--color-deep-emerald);
+  font-weight: var(--type-label-weight);
+  margin: 0 0 var(--space-sm);
 }
-.tab:hover { color: var(--ink); }
-.tab-active { color: var(--accent); border-bottom-color: var(--accent); }
-.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* Search forms */
-.search-form { display: block; }
-.field select {
-  width: 100%; padding: 0.65rem 0.75rem; border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
-  border-radius: 10px; font: inherit; background: #fff; color: var(--ink);
+.lead {
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  max-width: 60ch;
+  color: var(--color-secondary-text);
 }
-.field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.field-error { display: block; color: var(--accent); font-size: 0.8rem; font-weight: 600; margin-top: 0.3rem; }
 
-.triptype { border: 0; padding: 0; margin: 0 0 1rem; display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; }
-.triptype legend { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); padding: 0; }
-.radio, .checkbox { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; cursor: pointer; }
-.checkbox { margin-bottom: 1rem; }
-.radio input:focus-visible, .checkbox input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* Flights origin/destination swap row */
-.swap-row { grid-template-columns: 1fr auto 1fr; align-items: end; }
-.swap-btn {
-  appearance: none; border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent); background: #fff;
-  color: var(--ink); cursor: pointer; border-radius: 10px; width: 2.6rem; height: 2.7rem; font-size: 1.1rem;
-  margin-bottom: 1rem;
+/* Clean white surfaces (no glassmorphism, no blur, no translucency). */
+.surface,
+.card,
+.panel,
+.glass,
+.booking-surface {
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  color: var(--color-primary-text);
 }
-.swap-btn:hover { border-color: var(--accent); color: var(--accent); }
-.swap-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card { box-shadow: var(--shadow-sm); }
+.panel { background: var(--color-muted-bg); }
+.surface { box-shadow: var(--shadow-sm); }
+
+/* Illustration wrapper — preserves aspect ratio, never crops awkwardly. */
+.illustration {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* ===========================================================================
+   Filter drawer — off-canvas panel for search/filter controls.
+   Base treatment lives here (task 10); the responsive <=1023px behavior that
+   routes inline filters INTO the drawer is finalized in task 21. On wide
+   viewports the drawer reads as a static white panel; the off-canvas
+   transform/backdrop treatment is transform-based and bounded by --motion-*.
+   =========================================================================== */
+.filter-drawer {
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+}
+.filter-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.filter-drawer__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+  font-weight: var(--type-card-title-weight);
+  color: var(--color-primary-text);
+}
+/* Close control (reuses .btn visuals elsewhere; this is the minimal affordance). */
+.filter-drawer__close {
+  appearance: none;
+  border: 1px solid var(--color-light-border);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  border-radius: var(--radius-sm);
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.filter-drawer__close:hover { border-color: var(--color-primary-green); color: var(--color-deep-emerald); }
+.filter-drawer__close:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+
+/* Backdrop behind an open off-canvas drawer — dims the page, fades in. */
+.filter-drawer__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(38, 51, 47, 0.32);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--motion-normal) var(--ease-standard),
+              visibility var(--motion-normal) var(--ease-standard);
+}
+.filter-drawer__backdrop.is-open { opacity: 1; visibility: visible; }
+
+/* Off-canvas variant: slides in from the right, transform-based + bounded. */
+.filter-drawer--offcanvas {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  width: min(92vw, 22rem);
+  max-width: 100%;
+  border-radius: 0;
+  border: 0;
+  border-left: 1px solid var(--color-light-border);
+  box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform var(--motion-normal) var(--ease-standard);
+}
+.filter-drawer--offcanvas.is-open { transform: translateX(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-drawer--offcanvas {
+    transition: none;
+    transform: none;
+    /* Fall back to a plain fade so no translation occurs. */
+    opacity: 0;
+    visibility: hidden;
+  }
+  .filter-drawer--offcanvas.is-open { opacity: 1; visibility: visible; transition: opacity var(--motion-reduced) linear; }
+  .filter-drawer__backdrop { transition: opacity var(--motion-reduced) linear; }
+}
+
+/* ===========================================================================
+   Motion — triggered, time-bounded, reduced-motion aware.
+   =========================================================================== */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* Dropdown / mobile-menu open: opacity + small downward transform (Req 16.3). */
+@keyframes menu-drop {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+.motion-rise { animation: rise var(--motion-normal) var(--ease-standard) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-rise {
+    animation-name: fade;
+    animation-duration: var(--motion-reduced);
+    animation-timing-function: linear;
+  }
+  /* Mobile menu: opacity-only, no translation, within 200ms. */
+  .site-nav__controls.is-open {
+    animation-name: fade;
+    animation-duration: var(--motion-reduced);
+    animation-timing-function: linear;
+  }
+}
+
+/* ===========================================================================
+   Modal / overlay — reusable backdrop + panel with opacity + transform
+   open/close transitions bounded by --motion-* (<=400ms). Reduced motion
+   falls back to opacity-only within 200ms (Req 16.3, 16.6, 17.1).
+   =========================================================================== */
+.modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: rgba(38, 51, 47, 0.32);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--motion-normal) var(--ease-standard),
+              visibility var(--motion-normal) var(--ease-standard);
+}
+.modal__backdrop.is-open { opacity: 1; visibility: visible; }
+
+.modal__panel {
+  width: min(100%, 32rem);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-xl);
+  color: var(--color-primary-text);
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
+  transition: opacity var(--motion-normal) var(--ease-standard),
+              transform var(--motion-normal) var(--ease-standard);
+}
+.modal__backdrop.is-open .modal__panel { opacity: 1; transform: none; }
+
+.modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.modal__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-page-title-size);
+  line-height: var(--type-page-title-line);
+  font-weight: var(--type-page-title-weight);
+  letter-spacing: var(--type-page-title-spacing);
+  color: var(--color-primary-text);
+}
+.modal__close {
+  appearance: none;
+  border: 1px solid var(--color-light-border);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  border-radius: var(--radius-sm);
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.modal__close:hover { border-color: var(--color-primary-green); color: var(--color-deep-emerald); }
+.modal__close:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+.modal__body { color: var(--color-primary-text); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Opacity-only, no transform/translation, within 200ms. */
+  .modal__backdrop { transition: opacity var(--motion-reduced) linear, visibility var(--motion-reduced) linear; }
+  .modal__panel {
+    transform: none;
+    transition: opacity var(--motion-reduced) linear;
+  }
+}
+
+/* ===========================================================================
+   Layout + shared controls.
+   =========================================================================== */
+.grid-2 { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: var(--space-lg); margin-top: var(--space-xl); }
+@media (max-width: 1023px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-light-border);
+}
+.row:last-child { border-bottom: 0; font-weight: 700; }
+
+/* Primary_Action — orange with orange hover + focus ring. */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  background: var(--color-action-orange);
+  color: var(--color-background);
+  padding: 0.7rem 1.25rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--type-button-size);
+  font-weight: var(--type-button-weight);
+  letter-spacing: var(--type-button-spacing);
+  line-height: var(--type-button-line);
+  min-height: 44px;
+  /* Hover/press motion is bounded by the token durations (<=400ms) with a
+     non-linear ease; only color/shadow/transform animate (Req 16.2). */
+  transition: background var(--motion-normal) var(--ease-standard),
+              box-shadow var(--motion-normal) var(--ease-standard),
+              transform var(--motion-reduced) var(--ease-standard);
+}
+.cta:hover { background: var(--color-orange-hover); box-shadow: var(--shadow-sm); }
+/* Subtle tactile press — a small, bounded downward nudge. */
+.cta:active { transform: translateY(1px); }
+.cta:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Secondary/neutral button variant (new, token-based). */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 1.1rem;
+  font: inherit;
+  font-weight: var(--type-button-weight);
+  cursor: pointer;
+  min-height: 44px;
+  text-decoration: none;
+  transition: border-color var(--motion-normal) var(--ease-standard),
+              background var(--motion-normal) var(--ease-standard),
+              color var(--motion-normal) var(--ease-standard),
+              transform var(--motion-reduced) var(--ease-standard);
+}
+.btn:hover { border-color: var(--color-primary-green); color: var(--color-deep-emerald); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+.btn--primary {
+  background: var(--color-action-orange);
+  color: var(--color-background);
+  border-color: var(--color-action-orange);
+}
+.btn--primary:hover { background: var(--color-orange-hover); border-color: var(--color-orange-hover); color: var(--color-background); }
+
+/* Reduced motion: suppress the press transform; keep instant color changes. */
+@media (prefers-reduced-motion: reduce) {
+  .cta,
+  .btn { transition: background var(--motion-reduced) linear, color var(--motion-reduced) linear; }
+  .cta:active,
+  .btn:active { transform: none; }
+}
+
+/* ===========================================================================
+   Form fields / controls (44px min touch target, light borders, green focus).
+   =========================================================================== */
+.field { display: block; margin: 0 0 var(--space-md); }
+.field > span {
+  display: block;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+  font-weight: var(--type-label-weight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-secondary-text);
+  margin-bottom: 0.35rem;
+}
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  background: var(--color-background);
+  color: var(--color-primary-text);
+}
+/* Date/time pickers inherit the field treatment; pin a light color-scheme so
+   the native picker UI stays legible on the white canvas, keep the 44px touch
+   target, and make the picker indicator feel interactive (Req 2.7, 19.3). */
+.field input[type="date"],
+.field input[type="time"],
+.field input[type="datetime-local"],
+.field input[type="month"],
+.field input[type="week"] {
+  color-scheme: light;
+  min-height: 44px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.field input[type="date"]::-webkit-calendar-picker-indicator,
+.field input[type="time"]::-webkit-calendar-picker-indicator,
+.field input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.field input[type="month"]::-webkit-calendar-picker-indicator,
+.field input[type="week"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity var(--motion-reduced) var(--ease-standard);
+}
+.field input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.field input[type="time"]::-webkit-calendar-picker-indicator:hover,
+.field input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+.field input[type="month"]::-webkit-calendar-picker-indicator:hover,
+.field input[type="week"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
+.field input:hover,
+.field select:hover { border-color: var(--color-soft-green); }
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 1px;
+  border-color: var(--color-primary-green);
+}
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
+.field-error {
+  display: block;
+  color: var(--color-orange-hover);
+  font-size: var(--type-helper-size);
+  font-weight: 600;
+  margin-top: 0.3rem;
+}
+
+.triptype {
+  border: 0; padding: 0; margin: 0 0 var(--space-md);
+  display: flex; gap: var(--space-lg); align-items: center; flex-wrap: wrap;
+}
+.triptype legend {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-secondary-text);
+  padding: 0;
+}
+.radio, .checkbox {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-weight: 600; cursor: pointer; min-height: 44px;
+}
+.checkbox { margin-top: 0.4rem; }
+.radio input:focus-visible,
+.checkbox input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+
 .age-field { max-width: 12rem; }
 
-/* AI planning prompt */
-.home-ai .ai-form { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; }
-.ai-field { flex: 1 1 18rem; margin-bottom: 0; }
-.home-ai .cta { margin-top: 0; }
-
-/* Discovery + popular + continue sections */
-.home-section { display: block; }
-.home-section > h2 { margin: 0 0 1rem; }
-.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.25rem; }
-.discovery-card { text-align: left; cursor: pointer; font: inherit; color: var(--ink); }
-.discovery-card h3 { margin: 0 0 0.35rem; }
-.discovery-card p { margin: 0; color: color-mix(in srgb, var(--ink) 75%, var(--paper)); }
-.discovery-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-.chip-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
-.chip {
-  appearance: none; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); background: #fff;
-  color: var(--ink); cursor: pointer; font: inherit; font-weight: 600; padding: 0.5rem 0.9rem; border-radius: 999px;
+/* Origin/destination swap button. */
+.swap-btn {
+  appearance: none;
+  border: 1px solid var(--color-light-border);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  width: 2.75rem; height: 2.75rem; min-width: 44px; min-height: 44px;
+  font-size: 1.1rem; flex: 0 0 auto;
 }
-.chip:hover { border-color: var(--accent); color: var(--accent); }
-.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swap-btn:hover { border-color: var(--color-primary-green); color: var(--color-deep-emerald); }
+.swap-btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
 
-.home-promo .cta { margin-top: 1rem; }
+/* ===========================================================================
+   Tabs / pills — soft-green selected state, orange optional accent.
+   =========================================================================== */
+.tablist { display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); flex-wrap: wrap; border-bottom: 0; }
+.tab { appearance: none; cursor: pointer; font: inherit; }
+.tab-pill {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  border: 1px solid var(--color-light-border);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  font-weight: 700;
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-pill);
+  min-height: 44px;
+}
+.tab-pill__icon { font-size: 1rem; }
+.tab-pill:hover { border-color: var(--color-primary-green); color: var(--color-deep-emerald); }
+.tab-pill.tab-active {
+  background: var(--color-soft-green);
+  border-color: var(--color-primary-green);
+  color: var(--color-deep-emerald);
+}
+.tab-pill:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
 
-/* Continue exploring */
-.recent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
-.recent-link { display: block; text-decoration: none; color: var(--ink); font-weight: 600; }
-.recent-link:hover { color: var(--accent); }
-.recent-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* ===========================================================================
+   Chips (deals filters) — restyled, class names preserved.
+   =========================================================================== */
+.chip-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.chip {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  border: 1px solid var(--color-light-border);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  padding: 0.45rem 0.95rem;
+  border-radius: var(--radius-pill);
+  min-height: 44px;
+}
+.chip:hover { border-color: var(--color-primary-green); color: var(--color-deep-emerald); }
+.chip:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+.chip-active,
+.chip.chip-active {
+  background: var(--color-soft-green);
+  border-color: var(--color-primary-green);
+  color: var(--color-deep-emerald);
+}
+.chip-active:hover { color: var(--color-deep-emerald); border-color: var(--color-primary-green); }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-lg);
+}
+
+/* ===========================================================================
+   Homepage — white asymmetric canvas (no dark hero, no scrim, no glass).
+   Task 11 rebuilds the hero markup; here the shared utilities are light.
+   =========================================================================== */
+.home { display: flex; flex-direction: column; gap: var(--space-xxl); padding-bottom: 0; }
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  font-weight: var(--type-section-weight);
+  letter-spacing: var(--type-section-spacing);
+  color: var(--color-primary-text);
+}
+.section-sub { margin: 0.35rem 0 0; color: var(--color-secondary-text); max-width: 60ch; }
+.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-lg); }
+.section-head > div { min-width: 0; }
+.section-link { color: var(--color-deep-emerald); font-weight: 700; text-decoration: none; white-space: nowrap; }
+.section-link:hover { text-decoration: underline; }
+
+/* ── HERO (white canvas) ────────────────────────────────────────────── */
+.home-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  background: var(--color-background);
+  border-radius: var(--radius-lg);
+}
+.home-hero--photo { background: var(--color-muted-bg); }
+.home-hero__img { max-width: 100%; height: auto; display: block; }
+/* Scrim is now a no-op light overlay (dark gradient removed). */
+.home-hero__scrim { position: absolute; inset: 0; background: transparent; pointer-events: none; }
+.home-hero__inner { position: relative; width: 100%; padding-top: var(--space-xl); padding-bottom: var(--space-xxl); }
+.home-hero__copy { max-width: 36rem; color: var(--color-primary-text); }
+.home-hero__title {
+  color: var(--color-primary-text);
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 5vw, var(--type-hero-size));
+  line-height: var(--type-hero-line);
+  letter-spacing: var(--type-hero-spacing);
+  margin: 0 0 var(--space-md);
+}
+.home-hero__sub { color: var(--color-secondary-text); font-size: 1.05rem; max-width: 46ch; margin: 0; }
+.home-hero__script {
+  margin: var(--space-md) 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.1;
+  font-size: clamp(1.4rem, 3.2vw, 2.4rem);
+  color: var(--color-deep-emerald);
+}
+.home-hero__plane { font-style: normal; color: var(--color-action-orange); }
+
+.home-trust {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-pill); padding: 0.4rem 0.9rem 0.4rem 0.5rem;
+  box-shadow: var(--shadow-sm);
+}
+.home-trust__avatars { display: flex; }
+.home-trust__avatar {
+  width: 1.5rem; height: 1.5rem; border-radius: 50%;
+  border: 2px solid var(--color-background); margin-left: -0.5rem;
+}
+.home-trust__avatar:first-child { margin-left: 0; }
+.home-trust__label { font-size: var(--type-helper-size); font-weight: 700; color: var(--color-primary-text); white-space: nowrap; }
+
+/* ── SEARCH PANEL — clean white card (de-glassed) ───────────────────── */
+.home-search-wrap { padding-top: 0; padding-bottom: 0; margin-top: var(--space-lg); position: relative; z-index: 5; }
+.home-search {
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg) var(--space-xl);
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  box-shadow: var(--shadow-md);
+}
+
+.search-form { display: block; }
+.search-row { display: flex; gap: 0.9rem; align-items: flex-end; flex-wrap: wrap; }
+.search-row .field { flex: 1 1 11rem; margin: 0; min-width: 0; }
+.search-row .age-field { flex: 0 1 9rem; }
+.search-cta {
+  display: inline-flex; align-items: center; gap: 0.4rem; margin: 0;
+  border-radius: var(--radius-pill); padding: 0.75rem 1.5rem; flex: 0 0 auto; min-height: 44px;
+}
+
+.home-search__footrow {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-md);
+  flex-wrap: wrap; margin-top: var(--space-md);
+}
+.home-search__flex { margin: 0; }
+.home-search__ai { display: flex; align-items: center; gap: var(--space-sm); flex: 1 1 22rem; justify-content: flex-end; flex-wrap: wrap; }
+.home-search__ai-input {
+  flex: 1 1 12rem; min-width: 0; min-height: 44px; padding: 0.55rem 0.75rem; font: inherit;
+  border: 1px solid var(--color-light-border); border-radius: var(--radius-pill);
+  background: var(--color-background); color: var(--color-primary-text);
+}
+.home-search__ai-input:focus { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 1px; border-color: var(--color-primary-green); }
+.home-search__ai-link {
+  appearance: none; border: 0; background: transparent; cursor: pointer; font: inherit;
+  color: var(--color-deep-emerald); font-weight: 700; white-space: nowrap; padding: 0.35rem 0.2rem;
+}
+.home-search__ai-link:hover { text-decoration: underline; }
+.home-search__ai-link:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); border-radius: 6px; }
+
+/* Shared image layer — light placeholder (no dark gradient). */
+.img-layer { position: absolute; inset: 0; z-index: 0; background: var(--color-muted-bg); }
+.img-layer__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── Destinations rail / discovery cards (white surfaces) ───────────── */
+.home-section { display: block; }
+.dest-rail {
+  display: flex; gap: var(--space-lg); overflow-x: auto; padding: 0.25rem 0 var(--space-md);
+  scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+}
+.dest-card {
+  position: relative; flex: 0 0 auto; width: 200px;
+  border: 1px solid var(--color-light-border); padding: 0; cursor: pointer;
+  overflow: hidden; border-radius: var(--radius-md);
+  scroll-snap-align: start; background: var(--color-background);
+  color: var(--color-primary-text); text-align: left;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--motion-normal) var(--ease-standard),
+              transform var(--motion-normal) var(--ease-standard);
+}
+.dest-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+/* Scrim removed — card content sits on a white footer band. */
+.dest-card__scrim { position: absolute; inset: auto 0 0 0; height: 0; background: transparent; }
+.dest-card__meta { position: relative; z-index: 2; display: flex; flex-direction: column; padding: var(--space-md); }
+.dest-card__name {
+  font-family: var(--font-display);
+  font-weight: var(--type-card-title-weight);
+  font-size: var(--type-card-title-size);
+  color: var(--color-primary-text);
+}
+.dest-card__country { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.dest-card__go {
+  position: absolute; right: 0.75rem; bottom: 0.9rem; z-index: 2;
+  width: 2rem; height: 2rem; border-radius: 50%;
+  background: var(--color-action-orange); color: var(--color-background);
+  display: flex; align-items: center; justify-content: center; font-weight: 700;
+  transition: transform var(--motion-normal) var(--ease-standard);
+}
+.dest-card:hover .dest-card__go { transform: translateX(2px); }
+.dest-card:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 3px; }
+
+/* ── Feature icons row ──────────────────────────────────────────────── */
+.home-features { border-top: 1px solid var(--color-light-border); padding-top: var(--space-xxl); }
+.feature-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-xl); text-align: center; }
+.feature { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.feature__icon { font-size: 1.8rem; color: var(--color-primary-green); }
+.feature__title { font-family: var(--font-display); font-weight: 700; color: var(--color-primary-text); margin: 0; font-size: var(--type-card-title-size); }
+.feature__copy { margin: 0; color: var(--color-secondary-text); font-size: var(--type-helper-size); }
+
+/* ── Continue exploring ─────────────────────────────────────────────── */
+.recent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--space-md); }
+.recent-link { display: block; text-decoration: none; color: var(--color-primary-text); font-weight: 600; }
+.recent-link:hover { color: var(--color-deep-emerald); }
+.recent-link:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
 .empty-state { text-align: left; }
 .empty-state p { margin: 0 0 0.75rem; }
 .empty-state .cta { margin-top: 0.25rem; }
 
-/* Accessible visually-hidden label */
+/* Accessible visually-hidden label. */
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-/* Keep forms single-column on narrow screens (no horizontal overflow at >=320px) */
-@media (max-width: 560px) {
-  .field-row { grid-template-columns: 1fr; }
-  .swap-row { grid-template-columns: 1fr; }
-  .swap-btn { margin: 0 0 1rem; width: 100%; }
-}
-
-/* ── Editorial focus-ring token (keyboard reachability, Req 21.8/28.7) ── */
-:root { --focus-ring: 2px solid var(--accent); --focus-offset: 2px; }
-
-/* Global keyboard focus fallback (Req 28.7): every interactive control is
-   reachable and shows a visible focus indicator, even any not individually
-   styled above. Mouse focus stays quiet via :focus-visible. */
+/* ===========================================================================
+   Global keyboard focus fallback — every interactive control is reachable
+   and shows a visible green focus indicator.
+   =========================================================================== */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
@@ -200,64 +833,68 @@ textarea:focus-visible,
 [tabindex]:focus-visible,
 [role="tab"]:focus-visible,
 [role="button"]:focus-visible {
-  outline: var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-offset);
   border-radius: 6px;
 }
 
-/* Global_Navigation (Req 21) ─────────────────────────────────────────── */
+/* ===========================================================================
+   Global_Navigation — slim white bar.
+   =========================================================================== */
 .site-nav {
   position: sticky;
   top: 0;
   z-index: 50;
-  background: color-mix(in srgb, var(--paper) 92%, #ffffff);
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  background: var(--color-background);
+  border-bottom: 1px solid var(--color-light-border);
 }
 .site-nav__bar {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+  gap: var(--space-lg);
+  padding-top: var(--space-md);
+  padding-bottom: var(--space-md);
 }
 .site-nav__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font-family: var(--font-display);
-  font-size: var(--type-h3);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
+  font-size: var(--type-card-title-size);
+  font-weight: 700;
+  letter-spacing: var(--type-card-title-spacing);
+  color: var(--color-primary-text);
   text-decoration: none;
   white-space: nowrap;
 }
 .site-nav__controls {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: var(--space-lg);
   margin-left: auto;
 }
 .site-nav__links {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: var(--space-lg);
   list-style: none;
   margin: 0;
   padding: 0;
 }
 .site-nav__link {
-  color: color-mix(in srgb, var(--ink) 80%, var(--paper));
+  color: var(--color-secondary-text);
   text-decoration: none;
+  font-size: var(--type-nav-size);
+  line-height: var(--type-nav-line);
   font-weight: 600;
-  font-size: 0.95rem;
   padding: 0.35rem 0;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
 }
-.site-nav__link:hover { color: var(--ink); }
+.site-nav__link:hover { color: var(--color-primary-text); }
 .site-nav__link.is-active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--color-deep-emerald);
+  border-bottom-color: var(--color-primary-green);
 }
 .site-nav__account {
   display: inline-flex;
@@ -265,41 +902,56 @@ textarea:focus-visible,
   gap: 0.4rem;
   text-decoration: none;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: var(--type-nav-size);
   white-space: nowrap;
+  min-height: 44px;
 }
+/* Sign-in is the orange Primary_Action. */
 .site-nav__account--signin {
-  background: var(--accent);
-  color: #fff;
-  padding: 0.5rem 1rem;
-  border-radius: 10px;
+  background: var(--color-action-orange);
+  color: var(--color-background);
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-pill);
 }
+.site-nav__account--signin:hover { background: var(--color-orange-hover); }
 .site-nav__account--profile {
-  color: var(--accent-alt);
+  color: var(--color-deep-emerald);
   padding: 0.5rem 0;
 }
-.site-nav__account--profile span { color: var(--gold); font-size: 0.7rem; }
+.site-nav__account--profile span { color: var(--color-primary-green); font-size: 0.7rem; }
 
-/* Compact menu toggle: hidden on wide viewports, shown below 768px (Req 21.6). */
+/* Locale placeholder (globe + "INR | EN") — visual only, no behavior. */
+.site-nav__locale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-secondary-text);
+  font-weight: 600;
+  font-size: var(--type-helper-size);
+  white-space: nowrap;
+}
+.site-nav__locale-text { color: var(--color-secondary-text); }
+.site-nav__globe { font-size: 1rem; color: var(--color-primary-green); }
+
+/* Compact menu toggle: hidden on wide viewports, shown below 768px. */
 .site-nav__toggle {
   display: none;
   margin-left: auto;
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
-  border-radius: 10px;
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-sm);
   padding: 0.4rem 0.6rem;
   font-size: 1.2rem;
   line-height: 1;
-  color: var(--ink);
+  color: var(--color-primary-text);
   cursor: pointer;
+  min-height: 44px; min-width: 44px;
 }
-
-/* Visible focus indicator for every nav control (Req 21.8). */
 .site-nav__logo:focus-visible,
 .site-nav__link:focus-visible,
 .site-nav__account:focus-visible,
 .site-nav__toggle:focus-visible {
-  outline: var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-offset);
   border-radius: 6px;
 }
@@ -314,59 +966,67 @@ textarea:focus-visible,
     top: 100%;
     flex-direction: column;
     align-items: stretch;
-    gap: 1rem;
+    gap: var(--space-md);
     margin-left: 0;
-    padding: 1rem 1.5rem 1.5rem;
-    background: var(--paper);
-    border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-    box-shadow: 0 12px 32px rgba(26, 23, 20, 0.12);
+    padding: var(--space-md) var(--space-lg) var(--space-lg);
+    background: var(--color-background);
+    border-bottom: 1px solid var(--color-light-border);
+    box-shadow: var(--shadow-md);
   }
-  .site-nav__controls.is-open { display: flex; }
+  /* Mobile menu open — opacity + transform appearance transition (Req 16.3),
+     bounded by --motion-normal with a non-linear ease. */
+  .site-nav__controls.is-open {
+    display: flex;
+    animation: menu-drop var(--motion-normal) var(--ease-standard) both;
+  }
   .site-nav__links { flex-direction: column; align-items: stretch; gap: 0.25rem; }
-  .site-nav__link { padding: 0.6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
-  .site-nav__link.is-active { border-bottom-color: var(--accent); }
-  .site-nav__account--signin { text-align: center; }
+  .site-nav__link { padding: 0.6rem 0; border-bottom: 1px solid var(--color-light-border); }
+  .site-nav__link.is-active { border-bottom-color: var(--color-primary-green); }
+  .site-nav__account--signin { text-align: center; justify-content: center; }
 }
 
-/* Site_Footer (Req 29) ───────────────────────────────────────────────── */
+/* ===========================================================================
+   Site_Footer — light footer (no dark canvas).
+   =========================================================================== */
 .site-footer {
-  margin-top: 4rem;
-  background: var(--ink);
-  color: var(--paper);
+  margin-top: var(--space-xxl);
+  background: var(--color-muted-bg);
+  border-top: 1px solid var(--color-light-border);
+  color: var(--color-primary-text);
   font-family: var(--font-body);
 }
 .site-footer__inner {
   display: flex;
   flex-wrap: wrap;
-  gap: 2.5rem;
-  padding-top: 3rem;
-  padding-bottom: 2rem;
+  gap: var(--space-xl);
+  padding-top: var(--space-xxl);
+  padding-bottom: var(--space-xl);
 }
 .site-footer__brand { flex: 1 1 240px; min-width: 220px; }
 .site-footer__wordmark {
   font-family: var(--font-display);
-  font-size: var(--type-h2);
-  font-weight: 600;
-  margin: 0 0 0.5rem;
-  color: var(--paper);
+  font-size: var(--type-section-size);
+  font-weight: 700;
+  margin: 0 0 var(--space-sm);
+  color: var(--color-primary-text);
 }
 .site-footer__tagline {
-  margin: 0 0 1.25rem;
-  color: color-mix(in srgb, var(--paper) 70%, var(--ink));
+  margin: 0 0 var(--space-md);
+  color: var(--color-secondary-text);
   max-width: 34ch;
 }
 .site-footer__account {
   display: inline-block;
-  color: var(--gold);
+  color: var(--color-deep-emerald);
   font-weight: 700;
   text-decoration: none;
   border-bottom: 2px solid transparent;
 }
-.site-footer__account:hover { border-bottom-color: var(--gold); }
+.site-footer__account:hover { border-bottom-color: var(--color-primary-green); }
 .site-footer__sections {
   display: flex;
   flex-wrap: wrap;
-  gap: 2.5rem;
+  gap: var(--space-xl);
   flex: 2 1 360px;
 }
 .site-footer__section { min-width: 120px; }
@@ -374,196 +1034,184 @@ textarea:focus-visible,
   font-family: var(--font-body);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--gold);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  color: var(--color-deep-emerald);
   margin: 0 0 0.9rem;
 }
 .site-footer__links { list-style: none; margin: 0; padding: 0; }
 .site-footer__links li { margin-bottom: 0.55rem; }
 .site-footer__link {
-  color: color-mix(in srgb, var(--paper) 82%, var(--ink));
+  color: var(--color-secondary-text);
   text-decoration: none;
-  font-size: 0.95rem;
+  font-size: var(--type-nav-size);
 }
-.site-footer__link:hover { color: var(--paper); }
+.site-footer__link:hover { color: var(--color-primary-text); }
 .site-footer__disclosure {
-  padding-top: 1.25rem;
-  padding-bottom: 2.5rem;
-  border-top: 1px solid color-mix(in srgb, var(--paper) 18%, var(--ink));
+  padding-top: var(--space-md);
+  padding-bottom: var(--space-xl);
+  border-top: 1px solid var(--color-light-border);
 }
 .site-footer__disclosure p {
   margin: 0;
-  font-size: 0.85rem;
-  color: color-mix(in srgb, var(--paper) 68%, var(--ink));
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
   max-width: 70ch;
 }
 .site-footer__account:focus-visible,
 .site-footer__link:focus-visible {
-  outline: 2px solid var(--gold);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-offset);
   border-radius: 6px;
 }
 
 /* ===========================================================================
-   Deals_Page (Req 26) — warm editorial. Editorial recommendations (glass accent
-   cards) are visibly separated from bookable offers (opaque booking-surface).
-   Reuses palette, --type-*, glass, booking-surface, motion-rise, chip, card-grid.
-   No horizontal overflow at >=320px.
+   Deals_Page — light editorial layout; inspiration vs bookable split kept.
    =========================================================================== */
-.deals { display: flex; flex-direction: column; gap: 2.5rem; }
+.deals { display: flex; flex-direction: column; gap: var(--space-xl); }
 .deals-hero { max-width: 60ch; }
-
-/* Category controls (reuse .chip / .chip-row; add a pressed/active state) */
 .deals-filters { display: block; }
-.chip-active { border-color: var(--accent); color: #fff; background: var(--accent); }
-.chip-active:hover { color: #fff; border-color: var(--accent); }
 
-/* A small tag that names each region, reinforcing the editorial/bookable split */
 .deals-region-tag {
   font-family: var(--font-body);
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  font-size: 0.72rem;
+  font-size: var(--type-helper-size);
   font-weight: 700;
-  color: var(--accent-alt);
-  margin: 0 0 1rem;
+  color: var(--color-secondary-text);
+  margin: 0 0 var(--space-md);
 }
-.deals-region-tag--bookable { color: var(--accent); }
+.deals-region-tag--bookable { color: var(--color-deep-emerald); }
 
-/* Region separation (Req 26.2): editorial reads as a warm paper block; bookable
-   sits on a crisp card-like band so the two bodies are unmistakably distinct. */
+/* Editorial reads as a soft mint block; bookable sits on a crisp white band. */
 .deals-editorial {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  padding: 1.75rem;
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--gold) 12%, var(--paper));
-  border: 1px solid color-mix(in srgb, var(--accent-alt) 22%, transparent);
+  gap: var(--space-xl);
+  padding: var(--space-xl);
+  border-radius: var(--radius-lg);
+  background: var(--color-pale-mint);
+  border: 1px solid var(--color-soft-green);
 }
 .deals-bookable {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  padding: 1.75rem;
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--ink) 4%, #ffffff);
-  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  border-radius: var(--radius-lg);
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
 }
-
 .deals-section { display: block; }
-.deals-section > h2 { margin: 0 0 1rem; }
-.deals-empty { margin: 0; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+.deals-section > h2 { margin: 0 0 var(--space-md); }
+.deals-empty { margin: 0; color: var(--color-secondary-text); }
 
-/* Editorial (non-bookable) accent cards */
+/* Editorial (non-bookable) accent cards. */
 .editorial-card { display: block; }
 .editorial-card h3 { margin: 0 0 0.4rem; }
-.editorial-card p { margin: 0; color: color-mix(in srgb, var(--ink) 78%, var(--paper)); }
+.editorial-card p { margin: 0; color: var(--color-secondary-text); }
 
-/* Bookable offer cards (opaque booking-surface) */
-.offer-card { display: flex; flex-direction: column; gap: 0.5rem; }
-.offer-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
-.offer-card__head h3 { margin: 0; }
+/* Deals bookable offer cards. */
 .offer-card__cat {
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
-  color: var(--accent-alt);
+  color: var(--color-deep-emerald);
   white-space: nowrap;
 }
-.offer-card__detail { margin: 0; color: color-mix(in srgb, var(--ink) 72%, var(--paper)); }
-.offer-card__price { margin: 0; font-weight: 700; font-size: 1.1rem; }
+.offer-card__detail { margin: 0; color: var(--color-secondary-text); }
 .offer-card__savings {
   margin: 0;
   font-weight: 700;
-  color: var(--accent-alt);
-  background: color-mix(in srgb, var(--gold) 26%, #ffffff);
-  border-radius: 8px;
+  color: var(--color-deep-emerald);
+  background: var(--color-pale-mint);
+  border-radius: var(--radius-sm);
   padding: 0.35rem 0.6rem;
   align-self: flex-start;
 }
-.offer-card__code { color: var(--accent); letter-spacing: 0.04em; }
+.offer-card__code { color: var(--color-action-orange); letter-spacing: 0.04em; }
 
-/* Provenance label (OfferMeta, Req 26.5) */
+/* Deals provenance label (offer-provenance component). */
 .offer-provenance {
   margin-top: 0.25rem;
   padding-top: 0.75rem;
-  border-top: 1px dashed color-mix(in srgb, var(--ink) 20%, transparent);
+  border-top: 1px dashed var(--color-light-border);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 .offer-provenance__badge {
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-  color: #fff; background: var(--accent-alt);
-  border-radius: 999px; padding: 0.2rem 0.6rem;
+  color: var(--color-background); background: var(--color-primary-green);
+  border-radius: var(--radius-pill); padding: 0.2rem 0.6rem;
 }
-.offer-provenance--estimated .offer-provenance__badge { background: var(--accent); }
-.offer-provenance__provider { font-size: 0.82rem; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); }
+.offer-provenance--estimated .offer-provenance__badge { background: var(--color-action-orange); }
+.offer-provenance--cached .offer-provenance__badge { background: var(--color-secondary-text); }
+.offer-provenance--demo .offer-provenance__badge { background: var(--color-deep-emerald); }
+.offer-provenance__provider { font-size: 0.82rem; color: var(--color-secondary-text); }
 .offer-provenance__disclaimer {
   flex-basis: 100%;
   margin: 0;
-  font-size: 0.8rem;
-  color: color-mix(in srgb, var(--ink) 68%, var(--paper));
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
 }
 
 .offer-card__cta { margin-top: auto; align-self: flex-start; }
-.offer-card__cta:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.offer-card__cta:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
 
 @media (max-width: 560px) {
-  .deals-editorial, .deals-bookable { padding: 1.25rem; }
+  .deals-editorial, .deals-bookable { padding: var(--space-lg); }
   .offer-card__head { flex-direction: column; align-items: flex-start; gap: 0.2rem; }
 }
 
 /* ===========================================================================
-   Results_Page + Detail_Page (Cars; shared with Stays/Flights) — Req 25.6-25.11.
-   Offer cards carry a mandatory provenance label; prices sit on opaque
-   booking-surface; no horizontal overflow at >=320px.
+   Results + Detail (Stays / Flights / Cars shared) — white surfaces.
    =========================================================================== */
+.inline-link { color: var(--color-deep-emerald); font-weight: 600; text-decoration: underline; }
+.inline-link:hover { color: var(--color-primary-green); }
+.inline-link:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); border-radius: 4px; }
 
-/* Inline text links reused across booking surfaces. */
-.inline-link { color: var(--accent); font-weight: 600; text-decoration: underline; }
-.inline-link:hover { color: color-mix(in srgb, var(--accent) 80%, var(--ink)); }
-.inline-link:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: 4px; }
-
-.results-summary { margin: 0.25rem 0 1.5rem; }
+.cars-results { display: flex; flex-direction: column; }
+.results-summary { margin: 0.25rem 0 var(--space-lg); }
 .results-summary strong { font-weight: 700; }
 
-/* Sort + filter controls: wrap on narrow viewports, never overflow. */
 .results-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 1rem;
-  margin: 0 0 2rem;
-  padding: 1rem 1.25rem;
-  background: color-mix(in srgb, #ffffff 70%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  border-radius: 14px;
+  gap: var(--space-md);
+  margin: 0 0 var(--space-xl);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-muted-bg);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
 }
 .control-field { margin: 0; flex: 1 1 12rem; min-width: 0; }
 .control-submit { margin-top: 0; align-self: end; }
 
-/* Offer card list: responsive grid, single column below ~520px. */
 .offer-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  gap: 1.5rem;
+  gap: var(--space-lg);
 }
 
+/* Offer card — white card surface with subtle dividers. */
 .offer-card {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-md);
   text-decoration: none;
-  color: var(--ink);
+  color: var(--color-primary-text);
   height: 100%;
+  transition: box-shadow var(--motion-normal) var(--ease-standard);
 }
-.offer-card:hover { box-shadow: 0 16px 48px rgba(26, 23, 20, 0.16); }
-.offer-card:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.offer-card:hover { box-shadow: var(--shadow-md); }
+.offer-card:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+.offer-card__link { text-decoration: none; color: var(--color-primary-text); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: var(--space-md); }
+.offer-card__link:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); border-radius: 6px; }
+.offer-card__link:hover .offer-card__title { color: var(--color-deep-emerald); }
 
 .offer-card__head {
   display: flex;
@@ -572,18 +1220,30 @@ textarea:focus-visible,
   gap: 0.75rem;
   flex-wrap: wrap;
 }
-.offer-card__title { margin: 0; font-size: var(--type-h3); }
+.offer-card__head h2, .offer-card__head h3 { margin: 0; }
+.offer-card__title { margin: 0; font-size: var(--type-card-title-size); }
 .offer-card__tag {
-  font-size: 0.8rem;
+  font-size: var(--type-helper-size);
   font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 65%, var(--paper));
+  color: var(--color-secondary-text);
   white-space: nowrap;
+}
+.offer-card__sub {
+  margin: 0.15rem 0 0;
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+}
+.offer-card__route {
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+  font-weight: 700;
+  margin: 0;
 }
 
 .offer-card__facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-  gap: 0.75rem;
+  gap: 0.75rem 1rem;
   margin: 0;
 }
 .offer-card__facts dt {
@@ -591,19 +1251,50 @@ textarea:focus-visible,
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 55%, var(--paper));
+  color: var(--color-secondary-text);
   margin: 0 0 0.2rem;
 }
 .offer-card__facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.offer-card__muted { font-weight: 400; color: var(--color-secondary-text); font-size: var(--type-helper-size); }
+.offer-card__note, .offer-card__reviews {
+  margin: 0; font-size: var(--type-helper-size); color: var(--color-secondary-text);
+}
 
-/* Opaque price surface (Req 15.4/15.5). */
-.offer-card__price { padding: 0.9rem 1rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.5rem; }
-.offer-card__price-main { font-family: var(--font-display); font-size: var(--type-h2); font-weight: 600; }
-.offer-card__price-unit { color: color-mix(in srgb, var(--ink) 65%, var(--paper)); font-weight: 600; }
-.offer-card__price-total { flex-basis: 100%; font-size: 0.85rem; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+/* Price block — clear primary vs secondary hierarchy. */
+.offer-card__price {
+  padding: 0.9rem 1rem;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.5rem;
+  background: var(--color-muted-bg);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-sm);
+}
+.offer-card__price-main { font-family: var(--font-display); font-size: var(--type-page-title-size); font-weight: 700; color: var(--color-primary-text); }
+.offer-card__price-unit { color: var(--color-secondary-text); font-weight: 600; }
+.offer-card__price-total { flex-basis: 100%; font-size: var(--type-helper-size); color: var(--color-secondary-text); }
 
-/* Provenance label (shared component) — always visible on every card. */
-.provenance { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; }
+/* Flights fare block. */
+.offer-card__fare {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-light-border);
+}
+.offer-card__fare-person { margin: 0; }
+.offer-card__fare-amount {
+  font-family: var(--font-display);
+  font-size: var(--type-page-title-size);
+  font-weight: 700;
+  color: var(--color-deep-emerald);
+}
+.offer-card__fare-unit { font-weight: 600; color: var(--color-secondary-text); }
+.offer-card__fare-party {
+  margin: 0.25rem 0 0;
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+}
+.offer-card__cta { margin-top: auto; align-self: flex-start; }
+
+/* ── Provenance label (shared) — green/orange, visible on every card ── */
+.provenance { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin: 0; }
 .provenance__badge {
   display: inline-block;
   font-size: 0.7rem;
@@ -611,126 +1302,144 @@ textarea:focus-visible,
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
-  background: #fff;
-  color: var(--ink);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-light-border);
+  background: var(--color-background);
+  color: var(--color-primary-text);
   white-space: nowrap;
 }
-.provenance__badge[data-mode="live"] { color: var(--accent-alt); border-color: color-mix(in srgb, var(--accent-alt) 45%, transparent); }
-.provenance__badge[data-mode="estimated"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.provenance__badge[data-mode="live"] { color: var(--color-deep-emerald); border-color: var(--color-primary-green); background: var(--color-pale-mint); }
+.provenance__badge[data-mode="estimated"] { color: var(--color-orange-hover); border-color: var(--color-action-orange); }
+.provenance__text { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
 .provenance__note {
-  font-size: 0.8rem;
-  color: color-mix(in srgb, var(--ink) 72%, var(--paper));
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
   overflow-wrap: anywhere;
 }
-.provenance__note--estimated { color: var(--accent); font-weight: 600; }
+.provenance__note--estimated { color: var(--color-orange-hover); font-weight: 600; }
 
-/* Detail_Page layout. */
-.detail-back { display: inline-block; margin: 0.25rem 0 1rem; text-decoration: none; }
-.detail-panel { margin: 1.5rem 0; }
+/* Provenance dot variants (flight cards). */
+.provenance__dot {
+  width: 0.55rem; height: 0.55rem; border-radius: 50%;
+  background: var(--color-secondary-text); flex: none;
+}
+.provenance--live .provenance__dot { background: var(--color-primary-green); }
+.provenance--estimated .provenance__dot { background: var(--color-action-orange); }
+.provenance--cached .provenance__dot { background: var(--color-secondary-text); }
+.provenance--demo .provenance__dot { background: var(--color-deep-emerald); }
+
+/* Estimated no-payment / no-ticket disclosure. */
+.estimated-notice {
+  margin: 0;
+  font-size: var(--type-helper-size);
+  font-weight: 600;
+  color: var(--color-orange-hover);
+  background: var(--color-pale-mint);
+  border: 1px solid var(--color-action-orange);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+}
+
+/* Detail pages (shared across Cars/Stays). */
+.detail-back { display: inline-block; margin: 0.25rem 0 var(--space-md); text-decoration: none; color: var(--color-deep-emerald); }
+.detail-panel { margin: var(--space-lg) 0; }
 .detail-facts { margin: 0; }
-.detail-facts dt { font-weight: 600; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
+.detail-facts dt { font-weight: 600; color: var(--color-secondary-text); }
 .detail-facts dd { margin: 0; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
-.detail-facts .row { align-items: baseline; gap: 1rem; }
-.detail-provenance { margin: 0 0 1.5rem; }
-.detail-reviews { margin: 0 0 1.5rem; }
-.detail-reviews h2 { margin: 0 0 0.5rem; }
+.detail-facts .row { align-items: baseline; gap: var(--space-md); }
+.detail-provenance { margin: 0 0 var(--space-lg); }
+.detail-reviews { margin: 0 0 var(--space-lg); }
+.detail-reviews h2 { margin: 0 0 var(--space-sm); }
+.car-detail { display: flex; flex-direction: column; gap: var(--space-md); }
 
 @media (max-width: 520px) {
   .offer-list { grid-template-columns: 1fr; }
-  .results-controls { padding: 1rem; }
+  .results-controls { padding: var(--space-md); }
   .control-field { flex-basis: 100%; }
 }
 
-/* ===========================================================================
-   Booking_Site Results & Detail pages (Req 23, task 34.1). Reuses booking-surface
-   (opaque, ≥4.5:1 — price/detail), glass only for accent, motion-rise, --type-*.
-   No horizontal overflow at ≥320px (fluid grids + wrapping controls).
-   =========================================================================== */
-
-/* Provenance label + estimated disclosure styles are provided by the shared
-   offer-provenance component's CSS (.provenance / .estimated-notice), reused
-   here — not redefined, to avoid colliding with the shared definitions. */
-
-/* Results page */
-.results { display: flex; flex-direction: column; gap: 1.75rem; }
-.results__summary h1 { margin: 0.3rem 0 0.5rem; }
-.results__partial { margin: 0; color: color-mix(in srgb, var(--ink) 72%, var(--paper)); font-size: 0.92rem; }
+/* Results page scaffold (shared by Flights/Stays/Cars results pages). */
+.results { display: flex; flex-direction: column; gap: var(--space-xl); }
+.results__summary h1 { margin: 0.3rem 0 var(--space-sm); }
+.results__summary {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-secondary-text);
+}
+.results__head h1 { margin: 0.2rem 0 var(--space-sm); }
+.results__partial { margin: 0; color: var(--color-secondary-text); font-size: var(--type-helper-size); }
 .results__edit { margin: 0.5rem 0 0; }
 .results__edit-link, .detail__back-link {
-  color: var(--accent); font-weight: 700; text-decoration: none; border-bottom: 2px solid transparent;
+  color: var(--color-deep-emerald); font-weight: 700; text-decoration: none; border-bottom: 2px solid transparent;
 }
-.results__edit-link:hover, .detail__back-link:hover { border-bottom-color: var(--accent); }
+.results__edit-link:hover, .detail__back-link:hover { border-bottom-color: var(--color-primary-green); }
 .results__edit-link:focus-visible, .detail__back-link:focus-visible {
-  outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: 6px;
+  outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); border-radius: 6px;
 }
 
-/* Sort + filter controls (opaque, legible) */
 .results__controls {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 1rem;
+  gap: var(--space-md);
 }
 .results__controls .field { margin: 0; flex: 1 1 12rem; }
-.results__apply { margin-top: 0; }
+.results__control { margin: 0; min-width: 12rem; flex: 1 1 12rem; }
+.results__control > label > span {
+  display: block;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-secondary-text);
+  margin-bottom: 0.35rem;
+}
+.results__apply { margin-top: 0; white-space: nowrap; }
 
 .results__error p, .results__empty p { margin: 0 0 0.75rem; }
 .results__error .cta, .results__empty .cta { margin-top: 0.25rem; }
+.results__empty { margin: 0; }
 
-/* Fluid offer grid — collapses to one column well before 320px */
 .results__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-lg);
 }
 @media (max-width: 560px) {
   .results__grid { grid-template-columns: 1fr; }
   .results__controls { flex-direction: column; align-items: stretch; }
+  .results__control { min-width: 0; flex-basis: 100%; }
 }
 
-/* Offer card (opaque booking-surface) */
-.offer-card { display: flex; flex-direction: column; gap: 0.5rem; }
-.offer-card__link { text-decoration: none; color: var(--ink); }
-.offer-card__link:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: 6px; }
-.offer-card__title { margin: 0; }
-.offer-card__link:hover .offer-card__title { color: var(--accent); }
-.offer-card__facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.5rem 1rem;
-  margin: 0.25rem 0;
+/* Detail page (shared). */
+.detail { display: flex; flex-direction: column; gap: var(--space-lg); }
+.detail__back {
+  align-self: flex-start;
+  text-decoration: none;
+  font-weight: 700;
+  color: var(--color-deep-emerald);
+  margin: 0;
 }
-.offer-card__facts dt {
-  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 60%, var(--paper));
-}
-.offer-card__facts dd { margin: 0.1rem 0 0; font-weight: 600; }
-.offer-card__muted { font-weight: 400; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); font-size: 0.85rem; }
-.offer-card__note, .offer-card__reviews {
-  margin: 0; font-size: 0.85rem; color: color-mix(in srgb, var(--ink) 72%, var(--paper));
-}
-.offer-card__cta { align-self: flex-start; margin-top: 0.5rem; }
-
-/* Detail page (core booking surface — opaque, ≥4.5:1) */
-.detail { display: flex; flex-direction: column; gap: 1.25rem; }
-.detail__back { margin: 0; }
-.detail__panel { display: flex; flex-direction: column; gap: 1rem; }
-.detail__title { margin: 0.2rem 0 0.5rem; }
+.detail__back:hover { text-decoration: underline; }
+.detail__back:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); border-radius: 6px; }
+.detail__panel { display: flex; flex-direction: column; gap: var(--space-md); }
+.detail__head h1 { margin: 0.2rem 0 0.4rem; }
+.detail__title { margin: 0.2rem 0 var(--space-sm); }
+.detail__sub { margin: 0 0 0.75rem; font-weight: 600; color: var(--color-secondary-text); }
+.detail__body { display: flex; flex-direction: column; gap: var(--space-lg); }
 .detail__image {
   display: flex; align-items: flex-end; justify-content: flex-start;
   min-height: 220px;
-  border-radius: 12px;
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--accent-alt) 60%, var(--paper)),
-    color-mix(in srgb, var(--accent) 45%, var(--paper)));
+  border-radius: var(--radius-md);
+  background: var(--color-pale-mint);
+  border: 1px solid var(--color-light-border);
   padding: 0.75rem;
   overflow: hidden;
 }
 .detail__image-caption {
-  background: color-mix(in srgb, var(--ink) 70%, transparent);
-  color: var(--paper);
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  color: var(--color-primary-text);
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.25rem 0.6rem;
@@ -745,53 +1454,54 @@ textarea:focus-visible,
 }
 .detail__facts dt {
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 60%, var(--paper));
+  color: var(--color-secondary-text);
 }
 .detail__facts dd { margin: 0.15rem 0 0; font-weight: 600; }
-.detail__amenities h2, .detail__reviews h2 { margin: 0 0 0.5rem; font-size: var(--type-h3); }
+.detail__fare {
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-light-border);
+}
+.detail__fare-person { margin: 0; }
+.detail__fare-party { margin: 0.3rem 0 0; color: var(--color-secondary-text); }
+.detail__amenities h2, .detail__reviews h2, .detail__review h2 { margin: 0 0 var(--space-sm); font-size: var(--type-card-title-size); }
 .detail__amenities ul { margin: 0; padding-left: 1.1rem; }
 .detail__amenities li { margin-bottom: 0.25rem; }
-.detail__reviews p { margin: 0 0 0.25rem; }
-.detail__reviews-source { font-size: 0.85rem; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
-.detail__no-reviews { margin: 0; font-size: 0.9rem; color: color-mix(in srgb, var(--ink) 68%, var(--paper)); font-style: italic; }
+.detail__reviews p, .detail__review p { margin: 0 0 0.25rem; }
+.detail__reviews-source { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.detail__no-reviews { margin: 0; font-size: var(--type-helper-size); color: var(--color-secondary-text); font-style: italic; }
+.detail__notfound { margin: 0; color: var(--color-secondary-text); }
 
 /* ===========================================================================
-   My_Trips_Page (Req 27) — opaque booking-surface cards for each trip/booking,
-   glass accent for the sign-in / empty invitations, motion-rise entrances.
-   Confirmed bookings are visually distinct from self-created itineraries
-   (Req 27.8). Single-column and overflow-free at >=320px.
+   My_Trips_Page — clean white cards; itinerary vs booking as light accents.
    =========================================================================== */
-.my-trips { display: flex; flex-direction: column; gap: 1.75rem; }
+.my-trips { display: flex; flex-direction: column; gap: var(--space-xl); }
 .my-trips h1 { margin: 0.2rem 0 0.75rem; }
 
 .my-trips__error { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
 .my-trips__error .cta { margin-top: 0; }
 
 .my-trips__empty { max-width: 60ch; }
-.my-trips__empty-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+.my-trips__empty-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: var(--space-md); }
 .my-trips__empty-actions .cta { margin-top: 0; }
 
 .my-trips__group { display: block; }
-.my-trips__group-title { margin: 0 0 1rem; }
-/* Confirmed bookings carry a visible accent rule distinguishing them from
-   planned itineraries (Req 27.8). */
+.my-trips__group-title { margin: 0 0 var(--space-md); }
 .my-trips__group--bookings .my-trips__group-title {
-  border-left: 4px solid var(--accent-alt);
+  border-left: 4px solid var(--color-primary-green);
   padding-left: 0.75rem;
 }
 .my-trips__group-empty {
   margin: 0 0 0.5rem;
-  color: color-mix(in srgb, var(--ink) 65%, var(--paper));
+  color: var(--color-secondary-text);
 }
 
-.my-trips__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+.my-trips__list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-md); }
 
-.my-trips__card { display: flex; flex-direction: column; gap: 1rem; }
-/* Itineraries vs confirmed bookings get a distinct left accent (Req 27.8). */
-.my-trips__card--itinerary { border-left: 4px solid var(--accent); }
-.my-trips__card--booking { border-left: 4px solid var(--accent-alt); }
+.my-trips__card { display: flex; flex-direction: column; gap: var(--space-md); }
+.my-trips__card--itinerary { border-left: 4px solid var(--color-action-orange); }
+.my-trips__card--booking { border-left: 4px solid var(--color-primary-green); }
 
-.my-trips__card-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.my-trips__card-head { display: flex; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; }
 .my-trips__card-title { margin: 0 0 0.4rem; }
 .my-trips__card-meta { margin: 0; display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
 
@@ -802,259 +1512,121 @@ textarea:focus-visible,
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 0.2rem 0.55rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 .my-trips__badge--itinerary {
-  background: color-mix(in srgb, var(--accent) 14%, #fff);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--color-action-orange) 14%, var(--color-background));
+  color: var(--color-orange-hover);
 }
 .my-trips__badge--booking {
-  background: color-mix(in srgb, var(--accent-alt) 16%, #fff);
-  color: var(--accent-alt);
+  background: var(--color-pale-mint);
+  color: var(--color-deep-emerald);
 }
-.my-trips__updated { font-size: 0.85rem; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); }
+.my-trips__updated { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
 
-.my-trips__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.my-trips__actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
 .my-trips__action {
   appearance: none;
-  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
-  background: #fff;
-  color: var(--ink);
+  border: 1px solid var(--color-light-border);
+  background: var(--color-background);
+  color: var(--color-primary-text);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
   padding: 0.45rem 0.9rem;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   text-decoration: none;
   line-height: 1.2;
+  min-height: 44px;
 }
-.my-trips__action:hover { border-color: var(--accent); color: var(--accent); }
-.my-trips__action:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.my-trips__action:hover { border-color: var(--color-primary-green); color: var(--color-deep-emerald); }
+.my-trips__action:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
 .my-trips__action:disabled { opacity: 0.6; cursor: not-allowed; }
-.my-trips__action--resume { background: var(--accent); color: #fff; border-color: var(--accent); }
-.my-trips__action--resume:hover { background: color-mix(in srgb, var(--accent) 88%, #000); color: #fff; }
-.my-trips__action--danger:hover { border-color: var(--accent); color: var(--accent); }
+.my-trips__action--resume { background: var(--color-action-orange); color: var(--color-background); border-color: var(--color-action-orange); }
+.my-trips__action--resume:hover { background: var(--color-orange-hover); color: var(--color-background); border-color: var(--color-orange-hover); }
+.my-trips__action--danger:hover { border-color: var(--color-action-orange); color: var(--color-orange-hover); }
 
 .my-trips__detail {
-  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  padding-top: 1rem;
+  border-top: 1px solid var(--color-light-border);
+  padding-top: var(--space-md);
 }
 .my-trips__detail-list { margin: 0; }
 .my-trips__detail-list dt { font-weight: 700; }
 .my-trips__detail-list dd { margin: 0; text-align: right; word-break: break-word; }
-.my-trips__payload-empty { margin: 0; color: color-mix(in srgb, var(--ink) 65%, var(--paper)); }
+.my-trips__payload-empty { margin: 0; color: var(--color-secondary-text); }
 
-/* No horizontal overflow at >=320px: stack card head/actions on narrow screens. */
 @media (max-width: 560px) {
   .my-trips__card-head { flex-direction: column; }
   .my-trips__actions { flex-direction: column; align-items: stretch; }
   .my-trips__action { text-align: center; }
   .my-trips__empty-actions { flex-direction: column; align-items: stretch; }
-  .my-trips__empty-actions .cta { text-align: center; }
+  .my-trips__empty-actions .cta { text-align: center; justify-content: center; }
 }
 
 /* ===========================================================================
-   Booking results + detail surfaces (Req 24) — Flights Results_Page and
-   flight Detail_Page. Fares render on opaque booking-surface (Req 15.4);
-   provenance is visible on every offer. No horizontal overflow at >=320px.
+   Itinerary timeline (new, consumed by task 18) — green journey indicators.
    =========================================================================== */
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-md); }
+.timeline__day { position: relative; padding-left: var(--space-xl); }
+.timeline__day::before {
+  content: ""; position: absolute; left: 0.5rem; top: 0.4rem; bottom: -0.4rem;
+  width: 2px; background: var(--color-soft-green);
+}
+.timeline__marker {
+  position: absolute; left: 0; top: 0.2rem;
+  width: 1rem; height: 1rem; border-radius: 50%;
+  background: var(--color-primary-green); border: 2px solid var(--color-background);
+}
 
-/* Results page scaffold */
-.results { display: flex; flex-direction: column; gap: 1.75rem; }
-.results__head h1 { margin: 0.2rem 0 0.5rem; }
-.results__summary {
+/* ===========================================================================
+   Inline notice (new, task 10/11) — token-based.
+   =========================================================================== */
+.notice {
   margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-pale-mint);
+  border: 1px solid var(--color-soft-green);
+  color: var(--color-deep-emerald);
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+}
+/* Informational — soft mint, deep-emerald text (the default family). */
+.notice--info {
+  background: var(--color-muted-bg);
+  border-color: var(--color-light-border);
+  color: var(--color-primary-text);
+}
+/* Success — green family on the pale-mint surface. */
+.notice--success {
+  background: var(--color-pale-mint);
+  border-color: var(--color-primary-green);
+  color: var(--color-deep-emerald);
+}
+/* Error / caution — warm orange family on a light surface (no red introduced;
+   the palette's warning color is the action orange). */
+.notice--error {
+  background: var(--color-background);
+  border-color: var(--color-action-orange);
+  color: var(--color-orange-hover);
   font-weight: 600;
-  color: color-mix(in srgb, var(--ink) 75%, var(--paper));
 }
-
-/* Sort + filter control bar */
-.results__controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 1rem;
-}
-.results__control { margin: 0; min-width: 12rem; flex: 1 1 12rem; }
-.results__control > label > span {
+.notice__title {
   display: block;
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: color-mix(in srgb, var(--ink) 65%, var(--paper));
-  margin-bottom: 0.35rem;
-}
-.results__apply { margin-top: 0; white-space: nowrap; }
-
-.results__empty { margin: 0; }
-
-/* Offer list */
-.offer-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.25rem;
-}
-
-/* Offer card (opaque booking-surface so fares stay >= 4.5:1, Req 15.4) */
-.offer-card { display: flex; flex-direction: column; gap: 0.9rem; }
-.offer-card__link {
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  text-decoration: none;
-  color: var(--ink);
-  border-radius: 10px;
-}
-.offer-card__link:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: var(--focus-offset);
-}
-.offer-card__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.offer-card__route {
-  font-family: var(--font-display);
-  font-size: var(--type-h3);
-  font-weight: 600;
-  margin: 0;
-}
-.offer-card__sub {
-  margin: 0.15rem 0 0;
-  font-size: 0.9rem;
-  color: color-mix(in srgb, var(--ink) 70%, var(--paper));
-}
-.offer-card__facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-  gap: 0.75rem 1rem;
-  margin: 0;
-}
-.offer-card__facts dt {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 55%, var(--paper));
-}
-.offer-card__facts dd { margin: 0.15rem 0 0; font-weight: 600; }
-.offer-card__fare {
-  margin-top: auto;
-  padding-top: 0.75rem;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-}
-.offer-card__fare-person { margin: 0; }
-.offer-card__fare-amount {
-  font-family: var(--font-display);
-  font-size: var(--type-h2);
-  font-weight: 600;
-  color: var(--accent);
-}
-.offer-card__fare-unit { font-weight: 600; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
-.offer-card__fare-party {
-  margin: 0.25rem 0 0;
-  font-size: 0.9rem;
-  color: color-mix(in srgb, var(--ink) 75%, var(--paper));
-}
-
-/* Provenance label (visible on every offer card + detail, Req 24.9/24.11) */
-.provenance {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.25rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
-  background: color-mix(in srgb, var(--paper) 70%, #ffffff);
-  color: color-mix(in srgb, var(--ink) 80%, var(--paper));
-  white-space: nowrap;
-}
-.provenance__dot {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  background: var(--gold);
-  flex: none;
-}
-.provenance--live .provenance__dot { background: var(--accent-alt); }
-.provenance--estimated .provenance__dot { background: var(--gold); }
-.provenance--cached .provenance__dot { background: color-mix(in srgb, var(--ink) 45%, var(--paper)); }
-.provenance--demo .provenance__dot { background: var(--accent); }
-
-/* Estimated no-payment / no-ticket disclosure (Req 24.12) */
-.estimated-notice {
-  margin: 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-  border-radius: 10px;
-  padding: 0.55rem 0.75rem;
-}
-
-/* Detail page */
-.detail { display: flex; flex-direction: column; gap: 1.5rem; }
-.detail__back {
-  align-self: flex-start;
-  text-decoration: none;
-  font-weight: 700;
-  color: var(--accent);
-}
-.detail__back:hover { text-decoration: underline; }
-.detail__back:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: 6px; }
-.detail__head h1 { margin: 0.2rem 0 0.4rem; }
-.detail__sub { margin: 0 0 0.75rem; font-weight: 600; color: color-mix(in srgb, var(--ink) 70%, var(--paper)); }
-.detail__body { display: flex; flex-direction: column; gap: 1.25rem; }
-.detail__facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1rem 1.5rem;
-  margin: 0;
-}
-.detail__facts dt {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 55%, var(--paper));
-}
-.detail__facts dd { margin: 0.2rem 0 0; font-weight: 600; }
-.detail__fare {
-  padding-top: 1rem;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-}
-.detail__fare-person { margin: 0; }
-.detail__fare-party { margin: 0.3rem 0 0; color: color-mix(in srgb, var(--ink) 75%, var(--paper)); }
-.detail__review h2 { margin: 0 0 0.4rem; font-size: var(--type-h3); }
-.detail__review p { margin: 0; }
-
-@media (max-width: 560px) {
-  .offer-list { grid-template-columns: 1fr; }
-  .results__control { min-width: 0; flex-basis: 100%; }
+  font-weight: var(--type-label-weight);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-spacing);
+  margin-bottom: 0.2rem;
 }
 
 /* ===========================================================================
-   Route-level loading skeletons (Req 28.2) — shown by each route's loading.tsx
-   while the Results_Page awaits the Search_API. Opaque, legible placeholders on
-   the warm paper palette; a gentle shimmer that honors reduced-motion. No
-   horizontal overflow at >=320px (fluid grid, 100% max-width blocks).
+   Loading skeletons — token-styled placeholders, reduced-motion aware.
    =========================================================================== */
-.skeleton { display: flex; flex-direction: column; gap: 1.75rem; }
+.skeleton { display: flex; flex-direction: column; gap: var(--space-xl); }
 .skeleton__block {
-  background: color-mix(in srgb, var(--ink) 10%, var(--paper));
-  border-radius: 10px;
+  background: var(--color-muted-bg);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-sm);
   position: relative;
   overflow: hidden;
   max-width: 100%;
@@ -1062,15 +1634,17 @@ textarea:focus-visible,
 .skeleton__block--eyebrow { width: 8rem; height: 0.9rem; }
 .skeleton__block--title { width: min(100%, 24rem); height: 2.25rem; }
 .skeleton__block--line { width: min(100%, 40rem); height: 1rem; }
-.skeleton__controls { height: 4.5rem; border-radius: 14px; }
+.skeleton__controls { height: 4.5rem; border-radius: var(--radius-md); background: var(--color-muted-bg); border: 1px solid var(--color-light-border); }
 .skeleton__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-  gap: 1.25rem;
+  gap: var(--space-lg);
 }
-.skeleton__card { height: 12rem; border-radius: 14px; }
+.skeleton__card { height: 12rem; border-radius: var(--radius-md); background: var(--color-muted-bg); border: 1px solid var(--color-light-border); }
 
-/* Shimmer sweep — a triggered, continuous loading affordance (Req 15.6). */
+/* Shimmer sweep — a pale-mint highlight travelling over the muted-bg base
+   (--color-muted-bg -> --color-pale-mint). Continuous loading affordance,
+   reduced-motion aware. */
 .skeleton__block::after {
   content: "";
   position: absolute;
@@ -1079,14 +1653,1287 @@ textarea:focus-visible,
   background: linear-gradient(
     90deg,
     transparent,
-    color-mix(in srgb, #ffffff 55%, transparent),
+    var(--color-pale-mint),
     transparent
   );
+  opacity: 0.7;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
 @keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
 
-/* Reduced-motion (Req 28.8 / 15.8): suppress the sweep; keep a static tint. */
+/* Opacity-only pulse in the pale-mint tint for a static highlight. */
+@keyframes skeleton-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.7; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .skeleton__block::after { animation: none; }
+  /* No translation: swap the travelling sweep for a still pale-mint wash that
+     pulses only in opacity, within the reduced-motion budget. */
+  .skeleton__block::after {
+    transform: none;
+    background: var(--color-pale-mint);
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+}
+
+/* ===========================================================================
+   Responsive: stack asymmetric multi-column layouts to one column <=1023px.
+   (Extended further by task 21.)
+   =========================================================================== */
+@media (max-width: 1023px) {
+  .feature-row { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 768px) {
+  .search-row { flex-direction: column; align-items: stretch; }
+  .search-row .field, .search-row .age-field { flex: 1 1 auto; }
+  .swap-btn { width: 100%; }
+  .search-cta { width: 100%; justify-content: center; }
+  .home-search__footrow { flex-direction: column; align-items: flex-start; }
+  .home-search__ai { justify-content: flex-start; }
+}
+@media (max-width: 560px) {
+  .home { gap: var(--space-xl); }
+  .home-trust { margin-top: var(--space-md); display: inline-flex; }
+  .home-hero__inner { padding-bottom: var(--space-xl); }
+  .feature-row { grid-template-columns: 1fr; }
+}
+
+/* ===========================================================================
+   Deals accents (task 15) — restrained illustrated accents for the hero and
+   editorial region. Appended namespaced block; existing tokens only, no new
+   :root vars. The hero becomes a light two-column band (copy + illustration)
+   and the editorial region tag gains a small accent. Both stack on narrow
+   viewports and preserve the illustration aspect ratio.
+   =========================================================================== */
+.deals-hero:has(.deals-hero__copy) {
+  max-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xl);
+  flex-wrap: wrap;
+}
+.deals-hero__copy { max-width: 60ch; }
+.deals-hero__art {
+  width: clamp(8rem, 22vw, 13rem);
+  height: auto;
+  flex: 0 0 auto;
+}
+.deals-region-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+/* Keep the region tag's own bottom spacing collapsed inside the flex head. */
+.deals-region-head .deals-region-tag { margin: 0; }
+.deals-region-art {
+  width: clamp(3.5rem, 9vw, 5rem);
+  height: auto;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 768px) {
+  .deals-hero:has(.deals-hero__copy) { flex-direction: column; align-items: flex-start; }
+  .deals-hero__art { align-self: flex-end; }
+}
+
+/* ===========================================================================
+   Homepage hero + trip-finder (task 11.1) — asymmetric two-column white hero
+   (Req 5.1-5.4). Appended namespaced block; existing design tokens only, plus
+   the non-token radius, shadow, ease-standard, and space helpers. No new
+   :root custom properties (keeps the task-4 token<->CSS bijection intact).
+
+   LEFT column: serif heading + intro paragraph + a compact .trip-finder card
+   (reuses .home-search white-card treatment). RIGHT column: the large
+   traveler-globe illustration (green/emerald with orange accents), vertically
+   centred beside the form. Stacks to a single column at <=1023px via .grid-2,
+   with the illustration shrinking and the form staying full width.
+   =========================================================================== */
+.home-hero2 { align-items: stretch; }
+.home-hero2__grid {
+  /* Wider content column, narrower art column for the asymmetric hero. */
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: center;
+  margin-top: 0;
+}
+.home-hero2__col { min-width: 0; }
+.home-hero2__col--content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+.home-hero2__copy { max-width: 42rem; }
+
+/* Compact finder card — inherits .home-search (white card) visuals; tighten
+   padding so it reads as a compact in-hero form rather than a full panel. */
+.trip-finder {
+  padding: var(--space-lg);
+  margin: 0;
+}
+
+/* Art column: center the large illustration and give it generous size while
+   preserving its intrinsic aspect ratio (object-fit: contain on the img). */
+.home-hero2__col--art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-hero2__art {
+  width: 100%;
+  max-width: 26rem;
+  height: auto;
+  filter: drop-shadow(var(--shadow-md));
+}
+
+@media (max-width: 1023px) {
+  .home-hero2__grid { grid-template-columns: 1fr; gap: var(--space-xl); }
+  /* Place the illustration above the copy/form on stacked layouts. */
+  .home-hero2__col--content { order: 2; }
+  .home-hero2__col--art { order: 1; }
+  .home-hero2__art { max-width: 18rem; }
+}
+
+/* ===========================================================================
+   AI Travel Assistant / Planner (task 17) — calm white conversation surface.
+   Namespaced .planner-* / .chat-* block. Uses ONLY existing design tokens and
+   the non-token radius, shadow, and ease-standard helpers; defines NO new
+   :root token-group custom property (keeps the task-4 token<->CSS bijection).
+   The itinerary day-cards (.planner-itinerary / .planner-day) are left plainly
+   structured so task 18 can convert them into a .timeline treatment.
+   =========================================================================== */
+.planner-chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
+/* Suggested prompts (Req 11.2) — selectable example chips. */
+.chat-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.chat-suggestions__label {
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+  font-weight: var(--type-label-weight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-secondary-text);
+}
+.chat-suggestions__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.chat-chip {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  border: 1px solid var(--color-light-border);
+  background: var(--color-pale-mint);
+  color: var(--color-deep-emerald);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  min-height: 44px;
+  text-align: left;
+  transition: border-color var(--motion-normal) var(--ease-standard),
+              background var(--motion-normal) var(--ease-standard),
+              transform var(--motion-reduced) var(--ease-standard);
+}
+.chat-chip:hover {
+  border-color: var(--color-primary-green);
+  background: var(--color-soft-green);
+}
+.chat-chip:active { transform: translateY(1px); }
+.chat-chip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Composer — the request form rendered as a clean white card. */
+.planner-composer {
+  display: block;
+}
+.planner-composer .cta[disabled] {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+/* Assistant message states (Req 11.3). */
+.chat-message {
+  display: block;
+}
+.chat-message__role {
+  display: block;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+  font-weight: var(--type-label-weight);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-deep-emerald);
+  margin-bottom: var(--space-sm);
+}
+.chat-message--pending {
+  border-left: 3px solid var(--color-primary-green);
+  background: var(--color-muted-bg);
+}
+.chat-status {
+  margin: var(--space-md) 0 0;
+}
+.chat-status--error {
+  /* Inherits .field-error coloring; just ensure spacing stays tidy. */
+  margin-bottom: 0;
+}
+
+/* Bounded loading skeleton for the pending/in-progress assistant message. */
+.chat-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.chat-skeleton__line {
+  display: block;
+  height: 0.85rem;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--color-light-border) 25%,
+    var(--color-soft-green) 50%,
+    var(--color-light-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: chat-shimmer 1.1s var(--ease-standard) infinite;
+}
+.chat-skeleton__line--short { width: 55%; }
+
+@keyframes chat-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* Itinerary preview — structured day cards (task 18 converts to .timeline). */
+.planner-itinerary__title { margin-top: 0; }
+.planner-itinerary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.planner-day { margin: 0; }
+.planner-day__title { margin-top: 0; }
+.planner-day__theme {
+  margin-top: 0;
+  color: var(--color-deep-emerald);
+  font-weight: 700;
+}
+
+/* Trip summary aside. */
+.planner-summary {
+  align-self: start;
+  position: sticky;
+  top: var(--space-md);
+}
+.planner-summary__title { margin-top: 0; }
+.planner-summary__route { margin: 0 0 var(--space-md); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Skeleton shimmer is a decorative non-essential loop — stop it so no motion
+     plays beyond the opacity-only entrance already handled by .motion-rise. */
+  .chat-skeleton__line { animation: none; background: var(--color-light-border); }
+  .chat-chip:active { transform: none; }
+}
+
+/* ===========================================================================
+   Account / Authentication (task 20) — minimalist identity surface.
+   Namespaced .auth / .auth__* block appended at the END. Uses ONLY existing
+   design tokens plus the non-token radius, shadow, space, and ease helpers;
+   defines NO new :root token-group custom property (keeps the task-4
+   token<->CSS bijection intact). Sign-in is the orange Primary_Action (.cta);
+   "continue as guest" is a neutral secondary .btn.
+   =========================================================================== */
+.auth__intro { max-width: 46rem; }
+.auth__heading { margin-top: 0; }
+
+/* Preserved error path (Req 14.4): descriptive, role="alert" message rendered
+   with the token-based error notice treatment (orange family, no dead vars). */
+.auth__error { margin-bottom: var(--space-md); }
+
+/* One full-width control per enabled provider; omitted when disabled. */
+.auth__options { list-style: none; margin: 0 0 var(--space-md); padding: 0; }
+.auth__option { margin: 0 0 var(--space-sm); }
+.auth__option:last-child { margin-bottom: 0; }
+/* The sign-in submit control is the orange Primary_Action — full width, and
+   reset the .cta default top margin so it sits flush in the list. */
+.auth__cta { width: 100%; margin-top: 0; justify-content: center; }
+
+.auth__note {
+  margin: var(--space-md) 0 0;
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  color: var(--color-secondary-text);
+}
+
+/* Guest / anonymous path — a white card with a restrained illustration accent
+   and a neutral secondary action (not orange). */
+.auth__guest { display: flex; flex-direction: column; gap: var(--space-sm); }
+.auth__art {
+  width: clamp(5rem, 16vw, 7.5rem);
+  height: auto;
+  align-self: flex-start;
+  margin-bottom: var(--space-sm);
+}
+
+/* ===========================================================================
+   My_Trips_Page additions (task 19) — clean card refinements on top of the
+   base .my-trips__* block (task 3). Namespaced, appended at the END. Uses ONLY
+   existing design tokens plus the non-token radius, shadow, space, and
+   ease-standard helpers; defines NO new :root token-group custom property
+   (keeps the task-4 token<->CSS bijection intact).
+
+   Adds: a header row with a single restrained Illustration_Library accent
+   (Req 13.1), a collapsed-margin empty-state title, and a per-card orange
+   Primary_Action variant for the "View" control when a card has no "Resume"
+   action (Req 13.2), so every card reads with exactly one orange primary.
+   =========================================================================== */
+.my-trips__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+.my-trips__header-art {
+  width: clamp(3.5rem, 10vw, 5.5rem);
+  height: auto;
+  flex: 0 0 auto;
+}
+.my-trips__empty-title { margin-top: 0; }
+
+/* Orange Primary_Action variant of a card action — mirrors --resume so the
+   non-resumable card still surfaces one clear primary control (Req 13.2). */
+.my-trips__action--primary {
+  background: var(--color-action-orange);
+  color: var(--color-background);
+  border-color: var(--color-action-orange);
+}
+.my-trips__action--primary:hover {
+  background: var(--color-orange-hover);
+  color: var(--color-background);
+  border-color: var(--color-orange-hover);
+}
+
+@media (max-width: 560px) {
+  .my-trips__header { flex-direction: column; align-items: flex-start; }
+  .my-trips__header-art { align-self: flex-end; }
+}
+
+/* ===========================================================================
+   Homepage sections (task 11.2) — featured exploration, discovery-card copy,
+   AI planner promo, and feature-row SVG icons (Req 5.5-5.9, 6.1-6.4, 17.6).
+   Appended namespaced block; existing design tokens only, plus the non-token
+   radius, shadow, ease-standard, and space helpers. No new :root custom
+   properties (keeps the task-4 token<->CSS bijection intact).
+   =========================================================================== */
+
+/* ── Featured exploration: asymmetric illustration + text (Req 5.5) ─────── */
+.home-feature-explore__grid { align-items: center; margin-top: 0; }
+.home-feature-explore__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  order: 2; /* illustration on one side, text on the other */
+}
+.home-feature-explore__img {
+  width: 100%;
+  max-width: 22rem;
+  height: auto;
+  filter: drop-shadow(var(--shadow-md));
+}
+.home-feature-explore__copy {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+.home-feature-explore__cta { margin-top: var(--space-xs); }
+
+@media (max-width: 1023px) {
+  /* Stack single-column; keep illustration below the copy for reading flow. */
+  .home-feature-explore__art { order: 2; }
+  .home-feature-explore__copy { order: 1; }
+  .home-feature-explore__img { max-width: 18rem; }
+}
+
+/* ── Discovery-card description + minimal metadata (Req 6.1) ─────────────── */
+.dest-card__blurb {
+  margin-top: 0.3rem;
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  color: var(--color-secondary-text);
+}
+.dest-card__tag {
+  margin-top: var(--space-sm);
+  align-self: flex-start;
+  font-size: var(--type-helper-size);
+  font-weight: 700;
+  color: var(--color-deep-emerald);
+  background: var(--color-pale-mint);
+  border-radius: var(--radius-pill);
+  padding: 0.15rem 0.6rem;
+}
+
+/* The feature-row icon now wraps an inline SVG rather than an emoji glyph. */
+.feature__icon { display: inline-flex; line-height: 0; }
+
+/* ── AI planner promo: heading, copy, example prompts, CTA (Req 5.7) ─────── */
+.home-planner-promo { }
+.home-planner-promo__inner {
+  background: var(--color-muted-bg);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xxl);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+.home-prompt-chips {
+  list-style: none;
+  margin: var(--space-xs) 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.home-prompt-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  text-decoration: none;
+  font-weight: 600;
+  color: var(--color-deep-emerald);
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-pill);
+  padding: 0.5rem 1rem;
+  transition: border-color var(--motion-normal) var(--ease-standard),
+              background var(--motion-normal) var(--ease-standard),
+              transform var(--motion-reduced) var(--ease-standard);
+}
+.home-prompt-chip:hover {
+  border-color: var(--color-primary-green);
+  background: var(--color-pale-mint);
+}
+.home-prompt-chip:active { transform: translateY(1px); }
+.home-prompt-chip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+.home-planner-promo__cta { margin-top: var(--space-xs); }
+
+@media (max-width: 768px) {
+  .home-planner-promo__inner { padding: var(--space-xl); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-prompt-chip:active { transform: none; }
+}
+
+/* ===========================================================================
+   Itinerary timeline refinements (task 18) — the planner itinerary rendered as
+   a structured day-by-day timeline with location-pin markers, a green
+   "journey" spine, and orange Primary_Action edit/add controls (Req 12.1-12.4).
+   Appended namespaced .timeline-* / .timeline__* block; uses ONLY existing
+   design tokens plus the non-token radius, shadow, space, and ease helpers.
+   Defines NO new :root token-group custom property (keeps the task-4
+   token<->CSS bijection intact). Builds on the base .timeline block (task 3):
+   it widens the left gutter for the pin marker and strengthens the connector
+   into a deep-emerald -> primary-green journey indicator.
+   =========================================================================== */
+.timeline.planner-itinerary {
+  /* Extra left gutter so the pin marker + spine sit clear of the day cards. */
+  padding-left: var(--space-xs);
+  gap: var(--space-lg);
+}
+.timeline.planner-itinerary .timeline__day {
+  padding-left: calc(var(--space-xxl) + var(--space-xs));
+}
+
+/* Green journey indicator — the connecting spine between day nodes. A vertical
+   gradient from deep emerald to primary green reads as a continuous route. */
+.timeline.planner-itinerary .timeline__day::before {
+  content: "";
+  position: absolute;
+  left: 1.1rem;
+  top: 0.2rem;
+  bottom: calc(-1 * var(--space-lg));
+  width: 3px;
+  background: linear-gradient(
+    to bottom,
+    var(--color-deep-emerald),
+    var(--color-primary-green)
+  );
+  border-radius: var(--radius-pill);
+}
+/* The last day closes the journey — no trailing connector past its node. */
+.timeline.planner-itinerary .timeline__day:last-child::before { bottom: auto; height: 1.6rem; }
+
+/* Location marker node — a green ring holding the location-pin illustration. */
+.timeline.planner-itinerary .timeline__marker {
+  position: absolute;
+  left: 0;
+  top: 0.1rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-pale-mint);
+  border: 2px solid var(--color-primary-green);
+  box-shadow: var(--shadow-sm);
+}
+.timeline__marker-pin {
+  width: 1.4rem;
+  height: 1.4rem;
+  display: block;
+}
+
+/* Day card head — title/theme beside the orange Primary_Action edit control. */
+.timeline__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.timeline__head > div { min-width: 0; }
+
+/* Timeline control rows (edit/add) — orange Primary_Action affordances. */
+.timeline__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+/* Reset the .cta default top margin inside the action row so it sits flush. */
+.timeline__add-btn { margin-top: 0; }
+.timeline__edit-btn { flex: 0 0 auto; }
+
+/* Inline day edit form — compact fields + save/cancel controls. */
+.timeline__edit { display: block; }
+.timeline__edit .field:last-of-type { margin-bottom: var(--space-sm); }
+
+@media (max-width: 560px) {
+  .timeline__head { flex-direction: column; }
+  .timeline__actions { flex-direction: column; align-items: stretch; }
+  .timeline__add-btn,
+  .timeline__edit-btn { justify-content: center; text-align: center; }
+}
+
+/* ===========================================================================
+   RESPONSIVE PASS (task 21) — Req 19.1-19.6.
+
+   Single appended, clearly-marked block that finalizes the cross-route
+   responsive contract. Uses ONLY existing design tokens plus the non-token
+   radius, shadow, space, and ease-standard helpers. It defines NO :root
+   block and NO color, type, font, space, focus, or motion token-group
+   custom property, so the task-4 token<->CSS bijection stays intact (all the
+   space references below are reads of existing tokens, never new
+   declarations inside :root).
+
+   Coverage:
+     19.1 Usable layouts across mobile (320-767), tablet (768-1023), desktop.
+     19.2 Asymmetric multi-column layouts collapse to one column <=1023px while
+          illustrations keep their intrinsic aspect ratio.
+     19.3 Interactive search/filter controls are >=44x44 CSS px <=1023px.
+     19.4 Inline filters become full-width, touch-friendly stacked controls
+          <=1023px (CSS-driven drawer-equivalent; no component JS rewired).
+     19.5 No horizontal overflow at >=320px (fluid grids, min-width:0, wrapping).
+     19.6 Serif headings stay >=16px <=1023px while retaining the desktop
+          spacing scale / composition (targeted floors, not a uniform shrink).
+   =========================================================================== */
+
+/* ── 19.5 Global overflow safety — media never forces >100% width, long words
+   wrap instead of pushing the viewport, and the document itself cannot scroll
+   sideways. overflow-x is a belt-and-braces guard on top of fluid tracks /
+   min-width:0 (the real fixes), not a crutch hiding a broken layout. ───────── */
+html, body { max-width: 100%; overflow-x: hidden; }
+img, svg, video, canvas { max-width: 100%; }
+img, svg { height: auto; }
+/* Long unbroken strings (URLs, codes, IDs) wrap rather than overflow. */
+p, h1, h2, h3, li, dd, dt, a, span, .lead, .section-sub,
+.home-hero__title, .section-title, .offer-card__title, .offer-card__route,
+.detail__title, .detail__description { overflow-wrap: anywhere; }
+
+/* ===========================================================================
+   19.2 — STACK asymmetric multi-column layouts into ONE column at <=1023px.
+   .grid-2 and the hero grid already collapse; these reinforce the rest and
+   guarantee every discovered two-column composition stacks. Illustrations keep
+   .illustration (max-width:100%; height:auto) + intrinsic width/height attrs,
+   so aspect ratio is preserved automatically.
+   =========================================================================== */
+@media (max-width: 1023px) {
+  /* Any asymmetric grid-template two-col layout collapses to a single column. */
+  .grid-2,
+  .home-hero2__grid,
+  .home-feature-explore__grid,
+  .results__grid,
+  .offer-list,
+  .card-grid,
+  .recent-list {
+    grid-template-columns: 1fr;
+  }
+
+  /* Deals hero (copy + illustration) and region head stack vertically. */
+  .deals-hero:has(.deals-hero__copy) { flex-direction: column; align-items: flex-start; }
+  .deals-hero__art { align-self: flex-start; }
+  .deals-region-head { flex-direction: column; align-items: flex-start; }
+
+  /* Planner: the sticky summary aside drops below the conversation on tablet
+     and narrower so the two columns read as a single flow. */
+  .planner-summary { position: static; top: auto; }
+
+  /* Footer columns wrap to full width so nothing is squeezed. */
+  .site-footer__inner { gap: var(--space-lg); }
+
+  /* Illustrations never balloon on the stacked layout; aspect ratio intact.
+     (Width caps match the task-11 hero/feature rules; just centre them.) */
+  .home-hero2__art,
+  .home-feature-explore__img { max-width: 18rem; margin-inline: auto; }
+}
+
+/* ===========================================================================
+   19.3 / 19.4 — TOUCH TARGETS (>=44x44) + FILTER DRAWER-equivalent at <=1023px.
+   Every interactive search/filter control gets a >=44px min-height and an
+   adequate tap width; inline results filters stack full width so they are easy
+   to hit on touch. Most controls already carry min-height:44px (task 10); this
+   makes the guarantee explicit at the responsive breakpoint and adds width.
+   =========================================================================== */
+@media (max-width: 1023px) {
+  /* Baseline: all form controls + buttons + chips/tabs/actions meet 44px. */
+  .field input,
+  .field select,
+  .field textarea,
+  .control-field input,
+  .control-field select,
+  .results__control input,
+  .results__control select,
+  .home-search__ai-input,
+  .btn,
+  .cta,
+  .chip,
+  .tab-pill,
+  .swap-btn,
+  .my-trips__action,
+  .chat-chip,
+  .home-prompt-chip,
+  .site-nav__toggle,
+  .site-nav__account,
+  .filter-drawer__close,
+  .modal__close {
+    min-height: 44px;
+  }
+
+  /* Pills/chips/tabs/buttons also need an adequate tap WIDTH, not just height. */
+  .chip,
+  .tab-pill,
+  .btn,
+  .cta,
+  .my-trips__action,
+  .chat-chip { min-width: 44px; }
+
+  /* Tap-target vertical padding floor so text controls hit 44px comfortably. */
+  .field input,
+  .field select,
+  .home-search__ai-input { padding-block: 0.6rem; }
+
+  /* ── FILTER DRAWER equivalent (19.4): route inline results/search filters
+     into a full-width, touch-friendly stacked column. The results filter form
+     is the "drawer" surface; each control spans the row and is 44px tall so it
+     is comfortable on touch, satisfying the "filters presented in a usable
+     drawer" intent without rewiring component JS for an off-canvas toggle. ── */
+  .results__controls,
+  .results-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .results__controls .field,
+  .results__controls .results__control,
+  .results-controls .control-field,
+  .results-controls .field {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+  }
+  .results__apply,
+  .control-submit,
+  .results__controls .cta,
+  .results-controls .cta {
+    width: 100%;
+    justify-content: center;
+    margin-top: var(--space-xs);
+  }
+
+  /* Home trip-finder search row: already stacks <=768px; make the tablet band
+     (769-1023) comfortable too by letting fields grow full width. */
+  .search-row .field,
+  .search-row .age-field { flex: 1 1 100%; }
+}
+
+/* ===========================================================================
+   19.6 — READABLE SERIF HEADINGS (>=16px computed) at <=1023px, WITHOUT a
+   uniform downscale. The desktop spacing scale and composition are retained;
+   only per-heading font-size floors are applied where a clamp()/fluid value
+   could theoretically dip toward (but should never go below) 16px. The hero
+   title clamp floor is 2.2rem (35.2px) and section/page/card sizes are fixed
+   >=16px, so these are safety floors, not shrinks.
+   =========================================================================== */
+@media (max-width: 1023px) {
+  /* Each heading keeps its desktop-scale token size; max(1rem, …) only clamps
+     a 16px FLOOR so no serif heading can compute below 16px. Fixed-px token
+     sizes (section/page/card = 40/32/20px) are already well above the floor —
+     the floor is a guarantee, never a shrink — and the spacing scale/layout
+     composition is untouched. */
+  h1,
+  .modal__title, .detail__title {
+    font-size: max(1rem, var(--type-page-title-size));
+  }
+  h2, .section-title {
+    font-size: max(1rem, var(--type-section-size));
+  }
+  h3,
+  .offer-card__title, .offer-card__route,
+  .dest-card__name, .filter-drawer__title,
+  .my-trips__card-title, .planner-itinerary__title, .planner-day__title {
+    font-size: max(1rem, var(--type-card-title-size));
+  }
+  /* Fluid hero titles: clamp floor is already 2.2rem (35.2px); max(1rem, …)
+     is a redundant but explicit guard that the computed size stays >=16px. */
+  .display,
+  .home-hero__title {
+    font-size: max(1rem, clamp(2.2rem, 5vw, var(--type-hero-size)));
+  }
+}
+
+/* ===========================================================================
+   19.1 — Narrow-viewport (<=360px) safety: tighten the shell gutter and search
+   paddings so content + padding never force the layout past 100vw at 320px.
+   Keeps the spacious look on real phones while guaranteeing no overflow at the
+   320px floor. Headings remain >=16px (floors above still apply).
+   =========================================================================== */
+@media (max-width: 360px) {
+  .shell { padding-left: var(--space-md); padding-right: var(--space-md); }
+  .home-search { padding: var(--space-md); }
+  .deals-editorial, .deals-bookable { padding: var(--space-md); }
+  .home-planner-promo__inner { padding: var(--space-lg); }
+  .modal__backdrop { padding: var(--space-md); }
+  /* Chips/tabs wrap tightly without forcing a horizontal scroll. */
+  .chip-row, .tablist, .chat-suggestions__chips, .home-prompt-chips { gap: var(--space-xs); }
+}
+/* ===========================================================================
+   AI-concierge-first homepage (Req 21)
+
+   Namespaced .concierge-* block appended at the END of the stylesheet. It uses
+   ONLY existing design tokens (var(--color-*) / var(--type-*) / var(--space-*)
+   / var(--focus-*) / var(--motion-*)) plus the non-token helpers
+   --radius-* / --shadow-* / --ease-standard. It defines NO :root block and NO
+   color/type/font/space/focus/motion token-group custom property, so the
+   token<->CSS bijection (test/token-css-consistency.test.ts) stays intact.
+
+   Styles the classes rendered by components/concierge-home.tsx:
+     .concierge (root; also .grid-2 -> 1.1fr/0.9fr desktop, 1fr <=1023px)
+     .concierge-planner / .concierge-planner__header
+     .concierge-conversation (transcript: min-height, scrolls, message spacing)
+     .concierge-message(--assistant|--user) / .concierge-message__text
+     .concierge-chips (wraps .chat-chip example prompts)
+     .concierge-composer / __field / __submit (input grows + orange .cta send)
+     .concierge-profile (right .card) / __header / __title / __reset
+     .concierge-profile__list / __row (label + value + Change, divided rows)
+     .concierge-profile__label / __value / __value--muted / __change
+     .concierge-profile__helper / __proceed (disabled -> muted) / __hint
+
+   Responsive (Req 21.9): two columns on desktop (inherits .grid-2), stack
+   planner ABOVE profile in one column <=1023px, 44px touch targets, no
+   horizontal overflow at >=320px (min-width:0 on flex children + wrapping),
+   conversation scrolls instead of overflowing. Entrance reuses .motion-rise
+   (already reduced-motion-safe); any added transition is bounded by
+   --motion-* with --ease-standard and has a prefers-reduced-motion fallback.
+   =========================================================================== */
+
+/* Centered container (CONTAINMENT FIX): the concierge previously spanned the
+   full viewport because .concierge itself had no max-width. The shell centers
+   the whole experience to the same 1120px width as the nav/footer .shell so the
+   two panes align with the rest of the page instead of stretching edge-to-edge. */
+.concierge-shell {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding: var(--space-xxl) var(--space-lg);
+}
+
+/* Page header for the /plan "assistant" variant — sits above the two panes. */
+.concierge__pagehead {
+  margin: 0 0 var(--space-xl);
+  max-width: 60ch;
+}
+.concierge__pagehead .eyebrow { margin-bottom: var(--space-xs); }
+.concierge__pagetitle {
+  margin: 0 0 var(--space-sm);
+  font-family: var(--font-display);
+  font-size: var(--type-page-title-size);
+  line-height: var(--type-page-title-line);
+  font-weight: var(--type-page-title-weight);
+  letter-spacing: var(--type-page-title-spacing);
+  color: var(--color-primary-text);
+}
+.concierge__pagehead .lead { margin: 0; }
+
+/* Two-pane grid: planner WIDER than profile; gap + top alignment. Overrides
+   .grid-2's generic column ratio with the tuned minmax() tracks. Collapses to a
+   single column <=1023px (handled in the responsive block below). */
+.concierge {
+  align-items: start;
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 24rem);
+  column-gap: var(--space-xl);
+}
+
+/* ── LEFT: conversational planner (ONE cohesive white card) ────────────── */
+.concierge-planner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0; /* allow the column to shrink; prevents overflow at >=320px */
+  /* .card already supplies background/border/radius/shadow/padding. */
+}
+/* Header band: eyebrow+title on the LEFT, the progress indicator on the RIGHT,
+   a subtle pale-mint top accent, and a hairline divider below. The two sides
+   align to opposite ends and wrap cleanly on narrow widths. */
+.concierge-planner__header {
+  margin: 0;
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-light-border);
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+.concierge-planner__header::before {
+  content: "";
+  position: absolute;
+  top: calc(-1 * var(--space-lg));
+  left: calc(-1 * var(--space-lg));
+  right: calc(-1 * var(--space-lg));
+  height: var(--space-xs);
+  background: var(--color-pale-mint);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+.concierge-planner__heading {
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+.concierge-planner__header .eyebrow { margin-bottom: var(--space-xs); }
+.concierge-planner__header .lead { margin: 0; }
+
+/* Progress indicator ("X of 7"): a quiet right-aligned label above a slim
+   track; the fill width is driven inline from the live captured count. Track
+   uses the light border token, the fill the primary green token. */
+.concierge-progress {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-xs);
+  min-width: 9rem;
+  max-width: 14rem;
+}
+.concierge-progress__label {
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  font-weight: var(--type-label-weight);
+  letter-spacing: var(--type-label-spacing);
+  text-transform: uppercase;
+  color: var(--color-deep-emerald);
+  white-space: nowrap;
+}
+.concierge-progress__track {
+  display: block;
+  width: 100%;
+  height: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--color-light-border);
+  overflow: hidden;
+}
+.concierge-progress__fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-green);
+  transition: width var(--motion-normal) var(--ease-standard);
+}
+
+/* Transcript area: comfortable min-height, gentle inner scroll when long, and
+   never overflows horizontally. Messages are spaced via flex gap. */
+.concierge-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-height: 18rem;
+  max-height: 30rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-md);
+  background: var(--color-muted-bg);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+}
+
+/* Message bubble — reuses the .chat-message role label; assistant and user are
+   visually distinguished by surface, alignment and accent. Each message
+   animates in on mount with a gentle fade+rise (bounded + reduced-motion-safe,
+   see the keyframe + media query below). */
+.concierge-message {
+  max-width: 85%;
+  min-width: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  overflow-wrap: anywhere;
+  animation: concierge-message-in var(--motion-normal) var(--ease-standard) both;
+}
+/* Assistant — pale-mint surface, deep-emerald accent, left-aligned. */
+.concierge-message--assistant {
+  align-self: flex-start;
+  background: var(--color-pale-mint);
+  border-color: var(--color-soft-green);
+  border-top-left-radius: var(--radius-sm);
+}
+/* User — white surface with an orange accent edge, right-aligned/emphasized. */
+.concierge-message--user {
+  align-self: flex-end;
+  background: var(--color-background);
+  border-color: var(--color-light-border);
+  border-right: 3px solid var(--color-action-orange);
+  border-top-right-radius: var(--radius-sm);
+}
+.concierge-message--user .chat-message__role { color: var(--color-action-orange); }
+/* Role label sits on one line; the assistant gets a small token-colored CSS
+   "avatar" dot before the label (not an emoji / not an image). */
+.concierge-message .chat-message__role {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.concierge-message__avatar {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-green);
+  border: 1px solid var(--color-deep-emerald);
+  flex: 0 0 auto;
+}
+.concierge-message__text {
+  margin: 0;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  color: var(--color-primary-text);
+}
+
+/* Gentle entrance for a newly mounted message (bounded by --motion-normal). */
+@keyframes concierge-message-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Example-prompt chips — wrap onto multiple rows, each chip reuses .chat-chip. */
+.concierge-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.concierge-chips .chat-chip { min-width: 0; }
+
+/* Composer — input grows, orange send button on the same row; both 44px tall. */
+.concierge-composer {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.concierge-composer__field {
+  flex: 1 1 14rem;
+  min-width: 0;   /* flex child may shrink below content width -> no overflow */
+  margin: 0;
+}
+.concierge-composer__field input {
+  width: 100%;
+  min-height: 44px;
+  transition: border-color var(--motion-normal) var(--ease-standard);
+}
+/* Refined focus ring on the composer input (reuses the focus token policy). */
+.concierge-composer__field input:focus,
+.concierge-composer__field input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+  border-color: var(--color-primary-green);
+}
+.concierge-composer__submit {
+  flex: 0 0 auto;
+  margin-top: 0;   /* override .cta's default top margin inside the row */
+  min-height: 44px;
+  justify-content: center;
+}
+
+/* Voice mic button (UI only): round 44px control, soft-green surface, deep
+   emerald glyph, light border. Honest affordance — on click it posts a note
+   that voice isn't wired yet (see component) rather than faking recognition. */
+.concierge-mic {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-pale-mint);
+  color: var(--color-deep-emerald);
+  cursor: pointer;
+  transition:
+    background var(--motion-normal) var(--ease-standard),
+    border-color var(--motion-normal) var(--ease-standard);
+}
+.concierge-mic:hover {
+  background: var(--color-soft-green);
+  border-color: var(--color-soft-green);
+}
+.concierge-mic:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+.concierge-mic__icon { display: block; flex: 0 0 auto; }
+
+/* ── RIGHT: Live_Trip_Profile panel ("Your new trip") ──────────────────── */
+.concierge-profile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+.concierge-profile__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+/* Restrained accent illustration beside the profile title. */
+.concierge-profile__art {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+}
+.concierge-profile__title {
+  margin: 0;
+  /* Title takes the remaining space so Reset is pushed to the right. */
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+  line-height: var(--type-card-title-line);
+  font-weight: var(--type-card-title-weight);
+  letter-spacing: var(--type-card-title-spacing);
+  color: var(--color-primary-text);
+}
+/* Reset — quiet neutral control (reuses .btn); keep a 44px touch target. */
+.concierge-profile__reset {
+  margin: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.5rem 0.9rem;
+  font-size: var(--type-helper-size);
+  font-weight: var(--type-helper-weight);
+}
+
+/* Category rows — label + value + Change, separated by subtle dividers. */
+.concierge-profile__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.concierge-profile__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-light-border);
+  min-width: 0;
+}
+.concierge-profile__row:last-child { border-bottom: 0; }
+/* Route row is the prominent trip headline — a touch more breathing room. */
+.concierge-profile__row--route {
+  padding-top: var(--space-md);
+  padding-bottom: var(--space-md);
+}
+/* Label spans the full width above the value; uppercase deep-emerald eyebrow. */
+.concierge-profile__label {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.concierge-profile__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  color: var(--color-primary-text);
+  /* Subtle pale-mint highlight when a value flips to a real value (below). */
+  border-radius: var(--radius-sm);
+  transition: background var(--motion-normal) var(--ease-standard);
+}
+/* Prominent headline for the route (larger / emphasized vs category rows). */
+.concierge-profile__value--headline {
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+  line-height: var(--type-card-title-line);
+  font-weight: var(--type-card-title-weight);
+  letter-spacing: var(--type-card-title-spacing);
+}
+.concierge-profile__value--muted { color: var(--color-secondary-text); }
+/* A real (non-muted) value gets a brief pale-mint wash the first time it mounts
+   — a quiet confirmation that the category was captured. */
+.concierge-profile__value:not(.concierge-profile__value--muted) {
+  animation: concierge-value-flip var(--motion-normal) var(--ease-standard) both;
+}
+@keyframes concierge-value-flip {
+  from { background: var(--color-pale-mint); }
+  to { background: transparent; }
+}
+/* Change — quiet small text button (deep-emerald, light weight, underline on
+   hover); padding keeps a 44px touch target without looking heavy. */
+.concierge-profile__change {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  align-self: center;
+  margin: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-deep-emerald);
+  font-size: var(--type-helper-size);
+  font-weight: var(--type-helper-weight);
+  text-decoration: none;
+}
+.concierge-profile__change:hover {
+  background: transparent;
+  color: var(--color-deep-emerald);
+  text-decoration: underline;
+}
+
+/* Helper + proceed CTA + disabled hint. */
+.concierge-profile__helper {
+  margin: 0;
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  color: var(--color-secondary-text);
+}
+.concierge-profile__proceed {
+  margin-top: 0;
+  align-self: flex-start;
+  justify-content: center;
+}
+.concierge-profile__proceed:disabled,
+.concierge-profile__proceed[aria-disabled="true"] {
+  background: var(--color-light-border);
+  color: var(--color-secondary-text);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.concierge-profile__proceed:disabled:hover,
+.concierge-profile__proceed[aria-disabled="true"]:hover {
+  background: var(--color-light-border);
+}
+.concierge-profile__proceed:disabled:active,
+.concierge-profile__proceed[aria-disabled="true"]:active { transform: none; }
+.concierge-profile__hint {
+  margin: 0;
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  color: var(--color-secondary-text);
+}
+
+/* Desktop (>=1024px): keep the profile in view as the conversation grows by
+   making it sticky near the top of the viewport. Only applies while the two
+   panes sit side by side; it is cleared in the stacked layout below. */
+@media (min-width: 1024px) {
+  .concierge-profile {
+    position: sticky;
+    top: var(--space-lg);
+  }
+}
+
+/* Responsive (Req 21.9): stack planner ABOVE profile in one column <=1023px.
+   Override the tuned two-pane tracks back to a single column, keep source order
+   (planner first, profile second), drop the sticky profile, and let the
+   composer controls span the row — no fixed widths that could force horizontal
+   overflow at >=320px. */
+@media (max-width: 1023px) {
+  .concierge-shell {
+    padding: var(--space-xl) var(--space-md);
+  }
+  .concierge {
+    grid-template-columns: 1fr;
+  }
+  .concierge-planner { order: 0; }
+  .concierge-profile {
+    order: 1;
+    position: static; /* not sticky when stacked */
+    top: auto;
+  }
+  /* Composer on touch: input takes the top row full-width; the mic and the
+     send button share the row below so controls stay a comfortable 44px. */
+  .concierge-composer__field { flex: 1 1 100%; }
+  .concierge-mic { flex: 0 0 auto; }
+  .concierge-composer__submit { flex: 1 1 auto; }
+  /* Stack the header band cleanly: progress drops below the heading and the
+     track spans the full width so it never crowds the title at >=320px. */
+  .concierge-progress {
+    align-items: flex-start;
+    max-width: none;
+    width: 100%;
+  }
+}
+
+/* Reduced motion: every added transition/animation falls back to opacity-only
+   (no transforms) within --motion-reduced, or is disabled where decorative. */
+@media (prefers-reduced-motion: reduce) {
+  .concierge-message {
+    animation-name: fade;
+    animation-duration: var(--motion-reduced);
+    animation-timing-function: linear;
+  }
+  /* The value-flip wash and the input border transition are non-essential. */
+  .concierge-profile__value {
+    transition: none;
+    animation: none;
+  }
+  .concierge-composer__field input { transition: none; }
+  /* Progress fill still updates its width (that's state, not decoration) but
+     without an animated tween; the mic hover transition is decorative only. */
+  .concierge-progress__fill { transition: none; }
+  .concierge-mic { transition: none; }
 }

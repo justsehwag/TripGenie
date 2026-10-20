@@ -50,11 +50,11 @@ function byLabel(label: string): NavLink {
 export const FOOTER_SECTIONS: readonly FooterSection[] = [
   {
     heading: "Book",
-    links: [byLabel("Stays"), byLabel("Flights"), byLabel("Cars")],
+    links: [byLabel("Stays"), byLabel("Flights")],
   },
   {
     heading: "Explore",
-    links: [byLabel("Deals"), byLabel("AI Travel Assistant")],
+    links: [byLabel("AI Travel Assistant"), byLabel("Discover")],
   },
   {
     heading: "Your trips",
@@ -87,7 +87,7 @@ export default function SiteFooter({
         <div className="site-footer__brand">
           <p className="site-footer__wordmark">TripGenie</p>
           <p className="site-footer__tagline">
-            An AWS-native agentic travel-planning concierge.
+           AI that takes you places.
           </p>
 
           {accountEnabled && (

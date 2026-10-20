@@ -21,10 +21,16 @@ export const metadata = { title: "Cars - TripGenie" };
  * It renders a results summary (pickup location + count), a sort control and
  * filter controls (plain GET forms that re-encode the URL so they also survive
  * refresh), and one `CarOffer` card per result. Every card shows the car offer
- * fields and its `OfferMeta` provenance label (mandatory, Req 25.8); when the
- * provenance is estimated the card's disclosure states no payment is taken and
- * no valid rental is issued (Req 25.11). Each card links to `/cars/[id]`
- * (Req 25.9). Prices render on an opaque `booking-surface` (Req 15.4/15.5).
+ * fields and its `OfferMeta` provenance label (mandatory, Req 25.8 / 9.4); when
+ * the provenance is estimated the card's disclosure states no payment is taken
+ * and no valid rental is issued (Req 25.11). Each card links to `/cars/[id]`
+ * (Req 25.9 / 9.3).
+ *
+ * UI redesign (Req 9.1-9.5): the search/sort/filter controls, result cards, and
+ * their vehicle facts use the shared minimalist Design_System classes
+ * (`.shell`, `.results-controls`, `.field`, `.offer-card`, `.offer-card__facts`,
+ * `.offer-card__price`, `.cta`, `.provenance`) on white surfaces with green
+ * accents — no legacy glass/dark/emoji/hardcoded colors.
  */
 
 /** Next 16 passes route search params as a promise. */
@@ -145,7 +151,7 @@ export default async function CarsResultsPage({
       {result?.error ? (
         /* Search_API failure/timeout (Req 28.4 / 4.3): render the labelled
            error and a retry control that resubmits the SAME criteria URL. */
-        <section className="booking-surface results__error" role="alert">
+        <section className="card results__error" role="alert">
           <p>{result.error}</p>
           <Link className="cta" href={`/cars${canonicalQs ? `?${canonicalQs}` : ""}`}>
             Retry search
@@ -251,26 +257,46 @@ function CriteriaHiddenFields({ qs }: { qs: string }) {
 }
 
 /**
- * One CarOffer card (Req 25.8/25.9/25.11). Shows the car offer fields —
- * carClass, transmission, seats, pricePerDay, pickup/drop-off, days — and the
- * mandatory `OfferMeta` provenance label. The price sits on an opaque
- * `booking-surface` so it stays legible at ≥4.5:1 (Req 15.4/15.5). The whole
- * card links to the car Detail_Page, carrying the criteria so the detail page
- * can reproduce the same offer set (Req 25.9).
+ * One CarOffer card (Req 25.8/25.9/25.11, 9.2/9.3/9.4). Shows the practical
+ * vehicle details the data provides — carClass, transmission, seats — alongside
+ * the rental logistics (pickup/drop-off, length) in an `.offer-card__facts`
+ * definition list, the per-day price with a clear primary-vs-secondary
+ * hierarchy, and the mandatory `OfferMeta` provenance label on every card
+ * (Req 9.4). The card is a clean white `.card` surface with green accents (no
+ * legacy glass). The whole card links to the car Detail_Page, carrying the
+ * criteria so the detail page reproduces the same offer set (Req 25.9 / 9.3).
  */
 function CarCard({ offer, criteriaQs }: { offer: CarOffer; criteriaQs: string }) {
   const href = `/cars/${encodeURIComponent(offer.id)}${criteriaQs ? `?${criteriaQs}` : ""}`;
   const total = offer.pricePerDay * offer.days;
+  const transmission = offer.transmission[0].toUpperCase() + offer.transmission.slice(1);
   return (
-    <Link href={href} className="offer-card glass" aria-label={`${offer.carClass} rental, ${money(offer.pricePerDay)} per day`}>
+    <Link
+      href={href}
+      className="offer-card card motion-rise"
+      aria-label={`${offer.carClass} rental, ${money(offer.pricePerDay)} per day`}
+    >
       <div className="offer-card__head">
         <h2 className="offer-card__title">{offer.carClass}</h2>
         <span className="offer-card__tag">
-          {offer.transmission[0].toUpperCase() + offer.transmission.slice(1)} · {offer.seats} seats
+          {transmission} · {offer.seats} seats
         </span>
       </div>
 
+      {/* Practical vehicle details (Req 9.2). */}
       <dl className="offer-card__facts">
+        <div>
+          <dt>Class</dt>
+          <dd>{offer.carClass}</dd>
+        </div>
+        <div>
+          <dt>Transmission</dt>
+          <dd>{transmission}</dd>
+        </div>
+        <div>
+          <dt>Seats</dt>
+          <dd>{offer.seats}</dd>
+        </div>
         <div>
           <dt>Pickup</dt>
           <dd>{offer.pickupLocation}</dd>
@@ -287,15 +313,15 @@ function CarCard({ offer, criteriaQs }: { offer: CarOffer; criteriaQs: string })
         </div>
       </dl>
 
-      {/* Opaque, legible price surface (Req 15.4/15.5). */}
-      <div className="booking-surface offer-card__price">
+      {/* Per-day price with clear primary vs secondary hierarchy. */}
+      <div className="offer-card__price">
         <span className="offer-card__price-main">{money(offer.pricePerDay)}</span>
         <span className="offer-card__price-unit"> / day</span>
         <span className="offer-card__price-total">Est. {money(total)} total</span>
       </div>
 
-      {/* Mandatory provenance label on every card (Req 25.8); estimated carries
-          the no-payment / no-rental disclosure (Req 25.11). */}
+      {/* Mandatory provenance label on every card (Req 25.8 / 9.4); estimated
+          carries the no-payment / no-rental disclosure (Req 25.11). */}
       <ProvenanceLabel meta={offer.meta} />
     </Link>
   );

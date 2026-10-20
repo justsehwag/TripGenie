@@ -1,13 +1,15 @@
 /**
- * StayOfferCard — a single StayOffer rendered as a bookable card on the Stays
- * Results_Page (task 34.1, Req 23.7). Displays the StayOffer fields and the
- * OfferMeta provenance label (via OfferProvenance); for estimated offers it
- * carries the no-payment / no-valid-room disclosure (Req 23.10). The whole card
- * links to the stay Detail_Page at /stays/[id] (Req 23.8).
+ * StayOfferCard — a single StayOffer rendered as a bookable Offer_Card on the
+ * Stays Results_Page (Req 7.1–7.5). Renders on a clean white card surface with
+ * green accents and subtle dividers (shared `.offer-card` / `.card` tokens, no
+ * glass or dark treatment). Displays the StayOffer fields with a clear price
+ * hierarchy (primary nightly price prominent, per-night/total details muted —
+ * Req 7.2) and the mandatory OfferMeta provenance label via ProvenanceLabel
+ * (Req 7.4). The whole card links to the stay Detail_Page at /stays/[id]
+ * (Req 7.3/7.5).
  *
- * The card is an opaque `booking-surface` (price/detail must be fully legible at
- * ≥4.5:1 contrast — Req 15.4/15.5), not glass. Prices and ratings are shown
- * exactly as produced on the server; nothing is fabricated here (Req 4 honesty).
+ * Prices and ratings are shown exactly as produced on the server; nothing is
+ * fabricated here (Req 4 honesty).
  */
 
 import Link from "next/link";
@@ -22,7 +24,7 @@ function money(amount: number): string {
 export interface StayOfferCardProps {
   offer: StayOffer;
   /** Query string of the active criteria, forwarded to the detail link so the
-   *  detail page reproduces the same result set (Req 28.1). */
+   *  detail page reproduces the same result set (Req 7.5). */
   criteriaQuery: string;
 }
 
@@ -34,7 +36,7 @@ export default function StayOfferCard({ offer, criteriaQuery }: StayOfferCardPro
     : `/stays/${encodeURIComponent(offer.id)}`;
 
   return (
-    <article className="booking-surface offer-card motion-rise">
+    <article className="card offer-card motion-rise">
       <Link href={href} className="offer-card__link">
         <h3 className="offer-card__title">
           {offer.stayStyle} stay in {offer.destination}
@@ -50,16 +52,6 @@ export default function StayOfferCard({ offer, criteriaQuery }: StayOfferCardPro
           <dt>Nights</dt>
           <dd>{nights}</dd>
         </div>
-        <div>
-          <dt>Per night</dt>
-          <dd>{money(offer.pricePerNight)}</dd>
-        </div>
-        <div>
-          <dt>Total</dt>
-          <dd>
-            {money(total)} <span className="offer-card__muted">for {nights} nights</span>
-          </dd>
-        </div>
       </dl>
 
       {offer.representative && (
@@ -72,6 +64,17 @@ export default function StayOfferCard({ offer, criteriaQuery }: StayOfferCardPro
           {offer.meta.reviewSummary.source})
         </p>
       ) : null}
+
+      {/* Price hierarchy (Req 7.2): primary nightly price prominent, the
+          per-night unit and multi-night total rendered as muted secondary
+          details using the shared price-block tokens. */}
+      <div className="offer-card__price">
+        <span className="offer-card__price-main">{money(offer.pricePerNight)}</span>
+        <span className="offer-card__price-unit">per night</span>
+        <span className="offer-card__price-total">
+          {money(total)} total for {nights} {nights === 1 ? "night" : "nights"}
+        </span>
+      </div>
 
       <ProvenanceLabel meta={offer.meta} />
       <EstimatedNotice meta={offer.meta} />

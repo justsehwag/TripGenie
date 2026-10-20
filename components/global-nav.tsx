@@ -6,7 +6,7 @@
  *
  * Renders once in the root `app/layout.tsx` so it appears on every Booking_Site
  * page (Req 21.1). A logo links to the Homepage `/`; navigation controls cover
- * Stays, Flights, Cars, Deals, My Trips, and the AI Travel Assistant (which
+ * Discover, Flights, Stays, My Trips, and the AI Travel Assistant (which
  * targets the Planning_Workspace `/plan`, Req 21.5). Every control is built from
  * the shared static route manifest in `@/lib/nav-links`, so no control ever
  * targets an absent route (Req 21.3). The active page is indicated from the current route via
@@ -79,7 +79,43 @@ export default function GlobalNav({
     <header className="site-nav">
       <nav className="site-nav__bar shell" aria-label="Primary">
         <Link href="/" className="site-nav__logo" aria-label="TripGenie home">
-          TripGenie
+          {/*
+            Logo treatment (Req 4.1 / 17.6): a small inline SVG mark — a globe
+            circle in the primary green with a journey arc / paper-plane accent
+            in deep emerald and a single orange action spark — paired with the
+            "TripGenie" wordmark. The mark is decorative (aria-hidden); the
+            wordmark + the link's aria-label convey the name. Colors reference
+            the Design_System token custom properties directly (no CSS added
+            here), so a token change propagates to the mark.
+          */}
+          <svg
+            className="site-nav__mark"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            focusable="false"
+          >
+            {/* Globe body */}
+            <circle cx="12" cy="12" r="9" stroke="var(--color-primary-green)" strokeWidth="1.8" />
+            {/* Meridian suggesting travel around the globe */}
+            <path
+              d="M12 3c3 2.4 3 15.6 0 18M12 3c-3 2.4-3 15.6 0 18M3.4 9h17.2M3.4 15h17.2"
+              stroke="var(--color-primary-green)"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+              opacity="0.55"
+            />
+            {/* Paper-plane / journey mark in deep emerald */}
+            <path
+              d="M7 13.2l9.4-4.4-3 9.2-2.1-3.1-4.3-1.7z"
+              fill="var(--color-deep-emerald)"
+            />
+            {/* Orange action spark accent */}
+            <circle cx="17.6" cy="6.6" r="2" fill="var(--color-action-orange)" />
+          </svg>
+          <span className="site-nav__wordmark">TripGenie</span>
         </Link>
 
         {/* Compact menu toggle, shown only below 768px via CSS (Req 21.6). */}

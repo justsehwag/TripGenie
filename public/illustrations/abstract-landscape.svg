@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" role="img">
+  <!-- soft mint backdrop -->
+  <circle cx="120" cy="120" r="96" fill="#E8FAF2"/>
+  <!-- clip to the circular scene -->
+  <defs>
+    <clipPath id="landscape-clip"><circle cx="120" cy="120" r="96"/></clipPath>
+  </defs>
+  <g clip-path="url(#landscape-clip)">
+    <!-- sun (restrained orange accent) -->
+    <circle cx="156" cy="84" r="20" fill="#FF901F"/>
+    <!-- back hill -->
+    <path d="M24 150c40 -40 70 -40 108 -10c30 24 56 18 84 -4v80h-192z" fill="#C8F2DF" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+    <!-- front hill -->
+    <path d="M24 186c36 -30 64 -30 100 -6c30 20 58 12 92 -8v44h-192z" fill="#16B982" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+    <!-- path line over the hills -->
+    <path d="M70 220c6 -24 20 -34 40 -38c22 -4 34 -16 50 -34" stroke="#087F63" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 12" fill="none"/>
+  </g>
+  <!-- scene outline -->
+  <circle cx="120" cy="120" r="96" fill="none" stroke="#087F63" stroke-width="3"/>
+</svg>

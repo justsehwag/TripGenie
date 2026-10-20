@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" role="img">
+  <!-- soft mint backdrop -->
+  <circle cx="120" cy="120" r="96" fill="#E8FAF2"/>
+  <!-- balloon envelope -->
+  <path d="M120 46c-34 0 -58 26 -58 60c0 28 20 46 36 56h44c16 -10 36 -28 36 -56c0 -34 -24 -60 -58 -60z" fill="#C8F2DF" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <!-- vertical gores -->
+  <path d="M120 46c-18 24 -18 100 0 116" stroke="#16B982" stroke-width="3" fill="none"/>
+  <path d="M120 46c18 24 18 100 0 116" stroke="#16B982" stroke-width="3" fill="none"/>
+  <path d="M86 52c-8 30 -8 76 10 104" stroke="#16B982" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M154 52c8 30 8 76 -10 104" stroke="#16B982" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- ropes -->
+  <path d="M104 160l8 26" stroke="#087F63" stroke-width="3" stroke-linecap="round"/>
+  <path d="M136 160l-8 26" stroke="#087F63" stroke-width="3" stroke-linecap="round"/>
+  <!-- basket (restrained orange accent) -->
+  <path d="M110 186h20l-3 20h-14z" fill="#FF901F" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+</svg>

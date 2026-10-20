@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" role="img">
+  <!-- soft mint backdrop -->
+  <circle cx="120" cy="120" r="96" fill="#E8FAF2"/>
+  <!-- pot (restrained orange accent) -->
+  <path d="M94 168h52l-8 40h-36z" fill="#FF901F" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M88 160h64v10h-64z" fill="#C8F2DF" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <!-- central stem -->
+  <path d="M120 160c0 -36 0 -62 0 -86" stroke="#087F63" stroke-width="3" stroke-linecap="round"/>
+  <!-- leaves -->
+  <path d="M120 150c-30 -6 -48 -26 -50 -52c26 2 46 20 50 52z" fill="#16B982" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M120 150c30 -6 48 -26 50 -52c-26 2 -46 20 -50 52z" fill="#C8F2DF" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M120 130c-22 -14 -30 -40 -22 -64c20 12 28 38 22 64z" fill="#C8F2DF" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M120 130c22 -14 30 -40 22 -64c-20 12 -28 38 -22 64z" fill="#16B982" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+  <!-- central leaf -->
+  <path d="M120 120c-12 -22 -8 -48 0 -66c8 18 12 44 0 66z" fill="#16B982" stroke="#087F63" stroke-width="3" stroke-linejoin="round"/>
+</svg>
