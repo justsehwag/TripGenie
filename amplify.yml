@@ -1,28 +1,18 @@
-# Amplify build spec for the TripGenie Next.js app.
-#
-# IMPORTANT: Environment variables must be configured in the Amplify console
-# (App settings -> Environment variables). `.env.local` is gitignored and is
-# NEVER deployed, so the deployed server will report "Cognito is not configured"
-# unless these are set in the console:
-#
-#   COGNITO_USER_POOL_ID   e.g. us-east-1_uhMLMXfmp
-#   COGNITO_CLIENT_ID      e.g. 32ekdfubsv0ku38f1ur4reglfu
-#   COGNITO_REGION         e.g. us-east-1
-#   BEDROCK_MODEL_ID       e.g. us.anthropic.claude-sonnet-4-5-20250929-v1:0
-#   BEDROCK_REGION         e.g. us-east-1
-#
-# The preBuild step below writes whichever of these are present in the Amplify
-# build environment into `.env.production`, so Next.js SSR routes read them at
-# runtime. Bedrock/Cognito access itself resolves via the Amplify execution
-# role; no long-lived credential/secret is stored here.
-version: 1
+﻿version: 1
 frontend:
   phases:
     preBuild:
       commands:
         - npm ci
         - |
-          # Surface Amplify console env vars to the Next.js runtime bundle.
+          echo "=== TRIPGENIE ENV DIAGNOSTIC START ==="
+          echo "COGNITO_USER_POOL_ID present: ${COGNITO_USER_POOL_ID:+YES}${COGNITO_USER_POOL_ID:-NO}"
+          echo "COGNITO_CLIENT_ID present: ${COGNITO_CLIENT_ID:+YES}${COGNITO_CLIENT_ID:-NO}"
+          echo "BEDROCK_MODEL_ID present: ${BEDROCK_MODEL_ID:+YES}${BEDROCK_MODEL_ID:-NO}"
+          echo "All env keys matching COGNITO/BEDROCK:"
+          env | grep -E "COGNITO|BEDROCK" | sed "s/=.*/=<redacted>/" || echo "  (none found in env)"
+          echo "=== TRIPGENIE ENV DIAGNOSTIC END ==="
+        - |
           rm -f .env.production
           for VAR in COGNITO_USER_POOL_ID COGNITO_CLIENT_ID COGNITO_REGION BEDROCK_MODEL_ID BEDROCK_REGION AWS_REGION; do
             VALUE="$(printenv "$VAR" || true)"
@@ -30,7 +20,7 @@ frontend:
               echo "$VAR=$VALUE" >> .env.production
             fi
           done
-          echo "Wrote .env.production with $(wc -l < .env.production 2>/dev/null || echo 0) vars"
+          echo "Wrote .env.production with $(wc -l < .env.production 2>/dev/null || echo 0) lines"
     build:
       commands:
         - npm run build
