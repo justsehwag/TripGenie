@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseRoute, emptyRouteState, routeConfirmed } from "@/lib/route-intake";
 import { durationFromText } from "@/lib/date-intake";
 import { illustration } from "@/lib/illustrations";
-import type { RouteState } from "@/lib/types";
+import type { RouteState, TripContext } from "@/lib/types";
+import { advance, uncollected, REQUIRED_FIELDS, type ControllerState, type ControllerResponse, type RequiredField } from "@/lib/preference-controller";
+import { syncFallbackModel } from "@/lib/intake-fallback";
+import { useTripContext } from "@/components/trip-context";
+import { useSpeechInput } from "@/components/use-speech-input";
 
 /** A single conversation turn shown in the planner transcript. */
 type ChatMessage = { role: "assistant" | "user"; text: string };
@@ -34,6 +38,20 @@ const EXAMPLE_PROMPTS: readonly string[] = [
   "From Mumbai to Singapore",
   "From Bengaluru to Bali",
 ];
+
+/** Tappable suggestion answers keyed by the trip field currently being asked.
+ *  Each is a valid answer the field-aware parser accepts, so a tap advances
+ *  the profile. Falls back to the route examples for the opening/route turn. */
+const SUGGESTIONS_BY_FIELD: Record<RequiredField, readonly string[]> = {
+  origin: ["From Delhi", "From Mumbai", "From Bengaluru"],
+  destination: ["To Switzerland", "To Singapore", "To Bali"],
+  durationDays: ["4 days", "7 days", "10 days"],
+  travellers: ["Solo", "A couple", "2 adults", "Family of 4"],
+  budgetLevel: ["Budget", "Mid-range", "Luxury"],
+  diet: ["No preference", "Vegetarian", "Vegan", "Halal"],
+  pace: ["Relaxed", "Balanced", "Packed"],
+  interests: ["Culture", "Food", "Adventure", "Nature", "Beaches"],
+};
 
 /** The six non-route categories rendered in the Live_Trip_Profile (Req 21.5). */
 const CATEGORY_ROWS: ReadonlyArray<{
@@ -73,6 +91,99 @@ function detectTripVibe(text: string): string | null {
 function detectSpecialNeeds(text: string): string | null {
   const m = text.match(/wheelchair|accessib(?:le|ility)?|infant|stroller|medical/);
   return m ? m[0] : null;
+}
+
+/**
+ * Build an INSTANT, local conversational acknowledgement for what the traveller
+ * just typed - zero network latency. It reads the message with the same light
+ * keyword heuristics the UI already uses and reflects the specific detail back
+ * ("Delhi to Switzerland, lovely." / "A family of 4 - noted."). Returns "" when
+ * nothing specific was detected so the caller can fall back to a neutral line.
+ * Never fabricates: only mentions what the text actually contains.
+ */
+function instantAck(answer: string, route: RouteState): string {
+  const text = answer.trim();
+  if (!text) return "";
+  const lower = text.toLowerCase();
+  const parts: string[] = [];
+
+  const parsed = parseRoute(text, route);
+  if (parsed.origin && parsed.destination) {
+    parts.push(`${parsed.origin} to ${parsed.destination} - a great pick`);
+  } else if (parsed.destination) {
+    parts.push(`${parsed.destination} sounds wonderful`);
+  } else if (parsed.origin) {
+    parts.push(`setting off from ${parsed.origin}`);
+  }
+
+  const days = durationFromText(text);
+  if (days) parts.push(`${days} day${days > 1 ? "s" : ""} it is`);
+
+  const who = detectWhosJoining(lower);
+  if (who) parts.push(`travelling ${who}`);
+
+  const cabin = detectFlightsClass(lower);
+  if (cabin) parts.push(`${cabin} class, noted`);
+
+  const food = detectFoodDietary(lower);
+  if (food) parts.push(`${food} dining sorted`);
+
+  const vibe = detectTripVibe(lower);
+  if (vibe) parts.push(`a ${vibe} trip`);
+
+  const needs = detectSpecialNeeds(lower);
+  if (needs) parts.push(`we will plan for ${needs}`);
+
+  if (parts.length === 0) return "";
+  const joined = parts.slice(0, 2).join(", ");
+  return joined.charAt(0).toUpperCase() + joined.slice(1) + ".";
+}
+/**
+ * Project a canonical `TripContext` (produced by the preference controller via
+ * `/api/ai`) onto the EXISTING `CapturedCategories` display shape (Req 4.x).
+ *
+ * This fills only the rows the Live_Trip_Profile already renders, and only when
+ * the corresponding `TripContext` field is actually present — nothing is ever
+ * fabricated and NO new row/category is introduced. The mapping into the fixed
+ * six non-route categories is:
+ *   - origin + destination → route
+ *   - durationDays         → dates ("N day(s)")
+ *   - travellers           → whosJoining ("N traveller(s)")
+ *   - diet                 → foodDietary
+ *   - budgetLevel / pace   → tripVibe (budget level preferred, else pace)
+ * `flightsClass`, `specialNeeds`, and `interests` have no controller field and
+ * are left untouched (they continue to be captured by the regex fallback path).
+ */
+function capturedFromContext(
+  prev: CapturedCategories,
+  ctx: TripContext,
+): CapturedCategories {
+  const updated: CapturedCategories = { ...prev };
+
+  if (ctx.origin && ctx.destination) {
+    updated.route = { from: ctx.origin, to: ctx.destination };
+  }
+
+  if (typeof ctx.durationDays === "number" && ctx.durationDays > 0) {
+    updated.dates = `${ctx.durationDays} day${ctx.durationDays > 1 ? "s" : ""}`;
+  }
+
+  if (ctx.travellers) {
+    const total =
+      (Number.isFinite(ctx.travellers.adults) ? ctx.travellers.adults : 0) +
+      (Number.isFinite(ctx.travellers.children) ? ctx.travellers.children : 0);
+    if (total >= 1) {
+      updated.whosJoining = `${total} traveller${total > 1 ? "s" : ""}`;
+    }
+  }
+
+  if (ctx.diet && ctx.diet.trim()) updated.foodDietary = ctx.diet;
+
+  // Trip vibe mirrors a single row: prefer the budget level, else the pace.
+  const vibe = (ctx.budgetLevel ?? ctx.pace)?.trim();
+  if (vibe) updated.tripVibe = vibe;
+
+  return updated;
 }
 
 /** Build the summary query passed to the full planner (Req 21.10). */
@@ -157,16 +268,59 @@ export default function ConciergeHome({
   initialQuery,
 }: ConciergeHomeProps = {}) {
   const router = useRouter();
+  const sharedContext = useTripContext();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", text: GREETING },
   ]);
   const [routeState, setRouteState] = useState<RouteState>(emptyRouteState());
   const [captured, setCaptured] = useState<CapturedCategories>({});
   const [draft, setDraft] = useState("");
+  /** Running preference-controller state carried across planning turns (Req 2.4). */
+  const [controllerState, setControllerState] = useState<ControllerState>({
+    context: {},
+    questionsAsked: 0,
+  });
+  /** In-flight guard so a turn's request is never fired twice (no new markup). */
+  const [pending, setPending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** The scrollable conversation container, auto-scrolled to the newest turn. */
+  const conversationRef = useRef<HTMLDivElement>(null);
   /** Guards the one-shot seeding so React 18 StrictMode double-mount or any
    *  re-render never replays the seed query more than once. */
   const seededRef = useRef(false);
+
+  // Keep the newest message in view after each turn so the user never has to
+  // scroll manually (the conversation is a fixed-height scroll area).
+  useEffect(() => {
+    const el = conversationRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, pending]);
+
+  /**
+   * Real browser voice input via the Web Speech hook (Req 9.x). On a recognized
+   * transcript we drop the text into the draft input (the traveler can edit then
+   * send); on an honest failure we append a descriptive assistant note using the
+   * existing message rendering. When the browser lacks the API the hook reports
+   * `supported:false` and we keep the exact existing VOICE_UNAVAILABLE message.
+   */
+  const speech = useSpeechInput({
+    existingText: draft,
+    onResult: (result) => {
+      if (result.ok) {
+        const text = result.text.trim();
+        if (text) {
+          setDraft(text);
+          inputRef.current?.focus();
+        }
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: result.error },
+        ]);
+        inputRef.current?.focus();
+      }
+    },
+  });
 
   // Seed the conversation once from ?q= on the assistant variant so the
   // profile pre-fills from the homepage hand-off (Req 21.10). Empty deps: run
@@ -177,17 +331,20 @@ export default function ConciergeHome({
     const seed = initialQuery?.trim();
     if (!seed) return;
     seededRef.current = true;
-    submit(seed);
+    void submit(seed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const headerIllustration = illustration("location-pin");
 
-  /** Interpret one answer through the existing pipeline and update state. */
-  function submit(text: string) {
-    const answer = text.trim();
-    if (!answer) return;
-
+  /**
+   * Deterministic OFFLINE fallback — the original regex/keyword pipeline, kept
+   * verbatim so the planner still works if `/api/ai` (Bedrock) is unreachable.
+   * Returns the assistant acknowledgement to append; updates route/captured.
+   * Does NOT append messages or clear the draft (the caller owns the transcript
+   * so both the live and fallback paths render identically).
+   */
+  function applyFallback(answer: string): string {
     const next = parseRoute(answer, routeState);
     setRouteState(next);
 
@@ -223,23 +380,115 @@ export default function ConciergeHome({
       return updated;
     });
 
+    // Mirror whatever the fallback could parse into the shared context too, so
+    // navigation to booking pages still prefills (never fabricating fields).
+    if (next.origin && next.destination) {
+      sharedContext.patchContext({ origin: next.origin, destination: next.destination });
+    }
+
     // Acknowledge what was just captured, reflecting the parsed route when
     // available and otherwise asking a gentle follow-up (Req 21.4).
-    const ack = capturedRoute
-      ? `Great — ${next.origin} to ${next.destination}. When are you travelling?`
-      : "Thanks — tell me a little more and I'll keep filling in your trip.";
+    return capturedRoute
+      ? `Great - ${next.origin} to ${next.destination}. When are you travelling?`
+      : "Thanks - tell me a little more and I'll keep filling in your trip.";
+  }
 
+  /**
+   * Interpret one answer through the real model turn (`POST /api/ai`), which
+   * replaces the inline regex parsing (Req 2.2/2.4/4.x). The deterministic
+   * preference controller owns flow server-side; here we only mirror the result
+   * into the local display `captured` map AND the Shared_Trip_Context, and
+   * append the controller's next question as the assistant reply.
+   *
+   * Resilience: on any network/route error we fall back to the original regex
+   * pipeline so the UX is identical whether or not Bedrock is reachable.
+   */
+  async function submit(text: string) {
+    const answer = text.trim();
+    if (!answer || pending) return;
+
+    // Append the user's message first, then an INSTANT local acknowledgement so
+    // the chat reacts with zero delay (no network wait). The controller's next
+    // question is appended afterwards when /api/ai responds.
+    const ack = instantAck(answer, routeState);
     setMessages((prev) => [
       ...prev,
       { role: "user", text: answer },
-      { role: "assistant", text: ack },
+      ...(ack ? [{ role: "assistant" as const, text: ack }] : []),
     ]);
     setDraft("");
+    setPending(true);
+
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "turn",
+          state: controllerState,
+          inputDelta: answer,
+        }),
+      });
+      if (!res.ok) throw new Error(`AI turn failed: ${res.status}`);
+      const data = (await res.json()) as { response: ControllerResponse };
+      const response = data.response;
+
+      // (a) advance the controller state for the next turn.
+      setControllerState(response.state);
+      // (b) mirror the resulting TripContext into BOTH the local display map
+      //     and the shared provider — only present fields, never fabricated.
+      const ctx = response.state.context;
+      setCaptured((prev) => capturedFromContext(prev, ctx));
+      sharedContext.setContext(ctx);
+      // Keep the route summary in sync for "Open full planner".
+      if (ctx.origin && ctx.destination) {
+        setRouteState((prev) => ({
+          ...prev,
+          origin: ctx.origin as string,
+          destination: ctx.destination as string,
+          originConfirmed: true,
+          destinationConfirmed: true,
+          routeCandidate: "",
+        }));
+      }
+      // (c) append the controller's next question / completion text.
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: response.prompt },
+      ]);
+      redirectIfComplete(ctx);
+    } catch {
+      // Offline / route failure: run the REAL deterministic controller locally
+      // so the flow still advances (step counter + chips + captured all update)
+      // exactly as the server would. This is what makes the planner work with no
+      // network / no Bedrock. The field the controller is asking about drives a
+      // field-aware extraction that rejects greetings and never fabricates.
+      const askedField = uncollected(controllerState.context)[0];
+      const model = syncFallbackModel(askedField);
+      const r = advance(controllerState, answer, model);
+      setControllerState(r.state);
+      const ctx = r.state.context;
+      setCaptured((prev) => capturedFromContext(prev, ctx));
+      sharedContext.setContext(ctx);
+      if (ctx.origin && ctx.destination) {
+        setRouteState((prev) => ({ ...prev, origin: ctx.origin as string, destination: ctx.destination as string, originConfirmed: true, destinationConfirmed: true, routeCandidate: "" }));
+      }
+      setMessages((prev) => [...prev, { role: "assistant", text: r.prompt }]);
+      redirectIfComplete(ctx);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function redirectIfComplete(ctx: TripContext) {
+    if (uncollected(ctx).length !== 0) return;
+    sharedContext.setContext(ctx);
+    window.setTimeout(() => router.push("/trip"), 900);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    submit(draft);
+    void submit(draft);
   }
 
   /** Reset the whole conversation and captured profile (Req 21.6). */
@@ -248,6 +497,8 @@ export default function ConciergeHome({
     setRouteState(emptyRouteState());
     setCaptured({});
     setDraft("");
+    setControllerState({ context: {}, questionsAsked: 0 });
+    sharedContext.reset();
   }
 
   /** Append an assistant prompt for a category and focus the input (Req 21.6). */
@@ -257,19 +508,46 @@ export default function ConciergeHome({
   }
 
   /**
-   * Voice button (UI only, Req 21.7): speech recognition is not wired, so we
-   * stay honest — append an assistant note explaining it isn't available and
-   * move focus to the text input rather than faking a transcript.
+   * Voice button (Req 9.x): drives the real Web Speech recognizer through the
+   * `useSpeechInput` hook. When the browser has no speech API we stay honest and
+   * keep the EXACT existing VOICE_UNAVAILABLE message rather than faking a
+   * transcript; otherwise we toggle listening. Recognized transcripts and errors
+   * are handled by the hook's `onResult` callback above.
    */
   function handleVoice() {
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", text: VOICE_UNAVAILABLE },
-    ]);
-    inputRef.current?.focus();
+    if (!speech.supported) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: VOICE_UNAVAILABLE },
+      ]);
+      inputRef.current?.focus();
+      return;
+    }
+    if (speech.status === "listening") {
+      speech.stop();
+    } else {
+      speech.start();
+    }
   }
 
-  const progressCount = capturedCount(captured);
+  // Progress reflects the controller's real field completion so the counter and
+  // the "profile ready" state stay in sync (route = origin + destination = 2).
+  const totalFields = REQUIRED_FIELDS.length;
+  const remainingFields = uncollected(controllerState.context).length;
+  const progressCount = totalFields - remainingFields;
+  const isComplete = remainingFields === 0;
+
+  // Suggestion chips track the field the assistant is currently asking about,
+  // so a tap always offers a valid answer to the live question (falls back to
+  // the route examples at the opening turn or once every field is captured).
+  const activeSuggestions = useMemo<readonly string[]>(() => {
+    const nextField: RequiredField | undefined = uncollected(controllerState.context)[0];
+    if (!nextField) return EXAMPLE_PROMPTS;
+    if (nextField === "origin" && !controllerState.context.origin && !controllerState.context.destination) {
+      return EXAMPLE_PROMPTS;
+    }
+    return SUGGESTIONS_BY_FIELD[nextField] ?? EXAMPLE_PROMPTS;
+  }, [controllerState]);
 
   const lastUser =
     [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
@@ -292,6 +570,10 @@ export default function ConciergeHome({
         </header>
       )}
 
+      <div className="concierge-editbar">
+        <a className="concierge-editbar__link" href="#trip-profile">Edit captured trip details</a>
+      </div>
+
       <section className="concierge grid-2">
         {/* LEFT — conversational planner */}
         <div className="concierge-planner card motion-rise">
@@ -304,23 +586,24 @@ export default function ConciergeHome({
               className="concierge-progress"
               role="progressbar"
               aria-valuemin={0}
-              aria-valuemax={TOTAL_CATEGORIES}
+              aria-valuemax={totalFields}
               aria-valuenow={progressCount}
-              aria-label={`Trip details captured: ${progressCount} of ${TOTAL_CATEGORIES}`}
+              aria-label={`Trip details captured: ${progressCount} of ${totalFields}`}
             >
               <span className="concierge-progress__label">
-                {progressCount} of {TOTAL_CATEGORIES} captured
+                {progressCount} of {totalFields} captured
               </span>
               <span className="concierge-progress__track" aria-hidden="true">
                 <span
                   className="concierge-progress__fill"
-                  style={{ width: `${(progressCount / TOTAL_CATEGORIES) * 100}%` }}
+                  style={{ width: `${(progressCount / totalFields) * 100}%` }}
                 />
               </span>
             </div>
           </header>
 
           <div
+            ref={conversationRef}
             className="concierge-conversation"
             aria-live="polite"
             aria-label="Conversation with TripGenie"
@@ -346,7 +629,7 @@ export default function ConciergeHome({
             role="group"
             aria-label="Example prompts"
           >
-            {EXAMPLE_PROMPTS.map((prompt) => (
+            {activeSuggestions.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
@@ -378,14 +661,23 @@ export default function ConciergeHome({
             >
               <MicIcon />
             </button>
-            <button type="submit" className="cta concierge-composer__submit">
-              Send
+            {/* Bounded in-progress indicator while a planning turn (POST /api/ai)
+                is pending (Req 10.1). Reuses the EXISTING `cta` button with the
+                same `disabled`/`aria-busy` pattern the planner already uses — no
+                new class, token, or layout is introduced. */}
+            <button
+              type="submit"
+              className="cta concierge-composer__submit"
+              disabled={pending}
+              aria-busy={pending}
+            >
+              {pending ? "Thinking…" : "Send"}
             </button>
           </form>
         </div>
 
         {/* RIGHT — Live_Trip_Profile */}
-        <aside className="card concierge-profile">
+        <aside id="trip-profile" className="card concierge-profile">
           <div className="concierge-profile__header">
             <img
               className="illustration concierge-profile__art"

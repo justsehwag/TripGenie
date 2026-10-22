@@ -117,7 +117,8 @@ describe("Feature: ui-redesign, Global Navigation contract", () => {
     const html = render({ providerPolicy: ALL_PROVIDERS, session });
 
     expect(html).toContain("site-nav__account--profile");
-    expect(html).toContain("Hi, Sam");
+    // The profile control now shows the username itself (not "My account").
+    expect(html).toContain("Sam");
     // An authenticated traveler is not offered the sign-in control.
     expect(html).not.toContain("site-nav__account--signin");
   });

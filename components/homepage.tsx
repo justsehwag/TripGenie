@@ -23,7 +23,7 @@
  * (concurrent task 32.1) — NOT here (Req 22.11 satisfied by the layout).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   serializeCriteria,
@@ -36,6 +36,8 @@ import {
   type FlightTripType,
 } from "@/lib/search-criteria";
 import { DestinationImageLayer } from "@/components/destination-image";
+import DestinationPanel from "@/components/destination-panel";
+import { useTripContext } from "@/components/trip-context";
 import { illustration } from "@/lib/illustrations";
 
 type BookingTab = "stays" | "flights" | "cars";
@@ -86,6 +88,17 @@ const POPULAR_DESTINATIONS: { name: string; country: string; blurb: string }[] =
   { name: "Dubai", country: "UAE", blurb: "Desert adventure meets modern skyline" },
   { name: "Paris", country: "France", blurb: "Classic boulevards and corner cafes" },
   { name: "New York", country: "USA", blurb: "Big-city energy around every block" },
+];
+
+/**
+ * Home quick-access entries (Req 7.1, 7.13). Each `href` is an EXISTING App
+ * Router route (`/flights`, `/stays`, `/cars`), so activating a quick-access
+ * control can never reach an absent route.
+ */
+const QUICK_ACCESS: { href: string; eyebrow: string; label: string; blurb: string }[] = [
+  { href: "/flights", eyebrow: "Book", label: "Flights", blurb: "Compare fares, durations and stops" },
+  { href: "/stays", eyebrow: "Book", label: "Stays", blurb: "Hotels and rentals with ratings" },
+  { href: "/cars", eyebrow: "Book", label: "Cars", blurb: "Rentals by location and dates" },
 ];
 
 /** Feature icon keys — map to small inline SVGs (no emoji, Req 17.6). */
@@ -191,7 +204,50 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
   const router = useRouter();
   const [active, setActive] = useState<BookingTab>("stays");
 
-  // Recently viewed / saved (continue-exploring) — browser-local, read on mount.
+  // Shared Trip Context (session-scoped, provided by app/layout.tsx) — used
+  // only to SEED the additive destination panel below, so a destination already
+  // captured by the concierge surfaces its live details without re-selection.
+  // Reading it introduces no visual element and changes no existing section.
+  const { context: sharedContext } = useTripContext();
+
+  // Chosen destination feeding the additive Destination_Panel (tasks 9.2/9.4).
+  // Rendered BELOW the existing "Popular destinations" rail; selecting a rail
+  // card sets this alongside the existing form-population behavior, without
+  // altering the rail's markup or classes.
+  const [selectedDestination, setSelectedDestination] = useState("");
+
+  // Seed the panel from the shared context's destination on mount / when it
+  // changes, unless the visitor has already picked one from the rail.
+  useEffect(() => {
+    const ctxDest = (sharedContext.destination ?? "").trim();
+    if (ctxDest) {
+      setSelectedDestination((prev) => prev || ctxDest);
+    }
+  }, [sharedContext.destination]);
+
+  // Popular-destinations carousel: auto-advance one card every 5s, pausing on
+  // hover/focus and honoring prefers-reduced-motion. Pure scroll side-effect;
+  // no state churn, and the rail stays manually scrollable/clickable.
+  const railRef = useRef<HTMLDivElement>(null);
+  const railPausedRef = useRef(false);
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el) return;
+    const reduce = typeof window !== "undefined" && window.matchMedia
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+    if (reduce) return;
+    const id = window.setInterval(() => {
+      if (railPausedRef.current) return;
+      const card = el.querySelector<HTMLElement>(".dest-card");
+      const step = card ? card.offsetWidth + 24 : 220;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
+      el.scrollTo({ left: atEnd ? 0 : el.scrollLeft + step, behavior: "smooth" });
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Recently viewed / saved (continue-exploring) - browser-local, read on mount.
   const [recent, setRecent] = useState<RecentItem[]>([]);
   useEffect(() => {
     setRecent(readRecent());
@@ -245,6 +301,10 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
     if (active === "stays") setStays((s) => ({ ...s, destination: name }));
     else if (active === "flights") setFlights((f) => ({ ...f, destination: name }));
     else setCars((c) => ({ ...c, pickupLocation: name }));
+    // Also surface the additive live Destination_Panel for the chosen place
+    // (tasks 9.2/9.4). This is a pure state side-effect — the rail's existing
+    // markup, classes, and form-population behavior are unchanged.
+    setSelectedDestination(name);
   }
 
   function submitStays(e: React.FormEvent) {
@@ -751,6 +811,36 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
         </div>
       </section>
 
+      {/*
+        ── 3. QUICK ACCESS — Flights / Stays / Cars (Req 7.1, 7.13) ────────
+        A compact row of quick-access entries so the Home surface itself
+        always offers direct routing to the three booking pages, independent
+        of the (optionally suppressed) hero trip-finder and the Global_Nav.
+        Each target is an EXISTING App Router route (Req 7.13); the markup
+        reuses the existing `home-section` / `section-head` / `recent-list`
+        grid and the `recent-link booking-surface` card-link pattern — no new
+        CSS class and no change to the shared nav manifest.
+      */}
+      <section className="shell home-section" aria-labelledby="quick-access-heading">
+        <header className="section-head">
+          <div>
+            <h2 id="quick-access-heading" className="section-title">Quick access</h2>
+            <p className="section-sub">Jump straight into flights, stays, or cars</p>
+          </div>
+        </header>
+        <ul className="recent-list">
+          {QUICK_ACCESS.map((q) => (
+            <li key={q.href}>
+              <a className="recent-link booking-surface" href={q.href}>
+                <span className="eyebrow">{q.eyebrow}</span>
+                <span className="dest-card__name">{q.label}</span>
+                <span className="dest-card__blurb">{q.blurb}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       {/* ── 4. POPULAR DESTINATIONS ───────────────────────────────────────── */}
       <section className="shell home-section" aria-labelledby="popular-heading">
         <header className="section-head">
@@ -760,7 +850,15 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
           </div>
           <a className="section-link" href="/stays">View all {"\u2192"}</a>
         </header>
-        <div className="dest-rail" role="list">
+        <div
+          ref={railRef}
+          className="dest-rail"
+          role="list"
+          onMouseEnter={() => { railPausedRef.current = true; }}
+          onMouseLeave={() => { railPausedRef.current = false; }}
+          onFocusCapture={() => { railPausedRef.current = true; }}
+          onBlurCapture={() => { railPausedRef.current = false; }}
+        >
           {popular.map((d, i) => (
             <button
               key={d.name}
@@ -770,8 +868,9 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
               onClick={() => selectDestination(d.name)}
               aria-label={`Choose ${d.name}, ${d.country}`}
             >
-              <DestinationImageLayer query={d.name} slot={i} />
-              <span className="dest-card__scrim" aria-hidden="true" />
+              <span className="dest-card__media">
+                <DestinationImageLayer query={d.name} slot={i} />
+              </span>
               <span className="dest-card__meta">
                 <span className="dest-card__name">{d.name}</span>
                 <span className="dest-card__country">{d.country}</span>
@@ -782,6 +881,17 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
             </button>
           ))}
         </div>
+
+        {/*
+          Additive live Destination_Panel (realtime-ai-integration tasks 9.2/9.4,
+          Req 5.1/5.2/5.4/5.5/5.6/7.3/10.1–10.4). Mounted BELOW the existing rail
+          inside this same section — it adds no new homepage section and
+          restyles nothing. It shows its Empty_State until a destination is
+          chosen (from the rail above or seeded from the shared context), then
+          surfaces live details, attractions, weather, local time, and generic
+          travel tips, each through existing classes + the Freshness_Indicator.
+        */}
+        <DestinationPanel destination={selectedDestination} />
       </section>
 
       {/* ── 7. FEATURE ICONS ROW ──────────────────────────────────────────── */}

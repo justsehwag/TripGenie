@@ -768,19 +768,32 @@ h3 {
   scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
 }
 .dest-card {
-  position: relative; flex: 0 0 auto; width: 200px;
+  position: relative; flex: 0 0 auto; width: 240px;
+  display: flex; flex-direction: column;
   border: 1px solid var(--color-light-border); padding: 0; cursor: pointer;
-  overflow: hidden; border-radius: var(--radius-md);
-  scroll-snap-align: start; background: var(--color-background);
+  overflow: hidden; border-radius: var(--radius-lg);
+  scroll-snap-align: start;
+  /* Subtle glass finish: translucent white over the photo with a soft blur. */
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  backdrop-filter: blur(10px) saturate(1.1);
   color: var(--color-primary-text); text-align: left;
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--motion-normal) var(--ease-standard),
               transform var(--motion-normal) var(--ease-standard);
 }
 .dest-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
-/* Scrim removed — card content sits on a white footer band. */
-.dest-card__scrim { position: absolute; inset: auto 0 0 0; height: 0; background: transparent; }
-.dest-card__meta { position: relative; z-index: 2; display: flex; flex-direction: column; padding: var(--space-md); }
+/* Fixed media area: the absolute image layer fills it so text never overlaps. */
+.dest-card__media { position: relative; z-index: 0; width: 100%; height: 150px; overflow: hidden; }
+.dest-card__scrim { display: none; }
+.dest-card__meta {
+  position: relative; z-index: 2; display: flex; flex-direction: column;
+  gap: 0.15rem; padding: var(--space-md);
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid var(--color-light-border);
+}
 .dest-card__name {
   font-family: var(--font-display);
   font-weight: var(--type-card-title-weight);
@@ -789,7 +802,7 @@ h3 {
 }
 .dest-card__country { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
 .dest-card__go {
-  position: absolute; right: 0.75rem; bottom: 0.9rem; z-index: 2;
+  position: absolute; right: 0.6rem; top: 0.6rem; z-index: 3;
   width: 2rem; height: 2rem; border-radius: 50%;
   background: var(--color-action-orange); color: var(--color-background);
   display: flex; align-items: center; justify-content: center; font-weight: 700;
@@ -2937,3 +2950,800 @@ p, h1, h2, h3, li, dd, dt, a, span, .lead, .section-sub,
   .concierge-progress__fill { transition: none; }
   .concierge-mic { transition: none; }
 }
+
+/* ============================================================================
+   Compact concierge layout - fit the whole planner on one screen (no page
+   scroll). Overrides placed after the base rules so they win without editing
+   them. Only spacing/sizing + a denser profile grid; no token or color change.
+   ============================================================================ */
+.concierge { margin-top: var(--space-md); column-gap: var(--space-lg); }
+.concierge__pagehead { margin-bottom: var(--space-md); }
+.concierge-shell { padding-top: var(--space-md); padding-bottom: var(--space-md); }
+.concierge-planner { padding: var(--space-md); gap: var(--space-sm); }
+.concierge-planner__header { padding-bottom: var(--space-sm); margin-bottom: var(--space-sm); }
+/* Shorter transcript: it scrolls internally, so the card height stays compact. */
+.concierge-conversation { min-height: 0; max-height: 20rem; gap: var(--space-sm); padding: var(--space-sm); justify-content: flex-start; }
+.concierge-message__text { margin: 0.15rem 0 0; }
+.concierge-chips { gap: var(--space-xs); }
+/* Denser right profile: two columns of category cells + compact route header. */
+.concierge-profile { padding: var(--space-md); gap: var(--space-sm); }
+.concierge-profile__header { margin-bottom: var(--space-sm); }
+/* Single-column vertical list (reference layout): each row is label+value on
+   the left with a Change link pinned to the right edge, divided by hairlines. */
+.concierge-profile__list { display: flex; flex-direction: column; gap: 0; }
+.concierge-profile__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--space-md);
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--color-light-border);
+}
+.concierge-profile__row:last-child { border-bottom: 0; }
+.concierge-profile__label { grid-column: 1; grid-row: 1; margin: 0; }
+.concierge-profile__value { grid-column: 1; grid-row: 2; font-size: var(--type-body-size); margin-top: 0.1rem; }
+.concierge-profile__change { grid-column: 2; grid-row: 1 / span 2; align-self: center; justify-self: end; padding: 0.1rem 0; min-height: 0; }
+.concierge-profile__row--route { padding: 0.25rem 0 var(--space-sm); }
+.concierge-profile__helper { margin-top: var(--space-sm); }
+.concierge-profile__value--headline { font-size: var(--type-card-title-size); }
+@media (min-width: 1024px) {
+  /* Keep the profile from forcing extra page height; align to planner top. */
+  .concierge-profile { position: sticky; top: var(--space-md); }
+}
+@media (max-width: 1023px) {
+  /* On narrow screens the two-column profile collapses back to one column. */
+  .concierge-profile__list { grid-template-columns: 1fr; }
+}
+
+
+/* Balanced two-column heights (reference layout): both cards stretch to the
+   same row height; the chat transcript GROWS to fill the left card so there is
+   no empty gap, and scrolls internally once the conversation gets long. */
+.concierge { align-items: stretch; }
+.concierge-message { max-width: 100%; }
+.concierge-planner { height: auto; }
+.concierge-conversation { flex: 1 1 auto; min-height: 18rem; max-height: 26rem; height: 0; overflow-y: auto; overflow-x: hidden; }
+
+
+/* 'Edit captured trip details' affordance above the two panes (reference layout). */
+.concierge-editbar { display: flex; justify-content: flex-end; margin-bottom: var(--space-sm); }
+.concierge-editbar__link {
+  display: inline-flex; align-items: center; gap: var(--space-xs);
+  font-size: var(--type-label-size); font-weight: var(--type-label-weight);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--color-deep-emerald); text-decoration: none;
+}
+.concierge-editbar__link:hover { text-decoration: underline; }
+.concierge-editbar__link:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+
+
+/* Location image carousel on the trip plan (realtime-ai). Reuses existing
+   radius/shadow helpers; cross-fades slides; no new design token. */
+.loc-carousel { position: relative; margin: var(--space-sm) 0 var(--space-md); }
+.loc-carousel__stage { position: relative; width: 100%; height: 160px; border-radius: var(--radius-md); overflow: hidden; background: var(--color-muted-bg); }
+.loc-carousel__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 600ms ease; }
+.loc-carousel__img.is-active { opacity: 1; }
+.loc-carousel__dots { display: flex; gap: var(--space-xs); justify-content: center; margin-top: var(--space-sm); }
+.loc-carousel__dot { width: 8px; height: 8px; padding: 0; border-radius: var(--radius-pill); border: 1px solid var(--color-light-border); background: var(--color-background); cursor: pointer; }
+.loc-carousel__dot.is-active { background: var(--color-primary-green); border-color: var(--color-deep-emerald); }
+.loc-carousel__dot:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .loc-carousel__img { transition: none; } }
+
+
+
+/* ===========================================================================
+   Auth glass surfaces (sign-in + sign-up). Top-notch glassy identity cards on
+   a soft brand-tinted backdrop. Uses ONLY existing design tokens plus the
+   non-token radius/shadow/ease helpers and free rgba()/blur literals (the same
+   latitude .dest-card already uses). Defines NO new :root token-group custom
+   property, so the task-4 token<->CSS bijection stays intact.
+   =========================================================================== */
+.auth-glass-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Ambient brand glow behind the glass, built from the existing green/orange
+   action tokens at low alpha via color-mix (no new tokens introduced). */
+.auth-glass-page__glow {
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 60vh;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(42rem 28rem at 18% 0%,
+      color-mix(in srgb, var(--color-primary-green) 22%, transparent), transparent 70%),
+    radial-gradient(38rem 26rem at 88% 12%,
+      color-mix(in srgb, var(--color-action-orange) 18%, transparent), transparent 72%);
+  filter: blur(6px);
+}
+
+/* Responsive grid: two columns where a sibling surface exists, a single
+   centered column for the sign-up page. */
+.auth-glass-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-lg);
+  align-items: start;
+}
+.auth-glass-grid--single {
+  max-width: 30rem;
+  grid-template-columns: 1fr;
+}
+
+/* The glass card itself: translucent white, blurred backdrop, soft ring and
+   lifted shadow. Falls back to a solid surface where backdrop-filter is off. */
+.auth-glass {
+  position: relative;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    var(--shadow-lg);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .auth-glass { background: var(--color-background); }
+}
+
+/* A subtle brand-tinted top edge so the card reads as a premium surface. */
+.auth-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: linear-gradient(90deg,
+    var(--color-primary-green), var(--color-action-orange));
+  opacity: 0.9;
+}
+
+/* Inputs inside the glass get a lighter translucent fill to stay legible. */
+.auth-glass .field input {
+  background: rgba(255, 255, 255, 0.78);
+}
+.auth-glass .field input:focus-visible {
+  background: var(--color-background);
+}
+
+/* Social sign-in controls rendered as neutral glass buttons so the orange
+   Primary_Action is reserved for the email submit. */
+.auth__cta--social {
+  width: 100%;
+  margin-top: 0;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Reveal animation for the inline email/password form. */
+.auth-email-form {
+  animation: auth-email-reveal var(--motion-reduced)
+    var(--ease-standard) both;
+}
+@keyframes auth-email-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-email-form { animation: none; }
+}
+
+/* "or" divider between provider list and the guest escape hatch. */
+.auth-glass__divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0;
+  color: var(--color-secondary-text);
+  font-size: var(--type-helper-size);
+}
+.auth-glass__divider::before,
+.auth-glass__divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(17, 24, 39, 0.12);
+}
+.auth-glass__guest-btn {
+  width: 100%;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* ===========================================================================
+   Discover / Sights (TripGenie parity with TripSaathi six-sights surface).
+   Uses ONLY existing tokens plus the non-token radius/shadow helpers and free
+   rgba literals; defines NO new :root token-group custom property.
+   =========================================================================== */
+.discover__intro { max-width: 46rem; }
+.discover__search {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: var(--space-md);
+}
+.discover__field { flex: 1 1 18rem; margin: 0; }
+.discover__cta { margin-top: 0; white-space: nowrap; }
+.discover__restriction {
+  margin: 0 0 var(--space-md);
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+}
+.discover__empty,
+.discover__results { margin-top: var(--space-lg); }
+
+.sight-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.sight-card__media {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-primary-green) 18%, var(--color-background)),
+    color-mix(in srgb, var(--color-action-orange) 14%, var(--color-background)));
+}
+.sight-card__body {
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.sight-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.sight-card__name { margin: 0; font-size: var(--type-card-title-size); }
+.sight-card__area {
+  margin: 0;
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+}
+.sight-card__desc { margin: 0; }
+.sight-card__source { margin-top: var(--space-xs); align-self: flex-start; }
+
+/* Provenance chip: green for live, neutral for curated fallback. */
+.sight-chip {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--type-helper-size);
+  font-weight: 600;
+  line-height: 1.6;
+}
+.sight-chip--live {
+  background: color-mix(in srgb, var(--color-primary-green) 16%, var(--color-background));
+  color: var(--color-primary-green);
+}
+.sight-chip--curated {
+  background: rgba(17, 24, 39, 0.06);
+  color: var(--color-secondary-text);
+}
+
+/* ===========================================================================
+   Gamification panel (XP / level / badges / quests). Token-only treatment.
+   =========================================================================== */
+.xp-panel { display: flex; flex-direction: column; gap: var(--space-md); }
+.xp-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.xp-panel__level { margin: 0; font-weight: 600; }
+.xp-panel__total { margin: 0; color: var(--color-action-orange); font-weight: 700; }
+.xp-bar {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(17, 24, 39, 0.08);
+  overflow: hidden;
+}
+.xp-bar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--color-primary-green), var(--color-action-orange));
+}
+.xp-badges { display: flex; flex-wrap: wrap; gap: var(--space-sm); list-style: none; margin: 0; padding: 0; }
+.xp-badge {
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-primary-green) 14%, var(--color-background));
+  color: var(--color-primary-green);
+  font-size: var(--type-helper-size);
+  font-weight: 600;
+}
+.xp-quests { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-sm); }
+.xp-quest { display: flex; flex-direction: column; gap: 0.25rem; }
+.xp-quest__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+}
+.xp-quest__row--done { color: var(--color-primary-green); font-weight: 600; }
+
+/* ===========================================================================
+   Global nav profile dropdown (signed-in state). Token-only; no new :root vars.
+   =========================================================================== */
+.site-nav__profile { position: relative; }
+.site-nav__account--profile {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  cursor: pointer;
+  border: none;
+  /* Solid brand-green pill once signed in. */
+  background: var(--color-primary-green);
+  color: var(--color-background);
+  border-radius: var(--radius-pill);
+  padding: 0.25rem 0.75rem 0.25rem 0.3rem;
+  font-weight: 700;
+}
+.site-nav__account--profile:hover { background: var(--color-deep-emerald); }
+.site-nav__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--color-background);
+}
+.site-nav__account-label {
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.site-nav__caret { font-size: 0.7em; color: var(--color-background); opacity: 0.85; }
+
+.site-nav__profile-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.site-nav__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-xs));
+  z-index: 50;
+  min-width: 13rem;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  box-shadow: var(--shadow-lg);
+}
+.site-nav__menu-head {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+  border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+  margin-bottom: var(--space-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.site-nav__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-primary-text);
+  font-size: var(--type-nav-size);
+  cursor: pointer;
+}
+.site-nav__menu-item:hover,
+.site-nav__menu-item:focus-visible {
+  background: color-mix(in srgb, var(--color-primary-green) 10%, var(--color-background));
+}
+.site-nav__menu-item--signout { color: var(--color-action-orange); font-weight: 600; }
+
+/* ===========================================================================
+   Discover search engine (dynamic place gallery + detail + map-style search).
+   Token-only + rgba/blur literals; no new :root token-group vars.
+   =========================================================================== */
+.disc__intro { max-width: 48rem; }
+.disc__h2 { margin: var(--space-xl) 0 var(--space-md); }
+
+/* Horizontal hero carousel of beautiful places. */
+.disc-carousel { margin-top: var(--space-lg); }
+.disc-carousel__track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(16rem, 20rem);
+  gap: var(--space-md);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: var(--space-sm);
+  scrollbar-width: thin;
+}
+.disc-carousel__track > * { scroll-snap-align: start; }
+
+/* Responsive gallery grid. */
+.disc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-md);
+}
+
+/* Place card: full-bleed photo with a gradient scrim + overlaid title/chips. */
+.disc-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: none;
+  padding: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--color-primary-green) 12%, var(--color-background));
+  box-shadow: var(--shadow-md);
+  text-align: left;
+}
+.disc-card__media { position: absolute; inset: 0; }
+.disc-card__media .img-layer__img,
+.disc-card__media.img-layer { width: 100%; height: 100%; }
+.disc-card__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 100%);
+}
+.disc-card__overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.disc-card__title {
+  color: #fff;
+  font-size: var(--type-card-title-size);
+  font-weight: 700;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+}
+
+/* Overlay chips (country / temperature / currency). */
+.disc-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.disc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--type-helper-size);
+  font-weight: 600;
+  background: rgba(255,255,255,0.88);
+  color: var(--color-primary-text);
+  backdrop-filter: blur(6px);
+}
+.disc-chips--static { margin: var(--space-sm) 0; }
+.disc-chip--solid {
+  background: color-mix(in srgb, var(--color-primary-green) 14%, var(--color-background));
+  color: var(--color-deep-emerald);
+}
+
+/* Detail dialog. */
+.disc-detail { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; }
+.disc-detail__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
+.disc-detail__panel {
+  position: relative;
+  z-index: 1;
+  width: min(60rem, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: var(--color-background);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.disc-detail__close { position: absolute; top: var(--space-md); right: var(--space-md); z-index: 2; }
+.disc-detail__gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.disc-detail__img { width: 100%; height: clamp(10rem, 26vw, 16rem); object-fit: cover; display: block; }
+.disc-detail__img--empty { background: color-mix(in srgb, var(--color-primary-green) 12%, var(--color-background)); }
+.disc-detail__body { padding: var(--space-lg); }
+.disc-detail__title { margin: 0 0 var(--space-xs); }
+.disc-detail__summary { color: var(--color-primary-text); }
+.disc-detail__subhead { margin: var(--space-md) 0 var(--space-xs); font-size: var(--type-label-size); }
+.disc-detail__places { margin: 0; padding-left: 1.1rem; color: var(--color-secondary-text); }
+.disc-detail__cta { margin-top: var(--space-lg); }
+
+/* Search bar + map-style results. */
+.disc-search { margin-top: var(--space-xl); }
+.disc-search__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);
+  border: 1px solid rgba(17,24,39,0.14);
+  border-radius: var(--radius-pill);
+  max-width: 40rem;
+}
+.disc-search__icon { color: var(--color-secondary-text); display: inline-flex; }
+.disc-search__bar input { flex: 1; border: none; outline: none; background: none; font-size: var(--type-body-size); }
+.disc-search__cta { margin: 0; }
+.disc-search__empty { margin-top: var(--space-md); color: var(--color-secondary-text); }
+
+.disc-results { list-style: none; margin: var(--space-lg) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-sm); }
+.disc-result__btn {
+  display: grid;
+  grid-template-columns: 7rem 1fr 4.5rem;
+  gap: var(--space-md);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-sm);
+  border: 1px solid rgba(17,24,39,0.1);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  cursor: pointer;
+  text-align: left;
+}
+.disc-result__btn:hover { box-shadow: var(--shadow-md); }
+.disc-result__photo { width: 7rem; height: 5rem; border-radius: var(--radius-sm); overflow: hidden; background: color-mix(in srgb, var(--color-primary-green) 12%, var(--color-background)); }
+.disc-result__photo .img-layer__img { width: 100%; height: 100%; }
+.disc-result__text { display: flex; flex-direction: column; gap: 0.15rem; }
+.disc-result__name { font-weight: 700; }
+.disc-result__meta { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.disc-result__blurb { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.disc-result__map {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  height: 5rem;
+  border-radius: var(--radius-sm);
+  background:
+    repeating-linear-gradient(0deg, rgba(22,185,130,0.10) 0 12px, transparent 12px 24px),
+    repeating-linear-gradient(90deg, rgba(22,185,130,0.10) 0 12px, transparent 12px 24px),
+    color-mix(in srgb, var(--color-pale-mint) 70%, var(--color-background));
+  color: var(--color-deep-emerald);
+}
+.disc-result__map-label { font-size: var(--type-helper-size); font-weight: 600; }
+
+@media (max-width: 560px) {
+  .disc-result__btn { grid-template-columns: 5rem 1fr; }
+  .disc-result__map { display: none; }
+  .disc-detail__gallery { grid-template-columns: 1fr; }
+}
+
+/* ===========================================================================
+   Account profile (signed-in view) + circular avatars. Token-only.
+   =========================================================================== */
+/* Ensure the nav avatar is a hard circle regardless of the SVG contents. */
+.site-nav__avatar { border-radius: 50%; overflow: hidden; }
+.site-nav__avatar svg { display: block; border-radius: 50%; }
+
+.account-profile { display: flex; flex-direction: column; gap: var(--space-md); }
+.account-profile__head { display: flex; align-items: center; gap: var(--space-md); }
+.account-profile__avatar {
+  display: inline-flex;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-pale-mint);
+  flex: 0 0 auto;
+}
+.account-profile__avatar svg { width: 100%; height: 100%; display: block; }
+.account-profile__name { margin: 0; font-weight: 700; font-size: var(--type-card-title-size); }
+.account-profile__email { margin: 0; color: var(--color-secondary-text); font-size: var(--type-helper-size); }
+.account-profile__links { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-sm); }
+.account-profile__link { width: 100%; justify-content: center; }
+.account-profile__signout {
+  background: var(--color-action-orange);
+  color: var(--color-background);
+  border-color: var(--color-action-orange);
+  justify-content: center;
+}
+.account-profile__signout:hover { background: var(--color-orange-hover); border-color: var(--color-orange-hover); }
+.account-profile__switch { background: none; border: none; padding: 0; cursor: pointer; }
+
+/* ===========================================================================
+   Profile hover menu + round avatar + glass dropdown (supersedes earlier rules
+   appended below are later in the cascade, so these win). Token-only + glass.
+   =========================================================================== */
+.site-nav__profile { position: relative; }
+
+/* Round, photo-style avatar badge (never a rectangle). */
+.site-nav__account--profile {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  cursor: pointer;
+  border: none;
+  background: var(--color-primary-green);
+  color: var(--color-background);
+  border-radius: var(--radius-pill);
+  padding: 0.2rem 0.7rem 0.2rem 0.25rem;
+  font-weight: 700;
+}
+.site-nav__account--profile:hover { background: var(--color-deep-emerald); }
+.site-nav__avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.7);
+}
+.site-nav__avatar svg { width: 100%; height: 100%; display: block; border-radius: 50%; }
+
+/* Hover/focus/click reveal (no navigation needed). */
+.site-nav__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 50;
+  min-width: 14rem;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-xs);
+  border-radius: var(--radius-md);
+  /* Glassmorphism */
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 18px 48px rgba(17, 24, 39, 0.16);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms;
+}
+.site-nav__profile:hover .site-nav__menu,
+.site-nav__profile:focus-within .site-nav__menu,
+.site-nav__profile.is-open .site-nav__menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-nav__menu { background: var(--color-background); }
+}
+.site-nav__menu-head {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+  border-bottom: 1px solid rgba(17, 24, 39, 0.1);
+  margin-bottom: var(--space-xs);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.site-nav__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem var(--space-sm);
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-primary-text);
+  font-size: var(--type-nav-size);
+  cursor: pointer;
+}
+.site-nav__menu-item:hover,
+.site-nav__menu-item:focus-visible { background: rgba(22, 185, 130, 0.12); }
+.site-nav__menu-item--signout { color: var(--color-action-orange); font-weight: 600; }
+.site-nav__caret { font-size: 0.7em; color: var(--color-background); opacity: 0.85; }
+
+/* ===========================================================================
+   Save as a compact icon control (not a wide button). Token-only.
+   =========================================================================== */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  color: var(--color-deep-emerald);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+.icon-btn:hover { background: var(--color-primary-green); color: var(--color-background); transform: translateY(-1px); }
+.icon-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ===========================================================================
+   Discover polish: bigger auto-scrolling carousel + transparent symbol chips
+   + glassmorphism search bar. Overrides earlier .disc-* rules (later cascade).
+   =========================================================================== */
+.disc-carousel__track {
+  grid-auto-columns: minmax(20rem, 24rem);   /* bigger thumbnails */
+  gap: var(--space-lg);
+  overflow-x: hidden;                         /* auto-scroll only, no manual drag */
+  scroll-behavior: smooth;
+}
+.disc-card { aspect-ratio: 3 / 2; }           /* taller/bigger cards */
+
+/* Transparent, glassy symbol chips for temperature / currency / country. */
+.disc-chip {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.45);
+}
+.disc-chip svg { opacity: 0.95; }
+.disc-chip--solid {
+  background: rgba(22, 185, 130, 0.18);
+  color: var(--color-deep-emerald);
+  border-color: rgba(22, 185, 130, 0.3);
+  text-shadow: none;
+}
+
+/* Glassmorphism search bar. */
+.disc-search__bar,
+.disc-search__bar--top {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 10px 30px rgba(17, 24, 39, 0.08);
+}
+.disc-search__bar--top { margin-top: var(--space-lg); }
+
+/* ===========================================================================
+   Glassmorphism finish for general card/surface components.
+   =========================================================================== */
+.offer-card,
+.editorial-card,
+.sight-card,
+.planner-day,
+.planner-summary,
+.xp-panel {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .offer-card, .editorial-card, .sight-card, .planner-day, .planner-summary, .xp-panel {
+    background: var(--color-background);
+  }
+}
+
+/* Profile button: clean round solid circle with just the avatar, like the
+   reference screenshot. No text label, no caret, no pill shape. */
+.site-nav__account--profile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.site-nav__account--profile:hover { background: transparent; }
+.site-nav__avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(22, 185, 130, 0.25);
+}
+.site-nav__avatar svg { width: 100%; height: 100%; display: block; }

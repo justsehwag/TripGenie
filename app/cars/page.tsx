@@ -5,6 +5,7 @@ import { runSearch } from "@/lib/search";
 import type { InventoryQuery } from "@/lib/inventory-adapter";
 import type { CarOffer } from "@/lib/types";
 import ProvenanceLabel from "@/components/provenance-label";
+import CarsPrefill from "@/components/cars-prefill";
 
 export const metadata = { title: "Cars - TripGenie" };
 
@@ -164,6 +165,11 @@ export default async function CarsResultsPage({
             Cars search
           </Link>
           .
+          {/* Additive shared-context prefill: when the Shared_Trip_Context has a
+              destination, this client helper appends a "Use my trip details"
+              link to a prefilled /cars search; otherwise it renders nothing and
+              the prompt above stands exactly as today. */}
+          <CarsPrefill />
         </p>
       ) : (
         <>

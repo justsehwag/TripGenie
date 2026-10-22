@@ -26,6 +26,7 @@ import { runSearch } from "@/lib/search";
 import type { InventoryQuery } from "@/lib/inventory-adapter";
 import type { StayOffer } from "@/lib/types";
 import StayOfferCard from "@/components/stay-offer-card";
+import StaysPrefill from "@/components/stays-prefill";
 
 export const metadata = { title: "Stays - TripGenie" };
 
@@ -81,6 +82,29 @@ export default async function StaysResultsPage({
     : "recommended";
   const styleFilterRaw = one(raw, "stayStyle") ?? "Any";
   const styleFilter = STAY_STYLES.includes(styleFilterRaw) ? styleFilterRaw : "Any";
+
+  // Shared-context prefill (Req 4.3 / 10.2): when the URL carries no destination
+  // (e.g. the traveler navigated here from the concierge, where only the
+  // Shared_Trip_Context holds the trip) there is no search to run. Render the
+  // existing empty-state card with the client prefill affordance, which offers a
+  // one-click "Use my trip details" link built from the shared context via the
+  // mappers, or the existing "start a search" prompt when the context is empty
+  // too. Everything downstream (results, provenance, controls, states) is
+  // untouched — a real search with a destination behaves exactly as before.
+  const hasSearch = criteria.destination.trim() !== "";
+  if (!hasSearch) {
+    return (
+      <main className="shell results">
+        <section className="results__summary motion-rise" aria-label="Results summary">
+          <p className="eyebrow">Stays</p>
+          <h1>Search stays</h1>
+        </section>
+        <section className="card results__empty">
+          <StaysPrefill />
+        </section>
+      </main>
+    );
+  }
 
   // Reproduce the search (Req 23.5): map criteria → InventoryQuery and run it.
   const query: InventoryQuery = {

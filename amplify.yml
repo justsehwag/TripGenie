@@ -1,3 +1,11 @@
+# Bedrock (realtime AI integration) — set these as environment variables in the
+# Amplify console (App settings → Environment variables). They are non-secret
+# bindings with documented defaults in lib/config.ts, so the build never fails
+# if they are absent:
+#   BEDROCK_MODEL_ID  (default: anthropic.claude-3-5-haiku-20241022-v1:0)
+#   BEDROCK_REGION    (default: AWS_REGION, else us-east-1)
+# Bedrock access itself resolves via the Amplify execution role at runtime; no
+# credential/secret is stored here or in amplify.yml.
 version: 1
 frontend:
   phases:

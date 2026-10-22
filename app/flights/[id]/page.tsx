@@ -6,6 +6,8 @@ import type { FlightOffer } from "@/lib/types";
 import type { InventoryQuery } from "@/lib/inventory-adapter";
 import { flightOfferFare } from "@/lib/workspace";
 import { ProvenanceLabel, EstimatedNotice } from "@/components/offer-provenance";
+import FlightCustomizeDialog from "@/components/flight-customize-dialog";
+import { summarizeReviews } from "@/lib/reviews";
 import {
   inr,
   flightDurationMinutes,
@@ -93,7 +95,17 @@ export default async function FlightDetailPage({
   const duration = flightDurationMinutes(offer.depart, offer.arrive);
   const stopsLabel =
     offer.stops === 0 ? "Non-stop" : offer.stops === 1 ? "1 stop" : `${offer.stops} stops`;
-  const review = offer.meta.reviewSummary;
+  const reviews = summarizeReviews(
+    offer.meta.reviewSummary
+      ? {
+          provider: offer.meta.reviewSummary.source,
+          score: offer.meta.reviewSummary.rating,
+          count: offer.meta.reviewSummary.count,
+          verified: true,
+          reviews: [],
+        }
+      : null,
+  );
 
   return (
     <main className="shell detail">
@@ -163,15 +175,31 @@ export default async function FlightDetailPage({
           </p>
         </div>
 
-        {review && (
-          <section className="detail__review" aria-label="Traveller reviews">
-            <h2>Reviews</h2>
-            <p>
-              {review.rating.toFixed(1)} / 5 from {review.count} reviews ·{" "}
-              {review.source}
-            </p>
-          </section>
-        )}
+        <section className="detail__review" aria-label="Traveller reviews">
+          <h2>Reviews</h2>
+          {reviews.hasReviews ? (
+            <>
+              <p className="detail__review-score">
+                {reviews.score !== null ? reviews.score.toFixed(1) + " / 5" : "Rated"} from{" "}
+                {reviews.count} verified {reviews.count === 1 ? "review" : "reviews"} via {reviews.source}
+              </p>
+              <ul className="detail__review-list">
+                {reviews.items.map((item, i) => (
+                  <li key={i} className="detail__review-item">
+                    <p className="detail__review-meta">
+                      <strong>{item.author}</strong> · {item.rating.toFixed(1)} / 5
+                    </p>
+                    <p>{item.text}</p>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="detail__review-empty">{reviews.note}</p>
+          )}
+        </section>
+
+        <FlightCustomizeDialog offer={offer} />
 
         <EstimatedNotice meta={offer.meta} />
       </section>

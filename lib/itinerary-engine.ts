@@ -1,4 +1,5 @@
 import type { Activity, Itinerary, TripContext, TripDay } from "./types";
+import { seedSights } from "./sights";
 
 /**
  * Itinerary generation & revision (pure) — design section "11. Itinerary".
@@ -23,13 +24,57 @@ const isoAt = (start: string, offset: number): string => {
   return d.toISOString().slice(0, 10);
 };
 
+/**
+ * Build five timed activities for a day that reference REAL, destination-
+ * specific places. We pull the curated six sights for the destination (from
+ * lib/sights.ts) and anchor the morning + afternoon sightseeing on actual named
+ * landmarks, rotating by day so each day visits different places. Meals and the
+ * arrival/departure bookends still frame the day, but the sightseeing is always
+ * a concrete place (e.g. "Burj Khalifa", not "signature experience"), so the
+ * itinerary reads specifically and each activity can fetch a real photo.
+ */
 function dayActivities(dest: string, day: number, last: boolean, vibe: string): Activity[] {
+  const sights = seedSights(dest);
+  const n = sights.length || 1;
+  // Two distinct sights per day, rotating so consecutive days differ.
+  const morning = sights[((day - 1) * 2) % n];
+  const afternoon = sights[((day - 1) * 2 + 1) % n];
+  const morningName = morning ? morning.name : `${dest} old town`;
+  const morningArea = morning ? morning.area : dest;
+  const afternoonName = afternoon ? afternoon.name : `${dest} waterfront`;
+  const afternoonArea = afternoon ? afternoon.area : dest;
+
   return [
-    { time: "08:30", title: day === 1 ? `Arrival in ${dest}` : "Breakfast and briefing", description: `A ${vibe} start to Day ${day}.`, cost: 1200 },
-    { time: "10:30", title: `${dest} signature experience`, description: `${vibe} focus.`, cost: 2600 },
-    { time: "13:00", title: `Local lunch in ${dest}`, description: "Dining matched to your preferences.", cost: 1800 },
-    { time: "15:30", title: last ? "Farewell walk and keepsake stop" : `Afternoon in ${dest}`, description: last ? "A flexible final activity." : `${vibe} exploration.`, cost: 2200 },
-    { time: "19:00", title: last ? "Departure transfer" : "Evening neighbourhood experience", description: `An unhurried close to Day ${day}.`, cost: 1900 },
+    {
+      time: "08:30",
+      title: day === 1 ? `Arrive in ${dest} and settle in` : `Breakfast near ${morningArea}`,
+      description: day === 1 ? "Airport transfer, check-in and an easy first stroll." : `A ${vibe} start before the day's sights.`,
+      cost: 1200,
+    },
+    {
+      time: "10:30",
+      title: `Visit ${morningName}`,
+      description: `${morningName} in ${morningArea} - ${vibe} highlight of the morning.`,
+      cost: 2600,
+    },
+    {
+      time: "13:00",
+      title: `Lunch in ${morningArea}`,
+      description: `A local table near ${morningName}, matched to your preferences.`,
+      cost: 1800,
+    },
+    {
+      time: "15:30",
+      title: last ? `Final stop: ${afternoonName}` : `Explore ${afternoonName}`,
+      description: `${afternoonName} in ${afternoonArea}${last ? " - a relaxed farewell visit." : `, a ${vibe} afternoon.`}`,
+      cost: 2200,
+    },
+    {
+      time: "19:00",
+      title: last ? `Departure transfer from ${dest}` : `Evening around ${afternoonArea}`,
+      description: last ? "Buffer included for a calm departure." : `Dinner and a wander to close Day ${day}.`,
+      cost: 1900,
+    },
   ];
 }
 
@@ -46,7 +91,7 @@ export function buildItinerary(input: ItineraryInput): Itinerary {
     return {
       day,
       date: isoAt(input.startDate, i),
-      title: day === 1 ? `Arrive in ${input.destination}` : last ? `${input.destination} farewell` : `${vibe} in ${input.destination}`,
+      title: day === 1 ? `Arrive in ${input.destination}` : last ? `${input.destination} farewell` : `${activities[1]?.title.replace(/^Visit /, "") ?? vibe}`,
       theme: vibe,
       activities,
       total,

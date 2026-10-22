@@ -65,6 +65,55 @@ export default function GlobalNav({
   // Mobile compact menu state (Req 21.6). Collapsed by default.
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Browser-local session bridge: the in-app sign-in form writes
+  // "tripgenie.session" to localStorage. The server layout cannot read that, so
+  // the client nav hydrates from it on mount and whenever storage changes (e.g.
+  // sign-in/sign-out in another tab), overriding the (null) prop session. This
+  // is what flips the control from "Sign in" to the profile menu once signed in.
+  const [localSession, setLocalSession] = useState<IdentitySession | null>(null);
+  useEffect(() => {
+    function read(): IdentitySession | null {
+      if (typeof window === "undefined") return null;
+      try {
+        const raw = window.localStorage.getItem("tripgenie.session");
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<IdentitySession>;
+        if (parsed && typeof parsed.userId === "string" && parsed.userId.trim()) {
+          return {
+            userId: parsed.userId.trim(),
+            firstName: typeof parsed.firstName === "string" ? parsed.firstName : undefined,
+            email: typeof parsed.email === "string" ? parsed.email : undefined,
+          };
+        }
+      } catch {
+        // Corrupt stub -> treat as anonymous.
+      }
+      return null;
+    }
+    setLocalSession(read());
+    function onStorage(e: StorageEvent) {
+      if (e.key === "tripgenie.session" || e.key === null) setLocalSession(read());
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // Profile dropdown open/closed state.
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  // Clear the browser-local session and return to the anonymous state.
+  function signOut() {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("tripgenie.session");
+      } catch {
+        // ignore
+      }
+    }
+    setLocalSession(null);
+    setProfileOpen(false);
+  }
+
   // Collapse the compact menu whenever the route changes (selection/dismissal).
   useEffect(() => {
     setMenuOpen(false);
@@ -73,7 +122,12 @@ export default function GlobalNav({
   // The account entry is only presented when the provider policy enables at
   // least one provider (Req 29.5) - otherwise there is no sign-in path to offer.
   const accountEnabled = landingControls(providerPolicy).length > 0;
-  const authed = Boolean(session?.userId);
+  const activeSession = localSession ?? session;
+  const authed = Boolean(activeSession?.userId);
+  const displayName =
+    activeSession?.firstName?.trim() ||
+    activeSession?.email?.split("@")[0] ||
+    "Explorer";
 
   return (
     <header className="site-nav">
@@ -154,15 +208,67 @@ export default function GlobalNav({
 
           {accountEnabled &&
             (authed ? (
-              <Link
-                href={ACCOUNT_HREF}
-                className="site-nav__account site-nav__account--profile"
-                aria-current={isActive(ACCOUNT_HREF, current) ? "page" : undefined}
-                onClick={() => setMenuOpen(false)}
+              <div
+                className={`site-nav__profile${profileOpen ? " is-open" : ""}`}
+                onMouseLeave={() => setProfileOpen(false)}
               >
-                <span aria-hidden="true">{"\u25CF"}</span>
-                {session?.firstName ? `Hi, ${session.firstName}` : "My account"}
-              </Link>
+                <button
+                  type="button"
+                  className="site-nav__account site-nav__account--profile"
+                  aria-haspopup="menu"
+                  aria-expanded={profileOpen}
+                  aria-label={`Account menu for ${displayName}`}
+                  title={displayName}
+                  onMouseEnter={() => setProfileOpen(true)}
+                  onFocus={() => setProfileOpen(true)}
+                  onClick={() => setProfileOpen((open) => !open)}
+                >
+                  {/* Clean round solid-colour badge with an ORIGINAL travel
+                      avatar (a friendly explorer in a sun hat). All original
+                      geometry - no third-party or branded character. */}
+                  <span className="site-nav__avatar" aria-hidden="true">
+                    <svg viewBox="0 0 40 40" fill="none" role="img" aria-label="">
+                      {/* Solid brand-green disc */}
+                      <circle cx="20" cy="20" r="20" fill="var(--color-primary-green)" />
+                      {/* Face */}
+                      <circle cx="20" cy="18.5" r="6.2" fill="#FFE2C2" />
+                      {/* Sun-hat brim + crown (travel cue) */}
+                      <ellipse cx="20" cy="13.2" rx="10" ry="2.3" fill="var(--color-action-orange)" />
+                      <path d="M14.2 13c0-3.2 2.6-5.4 5.8-5.4s5.8 2.2 5.8 5.4z" fill="var(--color-orange-hover)" />
+                      <rect x="14.6" y="12" width="10.8" height="1.6" rx="0.8" fill="#FFFFFF" opacity="0.85" />
+                      {/* Shoulders */}
+                      <path d="M9.5 34c0-5.4 4.7-9 10.5-9s10.5 3.6 10.5 9z" fill="var(--color-deep-emerald)" />
+                    </svg>
+                  </span>
+                </button>
+                {/* Menu is always in the DOM; CSS reveals it on hover/focus of the
+                    group, and `is-open` covers click/touch. */}
+                <ul className="site-nav__menu" role="menu" aria-label="Account menu">
+                  <li className="site-nav__menu-head" role="presentation">
+                    {activeSession?.email ?? "Signed in"}
+                  </li>
+                  <li role="none">
+                    <Link role="menuitem" href="/account" className="site-nav__menu-item" onClick={() => { setProfileOpen(false); setMenuOpen(false); }}>
+                      My account
+                    </Link>
+                  </li>
+                  <li role="none">
+                    <Link role="menuitem" href="/trips" className="site-nav__menu-item" onClick={() => { setProfileOpen(false); setMenuOpen(false); }}>
+                      My trips
+                    </Link>
+                  </li>
+                  <li role="none">
+                    <Link role="menuitem" href="/plan" className="site-nav__menu-item" onClick={() => { setProfileOpen(false); setMenuOpen(false); }}>
+                      Plan a trip
+                    </Link>
+                  </li>
+                  <li role="none">
+                    <button type="button" role="menuitem" className="site-nav__menu-item site-nav__menu-item--signout" onClick={signOut}>
+                      Sign out
+                    </button>
+                  </li>
+                </ul>
+              </div>
             ) : (
               <Link
                 href={ACCOUNT_HREF}

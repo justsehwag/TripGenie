@@ -8,6 +8,7 @@ import {
   FlightOfferCard,
   flightDurationMinutes,
 } from "@/components/flight-offer-card";
+import PrefillFromContext from "@/components/prefill-from-context";
 
 export const metadata: Metadata = { title: "Flights - TripGenie" };
 
@@ -111,6 +112,29 @@ export default async function FlightsResultsPage({
 
   const sort = parseSort(firstValue(raw.sort));
   const maxStops = firstValue(raw.maxStops) ?? "any";
+
+  // Shared-context prefill (Req 4.3 / 10.2): when the URL carries no origin AND
+  // no destination (e.g. the traveler navigated here from the concierge, where
+  // only the Shared_Trip_Context holds the trip), there is no search to run.
+  // Render the client prefill affordance, which offers a one-click
+  // "Use my trip details" link built from the shared context via the mappers,
+  // or the existing "start a search" prompt when the context is empty too.
+  // Everything downstream (results, provenance, filters, states) is untouched.
+  const hasSearch =
+    criteria.origin.trim() !== "" || criteria.destination.trim() !== "";
+  if (!hasSearch) {
+    return (
+      <main className="shell results">
+        <header className="results__head">
+          <p className="eyebrow">Flights</p>
+          <h1>Search flights</h1>
+        </header>
+        <section className="card results__empty">
+          <PrefillFromContext category="flights" />
+        </section>
+      </main>
+    );
+  }
 
   const result = runSearch(toInventoryQuery(criteria));
   const all = result.flights;

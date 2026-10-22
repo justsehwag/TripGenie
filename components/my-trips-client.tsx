@@ -94,6 +94,46 @@ function isResumable(trip: StoredTrip): boolean {
   return s === "draft" || s === "in-progress" || s === "planning";
 }
 
+/**
+ * Booking details "when available" (Req 7.8). The Trip_Store strips sensitive
+ * keys before persisting (`stripSensitive`, Req 13.6), so whatever confirmation
+ * fields survive into `payload` are safe to surface. We read ONLY the known
+ * non-sensitive confirmation fields that are actually present in the stored
+ * payload — we never fabricate booking data. When none exist we return null and
+ * the card shows nothing extra.
+ */
+function bookingDetails(trip: StoredTrip): string | null {
+  const payload = trip.payload ?? {};
+  // A confirmation may be stored either flat on the payload or under a nested
+  // `booking` object; read both, flat keys taking precedence.
+  const nested =
+    payload.booking !== null &&
+    typeof payload.booking === "object" &&
+    !Array.isArray(payload.booking)
+      ? (payload.booking as Record<string, unknown>)
+      : {};
+  const source: Record<string, unknown> = { ...nested, ...payload };
+
+  const pick = (...keys: string[]): string | null => {
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+      if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    }
+    return null;
+  };
+
+  const parts: string[] = [];
+  const reference = pick("confirmationNumber", "confirmation", "bookingReference", "reference", "orderId");
+  if (reference) parts.push(`Confirmation ${reference}`);
+  const provider = pick("provider", "supplier", "airline", "hotel");
+  if (provider) parts.push(provider);
+  const total = pick("total", "totalPrice", "amount");
+  if (total) parts.push(/^[^0-9]/.test(total) ? total : `Total ${total}`);
+
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 type LoadState =
   | { phase: "loading" }
   | { phase: "error"; message: string }
@@ -414,6 +454,9 @@ function TripCard({
 }) {
   const detailId = `trip-detail-${trip.tripId}`;
   const updated = formatDate(trip.updatedAt);
+  // Booking details "when available" (Req 7.8): a concise line, only shown when
+  // the stored payload actually carries confirmation data (never fabricated).
+  const booking = bookingDetails(trip);
 
   // Each card surfaces exactly one orange Primary_Action (Req 13.2): "Resume in
   // Planner" when the itinerary is resumable, otherwise the "View" control.
@@ -432,6 +475,13 @@ function TripCard({
             </span>
             {updated && <span className="my-trips__updated">Updated {updated}</span>}
           </p>
+          {booking && (
+            // Concise booking-details line, rendered through existing classes
+            // (Req 7.8). Shown only when the payload carries confirmation data.
+            <p className="my-trips__card-meta">
+              <span className="my-trips__updated">{booking}</span>
+            </p>
+          )}
         </div>
       </div>
 
