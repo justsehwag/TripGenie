@@ -1,17 +1,19 @@
-﻿version: 1
+﻿# Amplify build spec for the TripGenie Next.js SSR app.
+#
+# Environment variables (COGNITO_*, BEDROCK_*) are managed on the Amplify app
+# AND branch via the Amplify API. IMPORTANT: do NOT edit them in the Amplify
+# console env-var editor - its save replaces the whole set and can wipe them.
+#
+# The preBuild step writes whichever of these are present in the build
+# environment into .env.production, and next.config.ts additionally inlines
+# them into the SSR bundle so server routes read them at runtime. Bedrock access
+# itself resolves via the Amplify compute role (TripGenieAmplifyComputeRole).
+version: 1
 frontend:
   phases:
     preBuild:
       commands:
         - npm ci
-        - |
-          echo "=== TRIPGENIE ENV DIAGNOSTIC START ==="
-          echo "COGNITO_USER_POOL_ID present: ${COGNITO_USER_POOL_ID:+YES}${COGNITO_USER_POOL_ID:-NO}"
-          echo "COGNITO_CLIENT_ID present: ${COGNITO_CLIENT_ID:+YES}${COGNITO_CLIENT_ID:-NO}"
-          echo "BEDROCK_MODEL_ID present: ${BEDROCK_MODEL_ID:+YES}${BEDROCK_MODEL_ID:-NO}"
-          echo "All env keys matching COGNITO/BEDROCK:"
-          env | grep -E "COGNITO|BEDROCK" | sed "s/=.*/=<redacted>/" || echo "  (none found in env)"
-          echo "=== TRIPGENIE ENV DIAGNOSTIC END ==="
         - |
           rm -f .env.production
           for VAR in COGNITO_USER_POOL_ID COGNITO_CLIENT_ID COGNITO_REGION BEDROCK_MODEL_ID BEDROCK_REGION AWS_REGION; do
