@@ -1,17 +1,36 @@
-# Bedrock (realtime AI integration) — set these as environment variables in the
-# Amplify console (App settings → Environment variables). They are non-secret
-# bindings with documented defaults in lib/config.ts, so the build never fails
-# if they are absent:
-#   BEDROCK_MODEL_ID  (default: anthropic.claude-3-5-haiku-20241022-v1:0)
-#   BEDROCK_REGION    (default: AWS_REGION, else us-east-1)
-# Bedrock access itself resolves via the Amplify execution role at runtime; no
-# credential/secret is stored here or in amplify.yml.
+# Amplify build spec for the TripGenie Next.js app.
+#
+# IMPORTANT: Environment variables must be configured in the Amplify console
+# (App settings -> Environment variables). `.env.local` is gitignored and is
+# NEVER deployed, so the deployed server will report "Cognito is not configured"
+# unless these are set in the console:
+#
+#   COGNITO_USER_POOL_ID   e.g. us-east-1_uhMLMXfmp
+#   COGNITO_CLIENT_ID      e.g. 32ekdfubsv0ku38f1ur4reglfu
+#   COGNITO_REGION         e.g. us-east-1
+#   BEDROCK_MODEL_ID       e.g. us.anthropic.claude-sonnet-4-5-20250929-v1:0
+#   BEDROCK_REGION         e.g. us-east-1
+#
+# The preBuild step below writes whichever of these are present in the Amplify
+# build environment into `.env.production`, so Next.js SSR routes read them at
+# runtime. Bedrock/Cognito access itself resolves via the Amplify execution
+# role; no long-lived credential/secret is stored here.
 version: 1
 frontend:
   phases:
     preBuild:
       commands:
         - npm ci
+        - |
+          # Surface Amplify console env vars to the Next.js runtime bundle.
+          rm -f .env.production
+          for VAR in COGNITO_USER_POOL_ID COGNITO_CLIENT_ID COGNITO_REGION BEDROCK_MODEL_ID BEDROCK_REGION AWS_REGION; do
+            VALUE="$(printenv "$VAR" || true)"
+            if [ -n "$VALUE" ]; then
+              echo "$VAR=$VALUE" >> .env.production
+            fi
+          done
+          echo "Wrote .env.production with $(wc -l < .env.production 2>/dev/null || echo 0) vars"
     build:
       commands:
         - npm run build
