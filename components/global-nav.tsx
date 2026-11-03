@@ -26,7 +26,7 @@
  * Requirements: 21.1, 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8, 29.2, 29.4, 29.5.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -35,6 +35,7 @@ import {
   type IdentitySession,
 } from "@/lib/identity";
 import { NAV_LINKS, ACCOUNT_HREF } from "@/lib/nav-links";
+import HistoryDrawer from "@/components/history-drawer";
 
 export interface GlobalNavProps {
   /** Enabled-provider policy, reused from Req 1; drives whether an account control shows (Req 29.5). */
@@ -64,6 +65,12 @@ export default function GlobalNav({
 
   // Mobile compact menu state (Req 21.6). Collapsed by default.
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // History_Drawer open/close state (R4.1), owned here like menuOpen/profileOpen.
+  // Closed by default; the top-left trigger opens it and the drawer's onClose
+  // closes it AND returns focus to the trigger (stable focus-return, R4.11).
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Subtle elevation-on-scroll: a cheap client-only flag toggled by a passive
   // scroll listener. SSR renders the unscrolled bar (flag false), so there is
@@ -145,6 +152,50 @@ export default function GlobalNav({
   return (
     <header className={`site-nav${scrolled ? " is-scrolled" : ""}`}>
       <nav className="site-nav__bar shell" aria-label="Primary">
+        {/*
+          Top-left History_Drawer trigger (R4.1): present on every route, placed
+          before the logo so it sits at the very top-left. Opens the accessible
+          Drawer that lists the current Scope's Drafts, Saved plans, and
+          Confirmed bookings. The icon is an original "stacked list with a clock"
+          glyph drawn with currentColor and marked decorative; the accessible
+          name comes from aria-label. Styled in task 11 via `site-nav__drawer-trigger`.
+        */}
+        <button
+          type="button"
+          ref={drawerTriggerRef}
+          className="site-nav__drawer-trigger"
+          aria-expanded={drawerOpen}
+          aria-controls="history-drawer"
+          aria-label="Open your plans"
+          title="Your plans"
+          onClick={() => setDrawerOpen(true)}
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            focusable="false"
+          >
+            {/* Stacked plan rows */}
+            <path
+              d="M4 6h10M4 11h10M4 16h6"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+            {/* Clock dial accent (the "recent/history" cue) */}
+            <circle cx="17.5" cy="16" r="4" stroke="currentColor" strokeWidth="1.6" />
+            <path
+              d="M17.5 14.3v1.9l1.3 0.9"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
         <Link href="/" className="site-nav__logo" aria-label="TripGenie home">
           {/*
             Logo treatment (Req 4.1 / 17.6): a small inline SVG mark — a globe
@@ -293,6 +344,25 @@ export default function GlobalNav({
             ))}
         </div>
       </nav>
+
+      {/*
+        History_Drawer mount (design §7). The drawer is driven by the nav's
+        local open/close state and reuses the nav's already-resolved session
+        (`activeSession` = localSession ?? session) as `sessionOverride`, so the
+        drawer's Scope matches the chrome exactly. onClose closes AND returns
+        focus to the trigger for a stable focus-return (R4.11). The drawer is
+        only mounted while open so the closed state is fully inert.
+      */}
+      {drawerOpen && (
+        <HistoryDrawer
+          open={drawerOpen}
+          onClose={() => {
+            setDrawerOpen(false);
+            drawerTriggerRef.current?.focus();
+          }}
+          sessionOverride={activeSession}
+        />
+      )}
     </header>
   );
 }

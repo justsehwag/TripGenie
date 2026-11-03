@@ -53,6 +53,10 @@ export interface SharedTripContextState {
   /** The most recently generated itinerary, persisted so the results page
       can render it without regenerating (survives navigation). */
   itinerary?: Itinerary | null;
+  /** True once the user actively started (or resumed) a plan. Gates the
+      planner's generate-on-mount decision so an empty visit never fabricates
+      an itinerary. Defaults to undefined/false on missing/corrupt storage. */
+  userInitiated?: boolean;
 }
 
 /** The empty default used at session start and on any corrupt/missing storage. */
@@ -83,6 +87,8 @@ export interface TripContextValue extends SharedTripContextState {
   reset: () => void;
   /** Store (or clear) the most recently generated itinerary. */
   setItinerary: (itinerary: Itinerary | null) => void;
+  /** Mark whether the current plan was actively started/resumed by the user. */
+  setUserInitiated: (value: boolean) => void;
 }
 
 const SharedTripContext = createContext<TripContextValue | null>(null);
@@ -118,7 +124,11 @@ function readStorage(): SharedTripContextState {
       candidate.itinerary && typeof candidate.itinerary === "object"
         ? (candidate.itinerary as Itinerary)
         : null;
-    return { context, dates, itinerary };
+    const userInitiated =
+      typeof candidate.userInitiated === "boolean"
+        ? candidate.userInitiated
+        : undefined;
+    return { context, dates, itinerary, userInitiated };
   } catch {
     // Corrupt JSON or unavailable storage ⇒ empty default; never throw.
     return emptyState();
@@ -198,6 +208,10 @@ export function TripContextProvider({ children }: TripContextProviderProps) {
     setState((prev) => ({ ...prev, itinerary }));
   }, []);
 
+  const setUserInitiated = useCallback((value: boolean) => {
+    setState((prev) => ({ ...prev, userInitiated: value }));
+  }, []);
+
   const setDates = useCallback((dates: DateHints) => {
     setState((prev) => ({ ...prev, dates }));
   }, []);
@@ -215,6 +229,7 @@ export function TripContextProvider({ children }: TripContextProviderProps) {
       context: state.context,
       dates: state.dates,
       itinerary: state.itinerary,
+      userInitiated: state.userInitiated,
       setContext,
       patchContext,
       editField,
@@ -222,8 +237,19 @@ export function TripContextProvider({ children }: TripContextProviderProps) {
       patchDates,
       reset,
       setItinerary,
+      setUserInitiated,
     }),
-    [state, setContext, patchContext, editField, setDates, patchDates, reset, setItinerary],
+    [
+      state,
+      setContext,
+      patchContext,
+      editField,
+      setDates,
+      patchDates,
+      reset,
+      setItinerary,
+      setUserInitiated,
+    ],
   );
 
   return (

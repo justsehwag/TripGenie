@@ -9,6 +9,8 @@ import type { RouteState, TripContext } from "@/lib/types";
 import { advance, uncollected, REQUIRED_FIELDS, type ControllerState, type ControllerResponse, type RequiredField } from "@/lib/preference-controller";
 import { syncFallbackModel } from "@/lib/intake-fallback";
 import { useTripContext } from "@/components/trip-context";
+import { useScopedHistory } from "@/components/use-scoped-history";
+import { fromSharedContext } from "@/lib/history/record-codec";
 import { useSpeechInput } from "@/components/use-speech-input";
 import { useDestinationImage } from "@/components/destination-image";
 import { useReveal } from "@/lib/use-reveal";
@@ -347,6 +349,13 @@ export interface ConciergeHomeProps {
   initialQuery?: string;
   /** Seed a destination directly from a Discover hand-off (/plan?dest=). */
   initialDestination?: string;
+  /**
+   * Resume a stored draft/record from `/plan?trip=<tripId>` (design §10). On
+   * mount, if set, the concierge reads the record via `useScopedHistory().resume`
+   * and reconstructs the Shared_Trip_Context from the captured plan. An empty
+   * string means no resume (fall through to the normal intake).
+   */
+  initialTrip?: string;
 }
 
 /**
@@ -360,9 +369,11 @@ export default function ConciergeHome({
   variant = "home",
   initialQuery,
   initialDestination,
+  initialTrip,
 }: ConciergeHomeProps = {}) {
   const router = useRouter();
   const sharedContext = useTripContext();
+  const history = useScopedHistory();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", text: GREETING },
   ]);
@@ -382,6 +393,15 @@ export default function ConciergeHome({
   /** Guards the one-shot seeding so React 18 StrictMode double-mount or any
    *  re-render never replays the seed query more than once. */
   const seededRef = useRef(false);
+  /**
+   * Stable client-side draft id for THIS planning session (design §10). Assigned
+   * once on the first genuine user submit (or on a resume, where it is set to the
+   * resumed tripId), then reused for every subsequent save so the draft updates
+   * in place rather than creating a new record (idempotent by owner+clientDraftId).
+   */
+  const draftIdRef = useRef<string | null>(null);
+  /** Guards the one-shot `/plan?trip=` resume so a re-render never replays it. */
+  const resumedRef = useRef(false);
   /** Reveal container for the immersive home hero's staggered entrance (Task
    *  7.1). SSR-safe: the hook adds `.reveal--in` only after mount, so the
    *  server render is stable. */
@@ -449,6 +469,49 @@ export default function ConciergeHome({
     void submit(seed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Resume a stored draft/record from `/plan?trip=<tripId>` (design §10;
+  // Requirements 3.8, 4.6, 5.1). This re-runs as the scope-aware history loads
+  // (so `resume` can find the record once `items` are populated), but applies
+  // exactly once via `resumedRef`. On a hit it reconstructs the live
+  // Shared_Trip_Context from the captured plan, marks it user-initiated, and
+  // sets `draftIdRef` to the tripId so continued saves update THAT record. On a
+  // miss (unknown/out-of-scope id, or once loading settles with no match) it
+  // falls through to the normal intake without crashing.
+  useEffect(() => {
+    const tripId = initialTrip?.trim();
+    if (!tripId) return;
+    if (resumedRef.current) return;
+    if (history.loading) return;
+
+    const plan = history.resume(tripId);
+    if (plan) {
+      resumedRef.current = true;
+      seededRef.current = true; // a real resume IS the user-initiated start
+      draftIdRef.current = tripId;
+      sharedContext.setContext(plan.context);
+      sharedContext.setDates(plan.dates);
+      sharedContext.setItinerary(plan.itinerary ?? null);
+      sharedContext.setUserInitiated(true);
+
+      // Mirror the restored route/profile into the local display so the
+      // conversation and Live_Trip_Profile reflect the resumed trip. Only real
+      // captured fields are used — nothing is fabricated.
+      setCaptured((prev) => capturedFromContext(prev, plan.context));
+      if (plan.context.origin && plan.context.destination) {
+        setRouteState((prev) => ({
+          ...prev,
+          origin: plan.context.origin as string,
+          destination: plan.context.destination as string,
+          originConfirmed: true,
+          destinationConfirmed: true,
+          routeCandidate: "",
+        }));
+      }
+      setControllerState((prev) => ({ ...prev, context: plan.context }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTrip, history.loading, history.items]);
 
   const headerIllustration = illustration("location-pin");
 
@@ -518,9 +581,57 @@ export default function ConciergeHome({
    * Resilience: on any network/route error we fall back to the original regex
    * pipeline so the UX is identical whether or not Bedrock is reachable.
    */
+  /**
+   * Capture a resumable Draft on the user's genuine planning start (design §10;
+   * Requirements 3.8, 4.6, 5.1, 5.3, 5.5). Called only from `submit()` (a real
+   * user-initiated action — typing/choosing a prompt), never from the mount
+   * auto-seed path and never on an empty visit. On the FIRST call it:
+   *   - marks the Shared_Trip_Context as user-initiated,
+   *   - assigns a stable `clientDraftId` (reused for subsequent saves so the
+   *     draft updates in place), and
+   *   - persists a `"planning"`-status draft via the scope-aware history service
+   *     (guest → Local_Store, signed-in → /api/trips).
+   * Subsequent calls re-save under the SAME id so the stored draft tracks the
+   * plan as it progresses. The draft name and payload come only from real
+   * captured context — nothing is fabricated.
+   */
+  function captureDraft(userMessage: string) {
+    sharedContext.setUserInitiated(true);
+    if (draftIdRef.current === null) {
+      draftIdRef.current =
+        (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : null) ?? `draft-${Date.now().toString(36)}`;
+    }
+    const destination = sharedContext.context.destination?.trim();
+    const origin = sharedContext.context.origin?.trim();
+    const name = destination
+      ? origin
+        ? `Trip from ${origin} to ${destination}`
+        : `Trip to ${destination}`
+      : userMessage.trim() || "New trip";
+    void history.save({
+      owner: "",
+      clientDraftId: draftIdRef.current,
+      name,
+      status: "planning",
+      payload: fromSharedContext({
+        context: sharedContext.context,
+        dates: sharedContext.dates,
+        itinerary: sharedContext.itinerary ?? null,
+      }),
+    });
+  }
+
   async function submit(text: string) {
     const answer = text.trim();
     if (!answer || pending) return;
+
+    // A genuine user-initiated planning start: mark the Shared_Trip_Context as
+    // user-initiated and capture / update the resumable Draft (design §10). This
+    // runs only on a real submit (typed answer or chosen prompt), never on the
+    // mount auto-seed path and never on an empty visit.
+    captureDraft(answer);
 
     // Append ONLY the user's message. Exactly one assistant reply is appended
     // per turn (the controller's next question from /api/ai, or the offline

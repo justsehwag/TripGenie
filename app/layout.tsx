@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from "react";
+import type { ReactNode } from "react";
 import "./globals.css";
 import GlobalNav from "@/components/global-nav";
 import SiteFooter from "@/components/site-footer";
@@ -32,11 +32,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" style={FONT_FACE_VARS}>
       <body>
-        <GlobalNav providerPolicy={PROVIDER_POLICY} session={SESSION} />
-        <TripContextProvider>{children}</TripContextProvider>
-        <SiteFooter providerPolicy={PROVIDER_POLICY} session={SESSION} />
+        {/* TripContextProvider wraps the whole app so the top-left History_Drawer
+            (mounted inside GlobalNav) can read the Shared_Trip_Context via
+            useTripContext() without throwing. */}
+        <TripContextProvider>
+          <GlobalNav providerPolicy={PROVIDER_POLICY} session={SESSION} />
+          {children}
+          <SiteFooter providerPolicy={PROVIDER_POLICY} session={SESSION} />
+        </TripContextProvider>
       </body>
     </html>
   );
 }
-

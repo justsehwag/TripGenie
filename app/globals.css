@@ -6740,3 +6740,375 @@ main.shell:has(.planner-itinerary) .planner-summary {
 
 
 .flight-booking__count { margin: 0 0 var(--space-sm); font-size: var(--type-helper-size); font-weight: 700; color: var(--color-deep-emerald); }
+
+/* ===========================================================================
+   History drawer (account-history-and-drafts, task 11) — the top-left trigger,
+   the off-canvas panel anchored LEFT, and the dimming backdrop. Mirrors the
+   existing .filter-drawer--offcanvas / .modal__backdrop motion pattern:
+   transform-based slide bounded by --motion-panel with --ease-standard, a
+   fade-in backdrop, and an opacity-only degrade under prefers-reduced-motion.
+   Reuses ONLY existing :root tokens; one-off values (panel width, z-index,
+   overlay alpha) are plain literals so the token-to-CSS bijection stays intact.
+   No new reserved-prefix :root token is introduced here.
+   =========================================================================== */
+
+/* Top-left trigger button in the nav — sits before the logo. Compact, neutral,
+   currentColor icon; mirrors the quiet nav-control affordance. */
+.site-nav__drawer-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: var(--space-xs) var(--space-sm);
+  min-width: 40px;
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.site-nav__drawer-trigger:hover {
+  border-color: var(--color-primary-green);
+  color: var(--color-deep-emerald);
+}
+.site-nav__drawer-trigger:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Root — no visual; just a positioning context for the fixed children. */
+.history-drawer {
+  display: contents;
+}
+
+/* Backdrop — dims the page beneath the open panel and fades in. Sits above the
+   page chrome; the panel sits one layer higher. */
+.history-drawer__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: rgba(38, 51, 47, 0.42);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--motion-normal) var(--ease-standard),
+              visibility var(--motion-normal) var(--ease-standard);
+}
+.history-drawer__backdrop.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Panel — off-canvas, anchored to the LEFT (the trigger is top-left). Slides in
+   via transform bounded by --motion-panel; sits above the backdrop. */
+.history-drawer__panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: min(380px, 90vw);
+  z-index: 111;
+  background: var(--color-background);
+  border-right: 1px solid var(--color-light-border);
+  box-shadow: var(--shadow-xl);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform var(--motion-panel) var(--ease-standard);
+}
+.history-drawer__panel.is-open {
+  transform: none;
+}
+
+/* Sticky header row: title plus a close control (reuses the modal close look). */
+.history-drawer__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-background);
+  border-bottom: 1px solid var(--color-light-border);
+}
+.history-drawer__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+  line-height: var(--type-card-title-line);
+  font-weight: 700;
+  letter-spacing: var(--type-card-title-spacing);
+  color: var(--color-primary-text);
+}
+.history-drawer__close {
+  appearance: none;
+  border: 1px solid var(--color-light-border);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  border-radius: var(--radius-sm);
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 var(--space-md);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.history-drawer__close:hover {
+  border-color: var(--color-primary-green);
+  color: var(--color-deep-emerald);
+}
+.history-drawer__close:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Scrollable body under the sticky header. */
+.history-drawer__body {
+  flex: 1 1 auto;
+  padding: var(--space-lg);
+  overflow: auto;
+  color: var(--color-primary-text);
+}
+
+/* Labelled section (Drafts / Saved / Confirmed bookings). */
+.history-drawer__section {
+  margin-bottom: var(--space-xl);
+}
+.history-drawer__section:last-child {
+  margin-bottom: 0;
+}
+.history-drawer__section-title {
+  margin: 0 0 var(--space-md);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-primary-text);
+}
+
+/* Item list. */
+.history-drawer__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* A single item reuses .card for its surface; add the row spacing here. */
+.history-drawer__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.history-drawer__item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.history-drawer__item-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-primary-text);
+}
+.history-drawer__item-updated {
+  font-size: 0.8rem;
+  color: var(--color-secondary-text);
+  white-space: nowrap;
+}
+
+/* Per-item action row. */
+.history-drawer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* Inline detail (View) — a quiet nested block of key/value rows. */
+.history-drawer__detail {
+  margin-top: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-light-border);
+}
+.history-drawer__detail-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: 0.85rem;
+  color: var(--color-secondary-text);
+}
+
+/* Status / loading / restore-error line and empty states (muted helper text). */
+.history-drawer__status {
+  margin: 0 0 var(--space-md);
+  color: var(--color-secondary-text);
+}
+.history-drawer__empty,
+.history-drawer__payload-empty {
+  margin: 0;
+  color: var(--color-secondary-text);
+}
+
+/* Entrance — the panel slides from the left and the backdrop fades on open.
+   Both are transform/opacity only and bounded by existing --motion- bands. */
+@keyframes history-drawer-slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+@keyframes history-drawer-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.history-drawer__panel.is-open {
+  animation: history-drawer-slide-in var(--motion-panel) var(--ease-standard) both;
+}
+.history-drawer__backdrop.is-open {
+  animation: history-drawer-backdrop-in var(--motion-normal) var(--ease-standard) both;
+}
+
+/* Reduced motion — no slide. The panel appears in place (no transform
+   transition or keyframe translation); the backdrop degrades to an
+   opacity-only fade within the reduced band. */
+@media (prefers-reduced-motion: reduce) {
+  .history-drawer__panel {
+    transition: none;
+    transform: none;
+  }
+  .history-drawer__panel.is-open {
+    animation: none;
+    transform: none;
+  }
+  .history-drawer__backdrop {
+    transition: opacity var(--motion-reduced) linear,
+                visibility var(--motion-reduced) linear;
+  }
+  .history-drawer__backdrop.is-open {
+    animation-name: history-drawer-backdrop-in;
+    animation-duration: var(--motion-reduced);
+    animation-timing-function: linear;
+  }
+}
+
+/* ===========================================================================
+   Auth aurora backdrop + staggered card entrance (account-history-and-drafts
+   task 16). VISUALS ONLY. Reuses ONLY existing token-group custom properties
+   (--color-*, --motion-*) plus the non-token --ease-standard helper; every
+   one-off value (drift durations, blur radius, per-layer offsets, entrance
+   delays) is a PLAIN LITERAL so NO new :root token is introduced and the
+   token<->CSS bijection (test/token-css-consistency.test.ts) stays intact.
+   Decorative only: the .auth-aurora container is aria-hidden in the markup.
+   =========================================================================== */
+
+/* The glow element becomes a positioned stage for the drifting gradient
+   layers. It keeps its existing ambient radial-gradient background from
+   .auth-glass-page__glow; these layers composite on top behind the card. */
+.auth-aurora {
+  overflow: hidden;
+}
+
+/* Each layer is a soft blurred brand-tinted blob that slowly drifts, giving a
+   living aurora behind the sign-in card. Built from the existing brand action
+   tokens via color-mix at low alpha (no new tokens). */
+.auth-aurora__layer {
+  position: absolute;
+  display: block;
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+  filter: blur(42px);
+  opacity: 0.55;
+  will-change: transform, opacity;
+  animation: auth-aurora-drift 18s var(--ease-standard) infinite alternate;
+}
+.auth-aurora__layer--one {
+  top: -14%;
+  left: -6%;
+  width: 34rem;
+  height: 24rem;
+  background: radial-gradient(circle at 30% 30%,
+    color-mix(in srgb, var(--color-primary-green) 34%, transparent),
+    transparent 68%);
+  animation-duration: 20s;
+  animation-delay: -2s;
+}
+.auth-aurora__layer--two {
+  top: -8%;
+  right: -8%;
+  width: 30rem;
+  height: 22rem;
+  background: radial-gradient(circle at 70% 30%,
+    color-mix(in srgb, var(--color-action-orange) 30%, transparent),
+    transparent 70%);
+  animation-duration: 24s;
+  animation-delay: -6s;
+}
+.auth-aurora__layer--three {
+  top: 4%;
+  left: 28%;
+  width: 28rem;
+  height: 20rem;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--color-deep-emerald) 24%, transparent),
+    transparent 72%);
+  animation-duration: 28s;
+  animation-delay: -10s;
+  opacity: 0.4;
+}
+
+/* Drift keyframes: translate + gentle scale and opacity breathe so the blobs
+   wander without ever leaving the stage. Plain-literal offsets only. */
+@keyframes auth-aurora-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.42;
+  }
+  50% {
+    transform: translate3d(6%, 4%, 0) scale(1.08);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate3d(-5%, -3%, 0) scale(1.04);
+    opacity: 0.48;
+  }
+}
+
+/* Staggered entrance: the intro and the sign-in card fade and rise in on
+   mount. Per-element delay is supplied inline in the markup; the base
+   animation is bounded by the existing --motion-normal duration and eased by
+   --ease-standard. */
+.auth-rise {
+  animation: auth-rise-in var(--motion-normal) var(--ease-standard) both;
+}
+@keyframes auth-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduced motion: no aurora drift, no rise/stagger. The backdrop stays as a
+   static on-theme surface and the cards appear immediately (opacity 1, no
+   transform, no per-element delay). */
+@media (prefers-reduced-motion: reduce) {
+  .auth-aurora__layer {
+    animation: none;
+    opacity: 0.4;
+  }
+  .auth-rise {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    animation-delay: 0ms;
+  }
+}

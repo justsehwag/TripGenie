@@ -153,9 +153,16 @@ export default function AuthLanding({
 
   return (
     <main className="shell auth auth-glass-page">
-      <div className="auth-glass-page__glow" aria-hidden="true" />
+      <div className="auth-glass-page__glow auth-aurora" aria-hidden="true">
+        <span className="auth-aurora__layer auth-aurora__layer--one" />
+        <span className="auth-aurora__layer auth-aurora__layer--two" />
+        <span className="auth-aurora__layer auth-aurora__layer--three" />
+      </div>
 
-      <section className="motion-rise auth__intro">
+      <section
+        className="motion-rise auth-rise auth__intro"
+        style={{ animationDelay: "40ms" }}
+      >
         <p className="eyebrow">Your account</p>
         <h1 className="display">{heading}</h1>
         <p className="lead">
@@ -165,7 +172,11 @@ export default function AuthLanding({
       </section>
 
       <div className="auth-glass-grid">
-        <section className="auth-glass motion-rise" aria-labelledby="auth-signin-heading">
+        <section
+          className="auth-glass motion-rise auth-rise"
+          style={{ animationDelay: "140ms" }}
+          aria-labelledby="auth-signin-heading"
+        >
           <h2 id="auth-signin-heading" className="auth__heading">
             Sign in
           </h2>

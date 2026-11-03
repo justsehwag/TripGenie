@@ -9,7 +9,9 @@ import ConciergeHome from "@/components/concierge-home";
  * A SERVER component. It reads `searchParams` (a Promise in Next 16, matching
  * app/stays/page.tsx), awaits them, and forwards the single `q` value as
  * `initialQuery` so the concierge seeds the conversation once on mount and the
- * profile pre-fills from a homepage hand-off (Req 21.10).
+ * profile pre-fills from a homepage hand-off (Req 21.10). It also forwards
+ * `?dest=` (Discover hand-off) and `?trip=<tripId>` (resume a stored draft /
+ * record via the account-history-and-drafts resume path, design §10).
  */
 export const metadata = { title: "AI Travel Assistant - TripGenie" };
 
@@ -30,5 +32,13 @@ export default async function PlanPage({
   const raw = await searchParams;
   const q = one(raw, "q") ?? "";
   const dest = one(raw, "dest") ?? "";
-  return <ConciergeHome variant="assistant" initialQuery={q} initialDestination={dest} />;
+  const trip = one(raw, "trip") ?? "";
+  return (
+    <ConciergeHome
+      variant="assistant"
+      initialQuery={q}
+      initialDestination={dest}
+      initialTrip={trip}
+    />
+  );
 }

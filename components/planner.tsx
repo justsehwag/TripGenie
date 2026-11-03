@@ -10,6 +10,7 @@ import { buildItineraryPdf } from "@/lib/pdf";
 import { refineItinerary } from "@/lib/itinerary-engine";
 import { illustration } from "@/lib/illustrations";
 import { useTripContext } from "@/components/trip-context";
+import { plannerDecision, type PlanSignal } from "@/lib/history/draft-gating";
 import { useDestinationImage } from "@/components/destination-image";
 import GooglePlaceMedia from "@/components/google-place-media";
 import EditDayPanel from "@/components/edit-day-panel";
@@ -203,6 +204,11 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   const [route, setRoute] = useState(emptyRouteState());
   const [status, setStatus] = useState<AssistantStatus>("idle");
   const [editing, setEditing] = useState<DayEdit | null>(null);
+  // No-phantom-auto-load (R6): true when the on-mount decision resolves to
+  // "empty-start" (or a user-initiated generate ultimately yields nothing
+  // usable), so the planner renders an explicit start prompt and NEVER
+  // fabricates an itinerary. Set only by the decision logic below.
+  const [showEmptyStart, setShowEmptyStart] = useState(false);
   // Which day (number) currently has the Edit Day panel open, and which has the Know More modal open.
   const [editDayOpen, setEditDayOpen] = useState<number | null>(null);
   const [knowMoreDay, setKnowMoreDay] = useState<number | null>(null);
@@ -317,20 +323,64 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       setSaving(false);
     }
   }
-  // When arriving at /trip from the concierge, the context already holds a
-  // destination: auto-generate the itinerary once on mount so the user lands on
-  // a ready plan instead of an empty form (guarded so it never re-fires).
+  // On-mount planning decision (no-phantom-auto-load fix, R6). Instead of the
+  // old "generate() when /itinerary has no stored itinerary" branch (which
+  // fabricated an itinerary on an empty visit), we compute a PlanSignal from
+  // the Shared_Trip_Context and the current route and defer to the pure
+  // `plannerDecision` predicate:
+  //   "show-stored"  -> re-price and show the already-generated itinerary
+  //                     (the prior stored-itinerary behavior, unchanged).
+  //   "generate"     -> call generate() (only reached when userInitiated).
+  //   "empty-start"  -> render the Empty_Start_State; NEVER call generate().
+  // The route is derived from `resultsOnly`: resultsOnly -> "/itinerary", else
+  // "/trip". The one-shot `autoRanRef` guard is preserved, and the hydration
+  // tick is still handled: the Shared_Trip_Context rehydrates from
+  // sessionStorage a tick AFTER this component mounts, so when the context has
+  // not hydrated yet (no destination, no stored itinerary, no userInitiated
+  // flag) we clear the guard and bail so the decision re-runs once the context
+  // appears. An empty visit (no userInitiated, no stored itinerary) lands on
+  // "empty-start" and never calls generate().
   const autoRanRef = useRef(false);
   useEffect(() => {
     if (autoRanRef.current) return;
+
+    const routeStr = resultsOnly ? "/itinerary" : "/trip";
+    const stored = sharedContext.itinerary;
+    const hasStoredItinerary = Boolean(
+      stored && Array.isArray(stored.days) && stored.days.length > 0,
+    );
+    const hasContextDestination = Boolean(
+      sharedContext.context.destination &&
+        sharedContext.context.destination.trim(),
+    );
+    const userInitiated = sharedContext.userInitiated === true;
+
+    // Hydration tick: if nothing has arrived yet (no stored itinerary, no
+    // destination, and not user-initiated), the context likely has not
+    // rehydrated. Leave the guard unset so this effect re-evaluates once the
+    // context appears, rather than prematurely landing on "empty-start".
+    if (!hasStoredItinerary && !hasContextDestination && !userInitiated) {
+      autoRanRef.current = false;
+      setShowEmptyStart(true);
+      return;
+    }
+
     autoRanRef.current = true;
-    // Results page (/itinerary): prefer the already-generated itinerary stored
-    // in the shared context so the plan is shown INSTANTLY and never vanishes
-    // on re-render - we do NOT call the LLM again here. Only regenerate if no
-    // stored plan exists (e.g. direct navigation to /itinerary).
-    if (resultsOnly) {
-      const stored = sharedContext.itinerary;
+
+    const signal: PlanSignal = {
+      route: routeStr,
+      userInitiated,
+      hasStoredItinerary,
+      hasContextDestination,
+    };
+    const decision = plannerDecision(signal);
+
+    if (decision === "show-stored") {
+      // Prefer the already-generated itinerary stored in the shared context so
+      // the plan is shown INSTANTLY and never vanishes on re-render - we do NOT
+      // call the LLM again here.
       if (stored && Array.isArray(stored.days) && stored.days.length > 0) {
+        setShowEmptyStart(false);
         setState(reprice(stored));
         setStatus("done");
         if (sharedContext.context.destination || sharedContext.context.origin) {
@@ -340,27 +390,29 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
             origin: sharedContext.context.origin ?? prev.origin,
           }));
         }
-        return;
       }
+      return;
+    }
+
+    if (decision === "generate") {
+      // Only reached when the user actively started (or resumed) a plan. This
+      // is what makes a trip planned in chat mode auto-load its live stays and
+      // flights without a manual search.
+      setShowEmptyStart(false);
       void generate();
       return;
     }
-    // Input page (/trip): auto-generate only when the concierge already handed
-    // us a destination; otherwise wait for the user to submit the form. The
-    // Shared_Trip_Context rehydrates from sessionStorage in its own mount
-    // effect, so the destination may arrive a tick AFTER this component mounts.
-    // Depending on it (with the autoRanRef one-shot guard) means we fire
-    // generate() exactly once, as soon as the captured destination is present -
-    // this is what makes a trip planned in chat mode auto-load its live stays
-    // and flights without a manual search.
-    if (!sharedContext.context.destination) {
-      // Not hydrated yet (or truly empty) - allow a later run once it appears.
-      autoRanRef.current = false;
-      return;
-    }
-    void generate();
+
+    // decision === "empty-start": render the explicit start prompt and do NOT
+    // call generate(); nothing is fabricated.
+    setShowEmptyStart(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resultsOnly, sharedContext.context.destination]);
+  }, [
+    resultsOnly,
+    sharedContext.context.destination,
+    sharedContext.userInitiated,
+    sharedContext.itinerary,
+  ]);
 
   /**
    * Deterministic OFFLINE fallback — the original synchronous local build via
@@ -462,13 +514,34 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       if (!resultsOnly) { router.push("/itinerary"); return; }
     } catch {
       // Graceful offline fallback to the existing local synchronous build.
-      const local = buildLocal(destination, days);
-      setState(local);
-      sharedContext.setItinerary(local.itinerary);
-      carryTripDatesToContext(local.itinerary);
-      earn("itinerary_generated");
-      setStatus("done");
-      if (!resultsOnly) { router.push("/itinerary"); return; }
+      try {
+        const local = buildLocal(destination, days);
+        if (
+          !local.itinerary ||
+          !Array.isArray(local.itinerary.days) ||
+          local.itinerary.days.length === 0
+        ) {
+          // The fallback produced nothing usable: show the explicit
+          // Empty_Start_State with an error rather than fabricating content.
+          throw new Error("empty local build");
+        }
+        setShowEmptyStart(false);
+        setState(local);
+        sharedContext.setItinerary(local.itinerary);
+        carryTripDatesToContext(local.itinerary);
+        earn("itinerary_generated");
+        setStatus("done");
+        if (!resultsOnly) { router.push("/itinerary"); return; }
+      } catch {
+        // Even the offline fallback is unavailable: do NOT fabricate an
+        // itinerary. Surface the start prompt with an error indication (R6.8).
+        setState(null);
+        setError(
+          "We couldn't build your plan right now. Try starting again in a moment.",
+        );
+        setStatus("error");
+        setShowEmptyStart(true);
+      }
     }
   }
 
@@ -721,6 +794,69 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
             starting point below or write your own.
           </p>
         </>
+      )}
+
+      {/* Empty_Start_State (R6.2): an explicit start prompt shown when the
+          on-mount decision is "empty-start" (or a user-initiated generate
+          yielded nothing usable). It renders NO day/activity/booking content -
+          nothing is fabricated. Suppressed while generating or when a real
+          itinerary is present. */}
+      {showEmptyStart && !generating && !state && (
+        <section className="card planner-empty-start" aria-label="Start planning">
+          <p className="eyebrow">No plan yet</p>
+          <h2>Start planning your trip</h2>
+          <p className="lead">
+            You don&apos;t have a trip in progress. Tell us where you&apos;d like to go
+            and we&apos;ll draft a day-by-day itinerary, or pick up one of your saved plans.
+          </p>
+          {error && (
+            <p className="chat-status chat-status--error field-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="timeline__actions">
+            {resultsOnly ? (
+              <button
+                type="button"
+                className="cta"
+                onClick={() => router.push("/plan")}
+              >
+                Start planning
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="cta"
+                onClick={() => {
+                  setShowEmptyStart(false);
+                  if (typeof document !== "undefined") {
+                    const composer = document.querySelector<HTMLInputElement>(
+                      ".planner-composer input",
+                    );
+                    composer?.focus();
+                  }
+                }}
+              >
+                Start planning
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                // Open your plans: dispatch a window event the history drawer
+                // listens for, falling back to the plans route. Kept a plain
+                // control - the drawer is not imported here.
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent("tripgenie:open-plans"));
+                }
+                router.push("/plan");
+              }}
+            >
+              Open your plans
+            </button>
+          </div>
+        </section>
       )}
 
       {!resultsOnly && (
