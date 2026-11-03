@@ -150,7 +150,12 @@ function OptionsList({
       </p>
     );
   }
+  const siteCount = options.length;
   return (
+    <>
+    <p className="flight-booking__count">
+      {siteCount === 1 ? "1 booking site compared" : `${siteCount} booking sites compared`} {"\u00B7"} lowest first
+    </p>
     <ul className="live-offer-list flight-booking__options" aria-label="Flight booking options">
       {options.map((o: FlightBookingOption, i: number) => (
         <li className="live-offer" key={`${o.source}-${o.optionTitle ?? ""}-${i}`}>
@@ -173,6 +178,7 @@ function OptionsList({
         <span className="live-offer__unit">Checked {checkedLabel(checkedAt)}</span>
       </li>
     </ul>
+    </>
   );
 }
 
@@ -305,11 +311,16 @@ export default function FlightBookingPanel({
   return (
     <div id={id} className="flight-booking live-hotel__offers">
       {loading && (
-        <div className="flight-booking__status live-hotel__status">
+        <div className="flight-booking__status flight-booking__loading live-hotel__status" role="status" aria-live="polite">
           <BrandLoader
-            label={state.phase === "loadingReturns" ? "Finding return flights" : "Checking booking sites"}
+            label={state.phase === "loadingReturns" ? "Finding return flights" : "Comparing prices across booking sites"}
             size={110}
           />
+          <p className="flight-booking__loading-hint">
+            {state.phase === "loadingReturns"
+              ? "Pulling live return options for your dates\u2026"
+              : "Live quotes come straight from each booking site, so this can take a few seconds\u2026"}
+          </p>
         </div>
       )}
 

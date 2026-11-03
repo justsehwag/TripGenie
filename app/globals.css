@@ -6730,3 +6730,13 @@ main.shell:has(.planner-itinerary) .planner-summary {
   .offer-list .flight-row:hover { transform: none; }
   .offer-list.offer-list--rows > .flight-row { animation: none; }
 }
+
+
+/* Compare & book loading: centre the branded loader and add a reassuring
+   one-line hint so the (genuinely slow) live multi-site price fetch reads as
+   intentional, not stuck. */
+.flight-booking__loading { display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); text-align: center; padding: var(--space-md) 0; }
+.flight-booking__loading-hint { margin: 0; max-width: 42ch; font-size: var(--type-helper-size); line-height: var(--type-helper-line); color: var(--color-secondary-text); }
+
+
+.flight-booking__count { margin: 0 0 var(--space-sm); font-size: var(--type-helper-size); font-weight: 700; color: var(--color-deep-emerald); }
