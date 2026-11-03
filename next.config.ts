@@ -6,14 +6,26 @@
 // bundle via `env`, making process.env.* resolve at request time in the Lambda.
 // See AWS docs: Making environment variables accessible to server-side runtimes.
 //
-// Only NON-SECRET identifiers belong here. The Cognito app client has no secret;
-// user-pool id / client id are safe to inline. Never add a real secret below.
+// Non-secret identifiers (Cognito ids) AND server-only provider secrets
+// (SerpApi / Google Places keys) are inlined here. The provider secrets are
+// read ONLY by server-side code and are never imported by a "use client"
+// module, so Next keeps them in the server bundle and they never ship to the
+// browser. Do NOT add any value that a client component imports.
 const passthrough = [
   "COGNITO_USER_POOL_ID",
   "COGNITO_CLIENT_ID",
   "COGNITO_REGION",
   "BEDROCK_MODEL_ID",
   "BEDROCK_REGION",
+  // Server-only provider keys. These are read ONLY by server-side modules
+  // (lib/config.ts serpApiKey/googlePlacesApiKey, invoked from server routes
+  // and server adapters) and are NEVER imported by a "use client" module, so
+  // Next keeps them in the server bundle and they do not reach the browser.
+  // Amplify only populates these at build time, so they must be inlined here
+  // to resolve at request time in the SSR Lambda (same mechanism as above).
+  "SERPAPI_API_KEY",
+  "SERPAPI_MONTHLY_SOFT_LIMIT",
+  "GOOGLE_PLACES_API_KEY",
 ] as const;
 
 const bakedEnv: Record<string, string> = {};

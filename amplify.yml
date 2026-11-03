@@ -16,7 +16,7 @@ frontend:
         - npm ci
         - |
           rm -f .env.production
-          for VAR in COGNITO_USER_POOL_ID COGNITO_CLIENT_ID COGNITO_REGION BEDROCK_MODEL_ID BEDROCK_REGION AWS_REGION; do
+          for VAR in COGNITO_USER_POOL_ID COGNITO_CLIENT_ID COGNITO_REGION BEDROCK_MODEL_ID BEDROCK_REGION AWS_REGION SERPAPI_API_KEY SERPAPI_MONTHLY_SOFT_LIMIT GOOGLE_PLACES_API_KEY; do
             VALUE="$(printenv "$VAR" || true)"
             if [ -n "$VALUE" ]; then
               echo "$VAR=$VALUE" >> .env.production
