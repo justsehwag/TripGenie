@@ -29,5 +29,6 @@ export default async function PlanPage({
 }) {
   const raw = await searchParams;
   const q = one(raw, "q") ?? "";
-  return <ConciergeHome variant="assistant" initialQuery={q} />;
+  const dest = one(raw, "dest") ?? "";
+  return <ConciergeHome variant="assistant" initialQuery={q} initialDestination={dest} />;
 }

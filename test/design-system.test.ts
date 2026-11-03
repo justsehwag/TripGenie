@@ -56,10 +56,13 @@ describe("Feature: ui-redesign, Task 2.1 — palette & resolvability", () => {
       softGreen: "#C8F2DF",
       lightBorder: "#E8ECE9",
       mutedBg: "#F8FBF9",
+      deepPine: "#1C2A25",
+      warmSand: "#FBF7F0",
+      emeraldTint: "#D3F3E6",
     };
 
     const keys = Object.keys(APPROVED) as (keyof typeof COLOR_TOKENS)[];
-    // Exactly the eleven approved keys, no more, no less.
+    // Exactly the fourteen approved keys, no more, no less.
     expect(Object.keys(COLOR_TOKENS).sort()).toEqual(keys.slice().sort());
 
     fc.assert(
@@ -152,6 +155,12 @@ describe("Feature: ui-redesign, Task 2.2 — contrast, canvas & typography", () 
     // is 3:1. The pinned #7B8580 token resolves to ~3.81:1, satisfying the
     // large-text rule, so secondary text asserts the >=3:1 large-text threshold.
     expect(contrastRatio(COLOR_TOKENS.secondaryText, COLOR_TOKENS.background)).toBeGreaterThanOrEqual(3);
+
+    // New deep-pine text token: readable as normal text (>=4.5:1) both on the
+    // white background and on the warm-sand surface. emeraldTint is a
+    // surface/indicator color only and is intentionally not asserted as text.
+    expect(contrastRatio(COLOR_TOKENS.deepPine, COLOR_TOKENS.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(COLOR_TOKENS.deepPine, COLOR_TOKENS.warmSand)).toBeGreaterThanOrEqual(4.5);
 
     const EPSILON = 1e-9;
     fc.assert(

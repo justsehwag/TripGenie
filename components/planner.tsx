@@ -6,15 +6,69 @@ import { parseRoute, emptyRouteState, routeConfirmed as _rc } from "@/lib/route-
 import { durationFromText } from "@/lib/date-intake";
 import { recomputeWorkspace, flightOfferFare, type WorkspaceState } from "@/lib/workspace";
 import { calculateTripPricing } from "@/lib/pricing";
+import { buildItineraryPdf } from "@/lib/pdf";
 import { refineItinerary } from "@/lib/itinerary-engine";
 import { illustration } from "@/lib/illustrations";
 import { useTripContext } from "@/components/trip-context";
-import LocationCarousel from "@/components/location-carousel";
+import { useDestinationImage } from "@/components/destination-image";
+import GooglePlaceMedia from "@/components/google-place-media";
+import EditDayPanel from "@/components/edit-day-panel";
+import DayDetailModal from "@/components/day-detail-modal";
 import GamificationPanel from "@/components/gamification-panel";
 import { emptyXp, award, type XpState, type XpEvent } from "@/lib/gamification";
 import type { Activity, Itinerary, TripContext } from "@/lib/types";
+import { serializeCriteria } from "@/lib/search-criteria";
+import type { LiveHotel } from "@/lib/providers/serpapi-hotels";
+import type { LiveFlight, PriceInsights } from "@/lib/providers/serpapi-flights";
+import { checkedLabel as fmtCheckedLabel } from "@/lib/ist-time";
+import type { FlightBookingCriteria } from "@/components/flight-booking-panel";
+import BrandLoader from "@/components/brand-loader";
+import TravelFacts from "@/components/travel-facts";
 
 const INR = (n: number) => `INR ${n.toLocaleString("en-IN")}`;
+const INR_FMT = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+
+/** Live stays + flights fetched for the generated trip (see /api/trip-live). */
+type TripLiveStatus = "idle" | "loading" | "ready" | "error";
+interface TripLive {
+  status: TripLiveStatus;
+  stays: LiveHotel[];
+  flights: LiveFlight[];
+  staysHref: string;
+  flightsHref: string;
+  note: string | null;
+  /** Live provenance + criteria needed to render the full inline result cards. */
+  staysProvider: string;
+  staysCurrency: string;
+  flightsProvider: string;
+  flightsCurrency: string;
+  checkedAt: string;
+  checkedLabel: string;
+  nights: number;
+  insights: PriceInsights | null;
+  staysCriteria: { destination: string; checkIn: string; checkOut: string; adults: number; rooms: number } | null;
+  flightsCriteria: FlightBookingCriteria | null;
+}
+
+/** Default TripLive with no results loaded (all provenance fields blank). */
+const EMPTY_LIVE: TripLive = {
+  status: "idle", stays: [], flights: [], staysHref: "/stays", flightsHref: "/flights",
+  note: null, staysProvider: "", staysCurrency: "INR", flightsProvider: "", flightsCurrency: "INR",
+  checkedAt: "", checkedLabel: "", nights: 1, insights: null, staysCriteria: null, flightsCriteria: null,
+};
+
+/** Derive the best REAL place query for a day so the media shows the main landmark covered that day and every day resolves an image. */
+function dayPlaceQuery(day: { title: string; activities: { title: string }[] }, destination: string): string {
+  const dest = destination.trim();
+  let core = day.title && day.title.trim().length > 0 ? day.title.trim() : "";
+  const generic = /^(arrival|arrive|departure|depart|free day|leisure|checkout|check-in|rest)\b/i;
+  if (!core || generic.test(core)) {
+    const best = [...day.activities].map((a) => (a.title ? a.title.trim() : "")).filter((s) => s.length > 0).sort((a, b) => b.length - a.length)[0];
+    if (best) core = best;
+  }
+  if (!core) core = dest;
+  return (core + " " + dest).trim();
+}
 
 /** Marker illustration reused for every day node (Req 12.2, 17.5). */
 const LOCATION_PIN = illustration("location-pin");
@@ -24,6 +78,102 @@ const NEW_ACTIVITY_COST = 1500;
 
 /** Per-click budget delta for the day-level refine control (Req 8.3). */
 const DAY_BUDGET_STEP = 1000;
+
+/** Deterministic, SSR-safe short-date formatter for a stored ISO `yyyy-mm-dd`.
+ *  Parses only the stored string (NO Date.now()/new Date() of "now"), so server
+ *  and client render identically — no hydration mismatch. Returns "" if the
+ *  input is not a well-formed ISO date (fallback handled by the caller). */
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function formatShortDate(iso: string | undefined): string {
+  if (typeof iso !== "string") return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return "";
+  const month = Number(m[2]);
+  const dayNum = Number(m[3]);
+  if (month < 1 || month > 12 || dayNum < 1 || dayNum > 31) return "";
+  return `${dayNum} ${SHORT_MONTHS[month - 1]}`;
+}
+
+/** Build the human date range for the cover from the itinerary's stored day
+ *  dates. Uses ONLY the real `TripDay.date` values already present in the data
+ *  (never fabricates calendar dates in render). Returns "" when absent. */
+function coverDateRange(days: ReadonlyArray<{ date?: string }>): string {
+  if (days.length === 0) return "";
+  const start = formatShortDate(days[0]?.date);
+  const end = formatShortDate(days[days.length - 1]?.date);
+  if (start && end) return start === end ? start : `${start} – ${end}`;
+  return start || end || "";
+}
+
+/**
+ * TripCover — the premium itinerary cover (Req 6.1). A full-width, aspect-
+ * reserved `.image-frame` with a REAL destination image fetched through the
+ * existing `/api/image` route via `useDestinationImage` (gradient/illustration
+ * fallback when none resolves, so there is never a broken image or CLS). The
+ * serif trip title, destination, dates, travellers, and day-count metadata are
+ * overlaid on the existing `--gradient-image-scrim`. Every field shown is drawn
+ * from data that ALREADY EXISTS in the planner — no field is invented.
+ */
+function TripCover({
+  title,
+  destination,
+  origin,
+  dateRange,
+  dayCount,
+  travellers,
+}: {
+  title: string;
+  destination: string;
+  origin: string;
+  dateRange: string;
+  dayCount: number;
+  travellers: number;
+}) {
+  const query = destination.trim() || title.trim() || "travel destination";
+  const { url, alt } = useDestinationImage(query, 0);
+  return (
+    <header className="trip-cover reveal" aria-label="Trip overview">
+      <div className="trip-cover__frame image-frame">
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="trip-cover__img" src={url} alt={alt} />
+        ) : (
+          // Illustration/token fallback — never a broken image (Req 6.1 / 10.4).
+          <div className="trip-cover__fallback" aria-hidden="true" />
+        )}
+        <div className="trip-cover__scrim" aria-hidden="true" />
+        <div className="trip-cover__content">
+          <p className="trip-cover__eyebrow">
+            {origin.trim() ? `${origin.trim()} → ${destination || "your destination"}` : "Your itinerary"}
+          </p>
+          <h2 className="trip-cover__title">{title}</h2>
+          <dl className="trip-cover__meta">
+            {destination.trim() && (
+              <div className="trip-cover__meta-item">
+                <dt>Destination</dt>
+                <dd>{destination.trim()}</dd>
+              </div>
+            )}
+            {dateRange && (
+              <div className="trip-cover__meta-item">
+                <dt>Dates</dt>
+                <dd>{dateRange}</dd>
+              </div>
+            )}
+            <div className="trip-cover__meta-item">
+              <dt>Length</dt>
+              <dd>{dayCount} {dayCount === 1 ? "day" : "days"}</dd>
+            </div>
+            <div className="trip-cover__meta-item">
+              <dt>Travellers</dt>
+              <dd>{travellers} {travellers === 1 ? "traveller" : "travellers"}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </header>
+  );
+}
 
 /** Assistant conversation states (Req 11.3): idle -> generating -> done | error. */
 type AssistantStatus = "idle" | "generating" | "done" | "error";
@@ -53,6 +203,37 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   const [route, setRoute] = useState(emptyRouteState());
   const [status, setStatus] = useState<AssistantStatus>("idle");
   const [editing, setEditing] = useState<DayEdit | null>(null);
+  // Which day (number) currently has the Edit Day panel open, and which has the Know More modal open.
+  const [editDayOpen, setEditDayOpen] = useState<number | null>(null);
+  const [knowMoreDay, setKnowMoreDay] = useState<number | null>(null);
+  /** Add a real named place (from Edit Day suggestions) as a new activity on a day. */
+  /** Remove an activity (place) from a day by index, then re-price. */
+  function removeDayActivity(dayNum: number, index: number) {
+    if (!state) return;
+    const days = state.itinerary.days.map((d) => {
+      if (d.day !== dayNum) return d;
+      const activities = d.activities.filter((_, i) => i !== index);
+      const total = activities.reduce((s, a) => s + a.cost, 0);
+      return { ...d, activities, total };
+    });
+    const itinerary: Itinerary = { ...state.itinerary, days, revised: true };
+    setState(reprice(itinerary));
+    carryEditToContext(itinerary);
+  }
+
+  function addNamedPlace(dayNum: number, placeName: string) {
+    if (!state) return;
+    const days = state.itinerary.days.map((d) => {
+      if (d.day !== dayNum) return d;
+      const activity: Activity = { time: "Flexible", title: placeName, description: "Added from Edit Day suggestions.", cost: NEW_ACTIVITY_COST };
+      const activities = [...d.activities, activity];
+      const total = activities.reduce((s, a) => s + a.cost, 0);
+      return { ...d, activities, total };
+    });
+    const itinerary: Itinerary = { ...state.itinerary, days, revised: true };
+    setState(reprice(itinerary));
+    carryEditToContext(itinerary);
+  }
   // The single Shared_Trip_Context carried across pages (realtime-ai task 11.1).
   const sharedContext = useTripContext();
   // Deterministic, idempotent gamification state for this planning session.
@@ -72,6 +253,8 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   }
   const [saveMsg, setSaveMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  // Live stays + flights for the generated trip (auto-fetched once ready).
+  const [live, setLive] = useState<TripLive>(EMPTY_LIVE);
 
   /** Resolve the signed-in owner from the browser-local session (My Trips key). */
   function currentOwner(): string | null {
@@ -163,11 +346,21 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       return;
     }
     // Input page (/trip): auto-generate only when the concierge already handed
-    // us a destination; otherwise wait for the user to submit the form.
-    if (!sharedContext.context.destination) return;
+    // us a destination; otherwise wait for the user to submit the form. The
+    // Shared_Trip_Context rehydrates from sessionStorage in its own mount
+    // effect, so the destination may arrive a tick AFTER this component mounts.
+    // Depending on it (with the autoRanRef one-shot guard) means we fire
+    // generate() exactly once, as soon as the captured destination is present -
+    // this is what makes a trip planned in chat mode auto-load its live stays
+    // and flights without a manual search.
+    if (!sharedContext.context.destination) {
+      // Not hydrated yet (or truly empty) - allow a later run once it appears.
+      autoRanRef.current = false;
+      return;
+    }
     void generate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [resultsOnly, sharedContext.context.destination]);
 
   /**
    * Deterministic OFFLINE fallback — the original synchronous local build via
@@ -196,6 +389,26 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
    * booking (Req 8.5). The existing `generating`/`status`/`error` message-state
    * UI drives the loading/error states (Req 10.1, 10.3, 10.4).
    */
+  /**
+   * Store the itinerary's REAL first/last day dates into the Shared_Trip_Context
+   * date hints, so when the traveller opens the full /stays or /flights search
+   * it runs with valid dates and shows LIVE results (photos + provider quotes +
+   * Compare & book) instead of falling back to estimates. Only sets dates that
+   * are real ISO dates; never fabricates.
+   */
+  function carryTripDatesToContext(itinerary: Itinerary) {
+    const days = itinerary.days ?? [];
+    const checkIn = (days[0]?.date || "").trim();
+    const checkOut = (days[days.length - 1]?.date || "").trim();
+    const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+    if (isDate(checkIn) && isDate(checkOut) && checkOut > checkIn) {
+      sharedContext.setDates({
+        ...sharedContext.dates,
+        checkIn, checkOut, departDate: checkIn, returnDate: checkOut,
+      });
+    }
+  }
+
   async function generate() {
     setStatus("generating");
     setError("");
@@ -243,6 +456,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       // summary stays in lockstep with the rendered timeline.
       setState(reprice(data.itinerary));
       sharedContext.setItinerary(data.itinerary);
+      carryTripDatesToContext(data.itinerary);
       earn("itinerary_generated");
       setStatus("done");
       if (!resultsOnly) { router.push("/itinerary"); return; }
@@ -251,6 +465,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       const local = buildLocal(destination, days);
       setState(local);
       sharedContext.setItinerary(local.itinerary);
+      carryTripDatesToContext(local.itinerary);
       earn("itinerary_generated");
       setStatus("done");
       if (!resultsOnly) { router.push("/itinerary"); return; }
@@ -345,6 +560,143 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     carryEditToContext(itinerary);
   }
 
+  /**
+   * Export the current itinerary to a polished, dependency-free PDF via the
+   * existing uildItineraryPdf builder, then trigger a browser download. Maps
+   * the planner's itinerary days onto the builder's TripDay shape, supplying a
+   * date per day (today + dayIndex) so the PDF reads with real calendar dates.
+   */
+  function exportPdf() {
+    if (!state) return;
+    const base = new Date();
+    const days = state.itinerary.days.map((d, idx) => {
+      const dt = new Date(base.getTime() + idx * 86400000);
+      return {
+        day: d.day,
+        date: dt.toISOString().slice(0, 10),
+        title: d.title,
+        theme: d.theme,
+        activities: d.activities,
+        total: d.total,
+      };
+    });
+    const routeLabel = (route.origin || "-") + " to " + (route.destination || "your destination");
+    const bytes = buildItineraryPdf(state.itinerary.title, routeLabel, days, state.pricing);
+    const blob = new Blob([bytes as unknown as BlobPart], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (state.itinerary.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "itinerary") + ".pdf";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  // Scroll-reveal for the itinerary results (cover + each day-group + side
+  // panel). A single IntersectionObserver reveals each `.reveal` node inside the
+  // results subtree once (Req 6.3, 7.3). SSR-safe (runs only after mount) and
+  // reduced-motion-aware: under reduced motion or without IntersectionObserver,
+  // every node is shown immediately so content is never gated by motion.
+  // Auto-fetch live stays + flights whenever a new itinerary becomes ready,
+  // using the captured route, the first/last itinerary day dates and the
+  // traveller count. Each generated trip spends at most two provider searches
+  // (one stays, one flights); the server guards the monthly quota. Nothing is
+  // fabricated: when a field is missing or the provider is unavailable the
+  // section shows a labelled note and falls back to the full search pages.
+  const liveKeyRef = useRef<string>("");
+  useEffect(() => {
+    if (!state) return;
+    const dest = (route.destination || sharedContext.context.destination || "").trim();
+    const orig = (route.origin || sharedContext.context.origin || "").trim();
+    const days = state.itinerary.days;
+    const checkIn = (days[0]?.date || "").trim();
+    const checkOut = (days[days.length - 1]?.date || "").trim();
+    const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+    const staysC = isDate(checkIn) && isDate(checkOut) && checkOut > checkIn && dest
+      ? serializeCriteria({ category: "stays", destination: dest, checkIn, checkOut, guests: travellers, rooms: 1 })
+      : "";
+    const flightsC = isDate(checkIn) && isDate(checkOut) && checkOut > checkIn && dest && orig
+      ? serializeCriteria({ category: "flights", tripType: "round-trip", origin: orig, destination: dest, departDate: checkIn, returnDate: checkOut, travellers, cabin: "economy" })
+      : "";
+    const staysHref = staysC ? `/stays?${staysC}` : "/stays";
+    const flightsHref = flightsC ? `/flights?${flightsC}` : "/flights";
+    const nights = (() => {
+      const a = Date.parse(checkIn), b = Date.parse(checkOut);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return 1;
+      return Math.max(1, Math.round((b - a) / 86_400_000));
+    })();
+    const staysCriteria = dest ? { destination: dest, checkIn, checkOut, adults: travellers, rooms: 1 } : null;
+    const flightsCriteria: FlightBookingCriteria | null = (dest && orig)
+      ? { origin: orig, destination: dest, tripType: "round-trip", departDate: checkIn, returnDate: checkOut, cabin: "economy", travellers }
+      : null;
+    if (!dest || !isDate(checkIn) || !isDate(checkOut)) {
+      setLive({ ...EMPTY_LIVE, status: "ready", staysHref, flightsHref,
+        note: "Add your travel dates and route in the chat to see live stays and flights for this trip." });
+      return;
+    }
+    const key = `${orig}|${dest}|${checkIn}|${checkOut}|${travellers}`;
+    if (liveKeyRef.current === key) return;
+    liveKeyRef.current = key;
+    let cancelled = false;
+    setLive((pv) => ({ ...pv, status: "loading", staysHref, flightsHref, note: null, nights, staysCriteria, flightsCriteria }));
+    const qs = new URLSearchParams({ origin: orig, destination: dest, checkIn, checkOut, travellers: String(travellers), cabin: "economy", tripType: "round-trip" });
+    fetch(`/api/trip-live?${qs.toString()}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: {
+        stays?: { status: string; provider?: string; currency?: string; checkedAt?: string; hotels?: LiveHotel[]; error?: string };
+        flights?: { status: string; provider?: string; currency?: string; checkedAt?: string; insights?: PriceInsights | null; flights?: LiveFlight[]; error?: string };
+      }) => {
+        if (cancelled) return;
+        const hotels = data.stays?.status === "live" ? (data.stays.hotels ?? []) : [];
+        const fl = data.flights?.status === "live" ? (data.flights.flights ?? []) : [];
+        const notes: string[] = [];
+        if (hotels.length === 0) notes.push("live stays");
+        if (fl.length === 0) notes.push("live flights");
+        const checkedAt = data.stays?.checkedAt || data.flights?.checkedAt || new Date().toISOString();
+        setLive({
+          status: "ready", stays: hotels, flights: fl, staysHref, flightsHref,
+          note: notes.length ? `We could not load ${notes.join(" or ")} for these dates right now - open the full search to try again.` : null,
+          staysProvider: data.stays?.provider || "Google Hotels via SerpApi",
+          staysCurrency: data.stays?.currency || "INR",
+          flightsProvider: data.flights?.provider || "Google Flights via SerpApi",
+          flightsCurrency: data.flights?.currency || "INR",
+          checkedAt, checkedLabel: fmtCheckedLabel(checkedAt), nights,
+          insights: data.flights?.insights ?? null, staysCriteria, flightsCriteria,
+        });
+      })
+      .catch(() => { if (!cancelled) setLive((pv) => ({ ...pv, status: "error", staysHref, flightsHref, note: "Live prices are unavailable right now. Open the full search to try again." })); });
+    return () => { cancelled = true; };
+  }, [state, route.destination, route.origin, travellers, sharedContext.context.destination, sharedContext.context.origin]);
+
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!state) return;
+    const root = resultsRef.current;
+    if (!root || typeof window === "undefined") return;
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>(".reveal"));
+    if (nodes.length === 0) return;
+    const prefersReduced =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced || typeof IntersectionObserver === "undefined") {
+      nodes.forEach((n) => n.classList.add("reveal--in"));
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries, obs) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("reveal--in");
+            obs.unobserve(entry.target);
+          }
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px", threshold: 0.12 },
+    );
+    nodes.forEach((n) => observer.observe(n));
+    return () => observer.disconnect();
+  }, [state]);
+
   const _ok = _rc;
   const fare = flightOfferFare(BASE_FLIGHT, travellers);
   const generating = status === "generating";
@@ -373,6 +725,8 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
 
       {!resultsOnly && (
       <section className="planner-chat">
+        {!generating && (
+        <>
         <div className="chat-suggestions" role="group" aria-label="Suggested prompts">
           <span className="chat-suggestions__label">Try one of these</span>
           <div className="chat-suggestions__chips">
@@ -423,27 +777,40 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
             </p>
           )}
         </div>
+        </>
+        )}
 
         {/* Assistant message states: pending/in-progress skeleton while generating (Req 11.3). */}
         {generating && (
-          <div className="card chat-message chat-message--pending motion-rise" aria-live="polite">
-            <span className="chat-message__role">TripGenie is drafting your itinerary</span>
-            <div className="chat-skeleton">
-              <span className="chat-skeleton__line" />
-              <span className="chat-skeleton__line" />
-              <span className="chat-skeleton__line chat-skeleton__line--short" />
-            </div>
+          <div className="planner-drafting" aria-live="polite">
+            <BrandLoader label="Planning your trip" size={160} />
+            <TravelFacts destination={route.destination || sharedContext.context.destination || ""} />
           </div>
         )}
       </section>
       )}
 
       {state && (
-        <div className="grid-2">
+        <div className="grid-2 planner-results" ref={resultsRef}>
           {/* Completed assistant response — itinerary as a structured timeline
               of day-by-day activity cards with location markers and green
               journey indicators (Req 12.1, 12.2). */}
-          <div className="chat-message chat-message--done motion-rise">
+          <div className="chat-message chat-message--done motion-rise planner-results__main">
+            {/* Premium trip cover (Req 6.1): real destination image + overlaid
+                serif title/dates/destination/travellers metadata. Uses only
+                existing planner data; no field is invented. */}
+            <TripCover
+              title={state.itinerary.title}
+              destination={route.destination || sharedContext.context.destination || ""}
+              origin={route.origin || sharedContext.context.origin || ""}
+              dateRange={coverDateRange(state.itinerary.days)}
+              dayCount={state.itinerary.days.length}
+              travellers={
+                sharedContext.context.travellers
+                  ? sharedContext.context.travellers.adults + sharedContext.context.travellers.children
+                  : travellers
+              }
+            />
             <span className="chat-message__role">Here&apos;s your draft itinerary</span>
             <h2 className="planner-itinerary__title">{state.itinerary.title}</h2>
             {/* Every cost is an estimate and no activity is a confirmed booking
@@ -468,6 +835,15 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                   browser-local storage. Compact icon control, not a wide button. */}
               <button
                 type="button"
+                className="btn planner-export-btn"
+                onClick={exportPdf}
+                aria-label="Export this itinerary as a PDF"
+                title="Export as PDF"
+              >
+                Export PDF
+              </button>
+              <button
+                type="button"
                 className="icon-btn planner-save-icon"
                 onClick={saveTrip}
                 disabled={saving}
@@ -485,10 +861,14 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
               <p className="chat-status planner-save-msg" role="status">{saveMsg}</p>
             )}
             <ol className="timeline planner-itinerary">
-              {state.itinerary.days.map((d) => {
+              {state.itinerary.days.map((d, di) => {
                 const isEditing = editing?.day === d.day;
                 return (
-                  <li key={d.day} className="timeline__day">
+                  <li
+                    key={d.day}
+                    className="timeline__day reveal"
+                    style={{ transitionDelay: `calc(var(--anim-stagger-step) * ${Math.min(di, 6)})` }}
+                  >
                     <span className="timeline__marker" aria-hidden="true">
                       {/* Location-pin marker from the Illustration_Library (Req 12.2). */}
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -543,16 +923,12 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                               Edit
                             </button>
                           </div>
-                          {/* Image carousel for THIS day - a day-specific query so
-                              every day pulls its own distinct photos (not one shared image). */}
-                          <LocationCarousel
-                            query={`${d.title} ${d.theme} ${route.destination || sharedContext.context.destination || ""}`.trim()}
-                            seed={d.day}
-                          />
+                          <GooglePlaceMedia query={dayPlaceQuery(d, route.destination || sharedContext.context.destination || "")} />
                           {d.activities.map((a, i) => (
-                            <div key={i} className="row">
+                            <div key={i} className="row planner-day__activity" tabIndex={0}>
                               <span>
                                 <strong>{a.time}</strong> {a.title}
+                                {a.description ? <span className="planner-day__activity-hint">{a.description}</span> : null}
                               </span>
                               <span>{INR(a.cost)}</span>
                             </div>
@@ -562,31 +938,42 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                             <span>{INR(d.total)}</span>
                           </div>
                           <div className="timeline__actions">
-                            <button
-                              type="button"
-                              className="cta timeline__add-btn"
-                              onClick={() => addActivity(d.day)}
-                            >
-                              Add activity
-                            </button>
                             {/* Day-level budget edit via refineItinerary — revises
                                 only this day's total, leaving unedited days
                                 untouched (Req 8.3). Reuses existing `btn` class. */}
                             <button
                               type="button"
-                              className="btn"
-                              onClick={() => refineDay(d.day, DAY_BUDGET_STEP)}
+                              className="btn timeline__editday-btn"
+                              onClick={() => setEditDayOpen(editDayOpen === d.day ? null : d.day)}
                             >
-                              Raise budget
+                              Edit Day
                             </button>
                             <button
                               type="button"
-                              className="btn"
-                              onClick={() => refineDay(d.day, -DAY_BUDGET_STEP)}
+                              className="btn timeline__know-btn"
+                              onClick={() => setKnowMoreDay(d.day)}
                             >
-                              Lower budget
+                              Know more
                             </button>
                           </div>
+                          {editDayOpen === d.day && (
+                            <EditDayPanel
+                              seedQuery={dayPlaceQuery(d, route.destination || sharedContext.context.destination || "")}
+                              destination={route.destination || sharedContext.context.destination || ""}
+                              theme={d.theme}
+                              activities={d.activities}
+                              onAdd={(name) => addNamedPlace(d.day, name)}
+                              onRemove={(idx) => removeDayActivity(d.day, idx)}
+                              onClose={() => setEditDayOpen(null)}
+                            />
+                          )}
+                          {knowMoreDay === d.day && (
+                            <DayDetailModal
+                              day={d}
+                              destination={route.destination || sharedContext.context.destination || ""}
+                              onClose={() => setKnowMoreDay(null)}
+                            />
+                          )}
                         </>
                       )}
                     </article>
@@ -594,9 +981,56 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                 );
               })}
             </ol>
+
+            {/* Live stays + flights for this trip (Google Hotels / Google
+                Flights via SerpApi). Auto-fetched once the itinerary is ready;
+                every price is real and links through to the full search. */}
+            <section className="trip-live reveal" aria-label="Live prices for this trip">
+              <div className="trip-live__head">
+                <h3 className="trip-live__title">Live prices for your trip</h3>
+                <p className="eyebrow">Real stays and flights for your dates - book on the provider's site</p>
+              </div>
+              {live.status === "loading" ? (
+                <BrandLoader label="Fetching live stays and flights for your trip" size={130} />
+              ) : (
+                <div className="trip-live__sections">
+                  <a className="trip-live__card" href={live.staysHref}>
+                    <div className="trip-live__card-head">
+                      <h4 className="trip-live__coltitle">Stays</h4>
+                      <span className="trip-live__card-go">Open full search {"→"}</span>
+                    </div>
+                    {live.stays.length > 0 ? (
+                      <p className="trip-live__card-meta">
+                        {live.stays.length} live {live.stays.length === 1 ? "stay" : "stays"} for your dates {"·"} from{" "}
+                        <strong>{INR_FMT.format(Math.min(...live.stays.map((h) => h.ratePerNight)))}</strong> / night
+                      </p>
+                    ) : (
+                      <p className="trip-live__card-meta">Open the full stays search for live prices.</p>
+                    )}
+                  </a>
+                  <a className="trip-live__card" href={live.flightsHref}>
+                    <div className="trip-live__card-head">
+                      <h4 className="trip-live__coltitle">Flights</h4>
+                      <span className="trip-live__card-go">Open full search {"→"}</span>
+                    </div>
+                    {live.flights.length > 0 ? (
+                      <p className="trip-live__card-meta">
+                        {live.flights.length} live {live.flights.length === 1 ? "fare" : "fares"} for your route {"·"} from{" "}
+                        <strong>{INR_FMT.format(Math.min(...live.flights.map((f) => f.farePerPerson)))}</strong> / person
+                      </p>
+                    ) : (
+                      <p className="trip-live__card-meta">Open the full flights search for live fares.</p>
+                    )}
+                  </a>
+                </div>
+              )}
+              {live.note && (
+                <p className="trip-live__note" role="status">{live.note}</p>
+              )}
+            </section>
           </div>
 
-          <aside className="card planner-summary">
+          <aside className="card planner-summary planner-results__aside reveal">
             <h3 className="planner-summary__title">Trip summary</h3>
             <p className="lead planner-summary__route">
               {route.origin || "-"} to {route.destination}

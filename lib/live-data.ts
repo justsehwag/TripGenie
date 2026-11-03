@@ -121,7 +121,33 @@ export async function fetchDestination(
   return resolveLive<DestinationInfo>(
     LIVE_SOURCES.destination,
     async () => {
-      const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city)}`;
+      // Resolve the free-text query (which may be "City, Region, Country") to a
+      // real Wikipedia page title FIRST. The REST summary endpoint needs an
+      // exact title, so searching first lets ANY typed place (e.g. "Sabarimala,
+      // Keralam, India") resolve to real live content instead of a 404 fallback.
+      const primary = city.split(",")[0]?.trim() || city;
+      let resolvedTitle = primary;
+      try {
+        const searchUrl = new URL("https://en.wikipedia.org/w/api.php");
+        searchUrl.search = new URLSearchParams({
+          action: "query",
+          list: "search",
+          srsearch: primary,
+          srlimit: "1",
+          format: "json",
+          origin: "*",
+        }).toString();
+        const searchData = (await readJson(searchUrl.toString(), fetchImpl)) as {
+          query?: { search?: Array<{ title?: string }> };
+        };
+        const hit = searchData.query?.search?.[0]?.title?.trim();
+        if (hit && hit.length > 0) resolvedTitle = hit;
+      } catch {
+        // Search is best-effort; fall back to the primary term for the summary.
+        resolvedTitle = primary;
+      }
+
+      const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(resolvedTitle)}`;
       const data = (await readJson(summaryUrl, fetchImpl)) as {
         title?: string;
         extract?: string;
@@ -131,7 +157,7 @@ export async function fetchDestination(
       placesUrl.search = new URLSearchParams({
         action: "query",
         generator: "search",
-        gsrsearch: `${city} landmarks attractions tourism`,
+        gsrsearch: `${resolvedTitle} landmarks attractions tourism`,
         gsrlimit: "6",
         prop: "info",
         format: "json",
@@ -152,8 +178,8 @@ export async function fetchDestination(
       }
 
       return {
-        name: data.title?.trim() || city,
-        summary: data.extract?.slice(0, 360) || `Explore ${city}.`,
+        name: data.title?.trim() || primary,
+        summary: data.extract?.slice(0, 600) || `Explore ${primary}.`,
         places,
       };
     },

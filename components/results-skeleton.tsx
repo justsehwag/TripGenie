@@ -12,6 +12,8 @@
  * It is purely presentational and announces its busy state to assistive tech
  * with an aria-busy live region.
  */
+import BrandLoader from "@/components/brand-loader";
+
 export default function ResultsSkeleton({
   eyebrow = "Searching",
   cards = 6,
@@ -26,6 +28,9 @@ export default function ResultsSkeleton({
       aria-live="polite"
       aria-label={`${eyebrow} — loading results`}
     >
+      <div className="skeleton__loader">
+        <BrandLoader label={`${eyebrow} \u2014 finding the best options`} />
+      </div>
       <div className="skeleton__block skeleton__block--eyebrow" />
       <div className="skeleton__block skeleton__block--title" />
       <div className="skeleton__block skeleton__block--line" />

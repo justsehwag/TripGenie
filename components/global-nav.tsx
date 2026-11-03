@@ -65,6 +65,19 @@ export default function GlobalNav({
   // Mobile compact menu state (Req 21.6). Collapsed by default.
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Subtle elevation-on-scroll: a cheap client-only flag toggled by a passive
+  // scroll listener. SSR renders the unscrolled bar (flag false), so there is
+  // no hydration mismatch; the shadow is a pure CSS transition keyed off the
+  // `is-scrolled` class. Guarded on `typeof window` and uses a passive listener.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   // Browser-local session bridge: the in-app sign-in form writes
   // "tripgenie.session" to localStorage. The server layout cannot read that, so
   // the client nav hydrates from it on mount and whenever storage changes (e.g.
@@ -130,7 +143,7 @@ export default function GlobalNav({
     "Explorer";
 
   return (
-    <header className="site-nav">
+    <header className={`site-nav${scrolled ? " is-scrolled" : ""}`}>
       <nav className="site-nav__bar shell" aria-label="Primary">
         <Link href="/" className="site-nav__logo" aria-label="TripGenie home">
           {/*

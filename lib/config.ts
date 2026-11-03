@@ -12,6 +12,8 @@
  * Requirements: 19.1 (serverless-first bindings), 17.3 (no inlined secrets).
  */
 
+import { parseSoftLimit } from "@/lib/providers/provider-store";
+
 function env(name: string, fallback: string): string {
   const value = process.env[name];
   return value && value.trim().length > 0 ? value.trim() : fallback;
@@ -136,3 +138,45 @@ export function loadAwsConfig(): AwsConfig {
 
 /** Singleton config loaded once from the environment. */
 export const awsConfig: AwsConfig = loadAwsConfig();
+
+/**
+ * Server-only accessor for the Google Places API key.
+ *
+ * Reads the key from the `GOOGLE_PLACES_API_KEY` env var (a secret, so it is
+ * deliberately NOT prefixed with `NEXT_PUBLIC_`) via the same `env` helper used
+ * for the non-secret bindings above (Req 1.3). Returns "" when unconfigured so
+ * callers degrade to a labelled fallback and issue no outbound request
+ * (Req 10.4).
+ *
+ * This value is intentionally kept off the `AwsConfig` interface and the
+ * exported `awsConfig` object: it is a secret and must never be serialized into
+ * any response or reach the client bundle (Req 1.4). Import this accessor from
+ * server-only code paths only.
+ */
+export function googlePlacesApiKey(): string {
+  return env("GOOGLE_PLACES_API_KEY", "");
+}
+
+/**
+ * Server-only accessor for the SerpApi key (Google Hotels live pricing).
+ *
+ * Reads `SERPAPI_API_KEY` (a secret; deliberately NOT `NEXT_PUBLIC_`). Returns
+ * "" when unconfigured so callers fall back to labelled estimates and issue no
+ * outbound request. Never serialize this value into a response or the client
+ * bundle; import it from server-only code paths only.
+ */
+export function serpApiKey(): string {
+  return env("SERPAPI_API_KEY", "");
+}
+
+/**
+ * Server-only accessor for the SerpApi monthly soft limit (usage guard).
+ *
+ * Reads `SERPAPI_MONTHLY_SOFT_LIMIT`; a positive integer is used as-is, any
+ * other value (unset, blank, zero, negative, non-numeric) falls back to the
+ * default (Req 8.2, 8.3). Kept off `AwsConfig` like the other provider
+ * settings so it is never serialized into a response (Req 8.7).
+ */
+export function serpApiMonthlySoftLimit(): number {
+  return parseSoftLimit(process.env.SERPAPI_MONTHLY_SOFT_LIMIT);
+}

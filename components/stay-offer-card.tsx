@@ -26,17 +26,37 @@ export interface StayOfferCardProps {
   /** Query string of the active criteria, forwarded to the detail link so the
    *  detail page reproduces the same result set (Req 7.5). */
   criteriaQuery: string;
+  /**
+   * Optional AI's pick marker supplied by the Pick_Engine when this estimate is
+   * the recommended stay (Req 14.3, 15.2, 21.3). Purely additive: when absent
+   * the card renders exactly as before, so every existing caller keeps working.
+   */
+  pick?: { reason: string };
 }
 
-export default function StayOfferCard({ offer, criteriaQuery }: StayOfferCardProps) {
+export default function StayOfferCard({ offer, criteriaQuery, pick }: StayOfferCardProps) {
   const nights = Math.max(1, offer.nights);
   const total = offer.pricePerNight * nights;
-  const href = criteriaQuery
-    ? `/stays/${encodeURIComponent(offer.id)}?${criteriaQuery}`
+  // Carry the offer's stay style on the detail link so /stays/[id] can locate
+  // this exact offer within a mixed-style estimate set (Req 21.3). StayOffer
+  // always has a stayStyle field, so it is appended whenever present.
+  const styleParam = offer.stayStyle
+    ? `stayStyle=${encodeURIComponent(offer.stayStyle)}`
+    : "";
+  const query = [criteriaQuery, styleParam].filter(Boolean).join("&");
+  const href = query
+    ? `/stays/${encodeURIComponent(offer.id)}?${query}`
     : `/stays/${encodeURIComponent(offer.id)}`;
 
   return (
     <article className="card offer-card motion-rise">
+      {pick ? (
+        <div className="offer-card__pick">
+          <span className="ai-pick-badge">AI's pick</span>
+          <span className="stay-card__reason">{pick.reason}</span>
+        </div>
+      ) : null}
+
       <Link href={href} className="offer-card__link">
         <h3 className="offer-card__title">
           {offer.stayStyle} stay in {offer.destination}

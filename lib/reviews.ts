@@ -116,3 +116,29 @@ export function summarizeReviews(
     note: `${count} verified ${count === 1 ? "review" : "reviews"} via ${source}.`,
   };
 }
+
+// Type-only import of the live enrichment shape. google-places.ts already
+// imports `ProviderReview` from this module (a value-free type import), so this
+// pairing is a TYPES-ONLY cycle: `import type` is erased at compile time and
+// produces no runtime `require`/`import`, so no runtime circular dependency is
+// created (design "Components and Interfaces §3").
+import type { PlaceEnrichment } from "@/lib/providers/google-places";
+
+/**
+ * Map a live Google `PlaceEnrichment` into the existing `ProviderReviewPayload`
+ * (FR-3.1, 3.3-3.5). This is PURELY the mapping - it duplicates no attribution
+ * or normalization logic. `summarizeReviews` remains the sole authority for the
+ * verified / no-verified-reviews decision; this function only sets `verified`
+ * as a hint (`reviews.length > 0`) and hands the raw payload across. The score
+ * and count are passed through verbatim and are never fabricated here.
+ */
+export function toReviewPayload(e: PlaceEnrichment): ProviderReviewPayload {
+  return {
+    provider: "Google", // Req 3.1 - attribution
+    score: e.rating, // score = rating (passed through, may be null)
+    count: e.userRatingCount, // count = userRatingCount (passed through, may be null)
+    verified: e.reviews.length > 0, // engine renders only if verified AND has items
+    reviews: e.reviews, // { author, rating, text, publishedAt }
+    fetchedAt: new Date().toISOString(),
+  };
+}

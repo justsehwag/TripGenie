@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>Loading animation preview</title>
+<style>body{margin:0;font:14px system-ui;display:flex;gap:32px;padding:32px;background:#F2FDF0;flex-wrap:wrap}
+figure{margin:0;text-align:center}figcaption{margin-top:8px;color:#555}</style>
+<figure><div id="lottie" style="width:292px;height:218px"></div><figcaption>loading.json (Lottie)</figcaption></figure>
+<figure><img src="loading.svg" width="292" height="218" alt=""><figcaption>loading.svg (animated SVG)</figcaption></figure>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+<script>lottie.loadAnimation({container:document.getElementById('lottie'),renderer:'svg',loop:true,autoplay:true,path:'loading.json'})</script>

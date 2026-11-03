@@ -18,8 +18,22 @@
 import Link from "next/link";
 import { parseCriteria, serializeCriteria, type StaysCriteria } from "@/lib/search-criteria";
 import { runSearch } from "@/lib/search";
-import type { InventoryQuery } from "@/lib/inventory-adapter";
+import { toAttributableReview, type AttributableReview, type InventoryQuery } from "@/lib/inventory-adapter";
+import { enrichPlace } from "@/lib/providers/google-places";
 import { ProvenanceLabel, EstimatedNotice } from "@/components/offer-provenance";
+
+/**
+ * Indicative Price_Level_Band labels for Google's 0-4 priceLevel band
+ * (Req 6.6). These are shown ONLY as an indicative caption and MUST NEVER be
+ * presented as a bookable price or a currency amount (Req 6.7). `null` -> omit.
+ */
+const PRICE_LEVEL_LABEL: Record<number, string> = {
+  0: "Free",
+  1: "Inexpensive",
+  2: "Moderate",
+  3: "Expensive",
+  4: "Very expensive",
+};
 
 export const metadata = { title: "Stay detail - TripGenie" };
 
@@ -90,6 +104,50 @@ export default async function StayDetailPage({
     stayStyle,
     nights: nightsBetween(criteria.checkIn, criteria.checkOut),
   };
+
+  // Google Places enrichment (google-places-integration design §5 "Stays
+  // enrichment"; Req 6.1-6.7, 10.3). This is a SERVER component, so we call the
+  // server-only `enrichPlace` directly with `await`; the Google key is read
+  // internally via `googlePlacesApiKey()` and never reaches the client.
+  //
+  // Query choice: the synthetic property name `${stayStyle} stay in
+  // ${destination}` is not a real place Google can match, so we enrich a
+  // generic stay in the destination to obtain a meaningful, attributable
+  // rating/review signal. Real hotel-name matching will improve once real
+  // inventory supplies property names — out of scope for this task.
+  //
+  // Scope: this task enriches the single matched property on the Detail_Page
+  // only. The stays results LIST (app/stays/page.tsx) is intentionally NOT
+  // enriched here because that would call Google once per listed offer, a
+  // cost/latency concern (Req 9). See TODO below.
+  // TODO(results-list): thread a single shared enrichment through the stays
+  // results path if/when per-row Google enrichment is justified under Req 9.
+  const enrichment = await enrichPlace({ query: `hotel in ${criteria.destination}` });
+
+  // Only a live/cached enrichment with real attributable data populates the
+  // existing seam. `toAttributableReview` returns an `AttributableReview`
+  // (source already set to "Google") iff a rating, a positive user rating
+  // count, AND at least one review are present; otherwise `undefined`
+  // (Req 6.2-6.5). Setting `query.review` lets the inventory adapter's
+  // `meta()` render it into `offer.meta.reviewSummary` via the existing
+  // `attributable()` gate — no attribution logic is duplicated here.
+  //
+  // Note: a cache HIT (`mode: "cached"`) carries `reviews: []` by design
+  // (reviews are never cached), so `toAttributableReview` returns `undefined`
+  // and the stay keeps its estimated labelling — exactly the fallback render
+  // (Req 6.4, 6.5, 10.3).
+  let googleReview: AttributableReview | undefined;
+  let priceLevelLabel: string | null = null;
+  if (enrichment.data) {
+    googleReview = toAttributableReview(enrichment.data);
+    if (enrichment.data.priceLevel !== null) {
+      priceLevelLabel = PRICE_LEVEL_LABEL[enrichment.data.priceLevel] ?? null;
+    }
+  }
+  if (googleReview) {
+    query.review = googleReview;
+  }
+
   const result = runSearch(query);
   const offer = result.hotels.find((o) => o.id === id);
   const criteriaQuery = serializeCriteria(criteria);
@@ -176,7 +234,10 @@ export default async function StayDetailPage({
           </ul>
         </div>
 
-        {/* Review content ONLY when attributable (Req 23.9, 4.12/4.13). */}
+        {/* Review content ONLY when attributable (Req 23.9, 4.12/4.13). When a
+            live Google enrichment supplied an AttributableReview above, this is
+            the Google rating/count attributed to "Google" via the existing
+            offer.meta.reviewSummary seam (Req 6.2, 6.3). */}
         {offer.meta.reviewSummary ? (
           <div className="detail__reviews">
             <h2>Guest reviews</h2>
@@ -189,6 +250,17 @@ export default async function StayDetailPage({
         ) : (
           <p className="detail__no-reviews">No attributable guest reviews are available for this stay.</p>
         )}
+
+        {/* Indicative Price_Level_Band ONLY (Req 6.6). This is a coarse band
+            from Google, clearly labelled indicative; it is NOT a bookable price
+            and carries NO currency figure (Req 6.7). The bookable per-night and
+            total amounts above come solely from the estimator and are never
+            touched by Google data. */}
+        {priceLevelLabel ? (
+          <p className="detail__price-band">
+            Price level (indicative, not a bookable price): {priceLevelLabel} · Source: Google
+          </p>
+        ) : null}
 
         <ProvenanceLabel meta={offer.meta} />
         <EstimatedNotice meta={offer.meta} />

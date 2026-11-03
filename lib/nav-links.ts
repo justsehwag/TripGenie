@@ -15,14 +15,13 @@ export interface NavLink {
 }
 
 export const NAV_LINKS: readonly NavLink[] = [
+  { label: "Discover", href: "/discover" },
   { label: "AI Travel Assistant", href: "/plan" },
   { label: "Your Plan", href: "/itinerary" },
-  { label: "Discover", href: "/discover" },
-  { label: "Flights", href: "/flights" },
   { label: "Stays", href: "/stays" },
+  { label: "Flights", href: "/flights" },
   { label: "My Trips", href: "/trips" },
 ] as const;
 
 /** The account landing route the sign-in control resolves to (Req 29.4). */
 export const ACCOUNT_HREF = "/account";
-

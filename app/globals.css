@@ -21,6 +21,9 @@
   --color-soft-green: #C8F2DF;
   --color-light-border: #E8ECE9;
   --color-muted-bg: #F8FBF9;
+  --color-deep-pine: #1C2A25;
+  --color-warm-sand: #FBF7F0;
+  --color-emerald-tint: #D3F3E6;
 
   /* ── Typography scale (TYPOGRAPHY_SCALE) ───────────────────────────── */
   --type-hero-size: 56px;
@@ -95,18 +98,29 @@
   --motion-max: 400ms;
   --motion-normal: 400ms;
   --motion-reduced: 200ms;
+  --motion-fast: 160ms;
+  --motion-panel: 240ms;
+  --motion-standard: 280ms;
 
   /* ── Non-token helpers (OUTSIDE the token mirror; different prefix) ──── */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-pill: 999px;
+  --radius-xl: 24px;
   --shadow-sm: 0 1px 2px rgba(38, 51, 47, 0.06);
   --shadow-md: 0 6px 20px rgba(38, 51, 47, 0.08);
   --shadow-lg: 0 16px 40px rgba(38, 51, 47, 0.1);
-  /* Easing helper — intentionally NOT under the --motion- token prefix so it
-     stays out of the token<->CSS mirror (task-4 consistency bijection). */
+  --shadow-xl: 0 24px 60px rgba(28,42,37,0.14);
+  --elevation-hover: 0 12px 30px rgba(28,42,37,0.12);
+  /* Easing helpers — intentionally NOT under the --motion- token prefix so they
+     stay out of the token<->CSS mirror (task-4 consistency bijection). */
   --ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-emphasis: cubic-bezier(0.16, 0.84, 0.24, 1);
+  --anim-stagger-step: 70ms;
+  --anim-reveal-shift: 24px;
+  --gradient-image-scrim: linear-gradient(180deg, rgba(28,42,37,0) 40%, rgba(28,42,37,0.62) 100%);
+  --surface-editorial: var(--color-warm-sand);
 }
 
 * { box-sizing: border-box; }
@@ -315,6 +329,12 @@ h3 {
     animation-duration: var(--motion-reduced);
     animation-timing-function: linear;
   }
+  /* Active-link underline: snap to final state, no scaleX animation. */
+  .site-nav__link::after {
+    transition: none;
+  }
+  .site-nav__link:hover::after { transform: scaleX(0); }
+  .site-nav__link.is-active::after { transform: scaleX(1); }
 }
 
 /* ===========================================================================
@@ -860,6 +880,15 @@ textarea:focus-visible,
   z-index: 50;
   background: var(--color-background);
   border-bottom: 1px solid var(--color-light-border);
+  /* Subtle elevation-on-scroll: shadow only, transitioned (no layout change). */
+  box-shadow: 0 0 0 rgba(28, 42, 37, 0);
+  transition: box-shadow var(--motion-standard) var(--ease-standard);
+}
+/* Client flag (components/global-nav.tsx) lifts the bar off the page once the
+   traveler scrolls; purely a box-shadow transition, SSR-safe. */
+.site-nav.is-scrolled {
+  box-shadow: var(--shadow-md);
+  border-bottom-color: transparent;
 }
 .site-nav__bar {
   display: flex;
@@ -895,20 +924,40 @@ textarea:focus-visible,
   padding: 0;
 }
 .site-nav__link {
+  position: relative;
   color: var(--color-secondary-text);
   text-decoration: none;
   font-size: var(--type-nav-size);
   line-height: var(--type-nav-line);
+  letter-spacing: var(--type-nav-spacing);
   font-weight: 600;
   padding: 0.35rem 0;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
+  transition: color var(--motion-fast) var(--ease-standard);
 }
 .site-nav__link:hover { color: var(--color-primary-text); }
+/* Animated active-link underline: a scaleX bar that grows from the left.
+   This is a transform transition (no layout change); the transparent
+   border-bottom above reserves the space so the row never shifts. */
+.site-nav__link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  background: var(--color-primary-green);
+  border-radius: var(--radius-pill);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--motion-standard) var(--ease-emphasis);
+}
+.site-nav__link:hover::after { transform: scaleX(0.4); }
 .site-nav__link.is-active {
   color: var(--color-deep-emerald);
-  border-bottom-color: var(--color-primary-green);
 }
+.site-nav__link.is-active::after { transform: scaleX(1); }
 .site-nav__account {
   display: inline-flex;
   align-items: center;
@@ -986,11 +1035,11 @@ textarea:focus-visible,
     border-bottom: 1px solid var(--color-light-border);
     box-shadow: var(--shadow-md);
   }
-  /* Mobile menu open — opacity + transform appearance transition (Req 16.3),
-     bounded by --motion-normal with a non-linear ease. */
+  /* Mobile menu open — panel-motion entrance (opacity + small transform),
+     bounded by --motion-panel with an emphasis ease to match the overlay band. */
   .site-nav__controls.is-open {
     display: flex;
-    animation: menu-drop var(--motion-normal) var(--ease-standard) both;
+    animation: menu-drop var(--motion-panel) var(--ease-emphasis) both;
   }
   .site-nav__links { flex-direction: column; align-items: stretch; gap: 0.25rem; }
   .site-nav__link { padding: 0.6rem 0; border-bottom: 1px solid var(--color-light-border); }
@@ -1003,7 +1052,9 @@ textarea:focus-visible,
    =========================================================================== */
 .site-footer {
   margin-top: var(--space-xxl);
-  background: var(--color-muted-bg);
+  /* Editorial warm-sand band — a distinct closing surface, set off from the
+     page with a crisp hairline top rule. */
+  background: var(--surface-editorial);
   border-top: 1px solid var(--color-light-border);
   color: var(--color-primary-text);
   font-family: var(--font-body);
@@ -1011,7 +1062,7 @@ textarea:focus-visible,
 .site-footer__inner {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-xl);
+  gap: var(--space-xxl);
   padding-top: var(--space-xxl);
   padding-bottom: var(--space-xl);
 }
@@ -1039,10 +1090,10 @@ textarea:focus-visible,
 .site-footer__sections {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-xl);
+  gap: var(--space-xxl);
   flex: 2 1 360px;
 }
-.site-footer__section { min-width: 120px; }
+.site-footer__section { min-width: 140px; }
 .site-footer__heading {
   font-family: var(--font-body);
   text-transform: uppercase;
@@ -1050,14 +1101,15 @@ textarea:focus-visible,
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
   color: var(--color-deep-emerald);
-  margin: 0 0 0.9rem;
+  margin: 0 0 var(--space-md);
 }
 .site-footer__links { list-style: none; margin: 0; padding: 0; }
-.site-footer__links li { margin-bottom: 0.55rem; }
+.site-footer__links li { margin-bottom: var(--space-sm); }
 .site-footer__link {
   color: var(--color-secondary-text);
   text-decoration: none;
   font-size: var(--type-nav-size);
+  transition: color var(--motion-fast) var(--ease-standard);
 }
 .site-footer__link:hover { color: var(--color-primary-text); }
 .site-footer__disclosure {
@@ -3461,6 +3513,20 @@ p, h1, h2, h3, li, dd, dt, a, span, .lead, .section-sub,
 .disc-detail__subhead { margin: var(--space-md) 0 var(--space-xs); font-size: var(--type-label-size); }
 .disc-detail__places { margin: 0; padding-left: 1.1rem; color: var(--color-secondary-text); }
 .disc-detail__cta { margin-top: var(--space-lg); }
+/* Top action bar inside the detail panel: Add-to-trip (left) + Close (right). */
+.disc-detail__topbar {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-background);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-text) 10%, transparent);
+}
+.disc-detail__add { white-space: nowrap; }
+/* Override the old absolute close; it now lives in the flex topbar. */
+.disc-detail__close { position: static; top: auto; right: auto; }
+/* Gallery adapts to 1-4 high-res photos without stretching a single image. */
+.disc-detail__gallery { grid-auto-rows: clamp(10rem, 26vw, 16rem); }
+.disc-detail__gallery:has(.disc-detail__img:only-child) { grid-template-columns: 1fr; }
 
 /* Search bar + map-style results. */
 .disc-search { margin-top: var(--space-xl); }
@@ -3747,3 +3813,2920 @@ p, h1, h2, h3, li, dd, dt, a, span, .lead, .section-sub,
   box-shadow: 0 0 0 2px rgba(22, 185, 130, 0.25);
 }
 .site-nav__avatar svg { width: 100%; height: 100%; display: block; }
+/* ===========================================================================
+   Google Places enrichment + wider plan/discover surfaces (additive).
+   Added for: realtime autocomplete, large plan photos, full-width layout.
+   Scoped to the plan + discover surfaces so text-heavy pages keep readable
+   line lengths; the widening is gentle (fluid, capped) so it never reads as an
+   abrupt stretch.
+   =========================================================================== */
+
+/* Wider, gutter-respecting container for the itinerary/plan + discover pages.
+   Uses min() so it fills the viewport (minus comfortable gutters) without an
+   obvious hard max edge on common laptop/desktop widths. */
+.shell.disc,
+main.shell:has(.planner-itinerary) {
+  max-width: min(1680px, 94vw);
+}
+
+/* The plan's two-column grid widens its media column so the large photos have
+   room; collapses as before at <=1023px via the existing .grid-2 rule. */
+main.shell:has(.planner-itinerary) .grid-2 { grid-template-columns: 1.35fr 0.65fr; }
+
+/* ----- GooglePlaceMedia: large, soft rectangular hero + thumb strip ----- */
+.gpm { margin: var(--space-sm) 0 var(--space-md); }
+.gpm__hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-muted-bg);
+  box-shadow: var(--shadow-md);
+}
+.gpm__hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gpm__rating {
+  position: absolute; top: var(--space-sm); left: var(--space-sm);
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: var(--radius-pill);
+  background: rgba(0,0,0,0.62); color: #fff; font-size: var(--type-label-size); font-weight: 600;
+}
+.gpm__rating svg { color: #ffc531; }
+.gpm__brand {
+  position: absolute; bottom: var(--space-sm); right: var(--space-sm);
+  padding: 2px 8px; border-radius: var(--radius-pill);
+  background: rgba(255,255,255,0.9); color: var(--color-secondary-text);
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em;
+}
+.gpm__thumbs { display: flex; gap: var(--space-xs); margin-top: var(--space-xs); overflow-x: auto; padding-bottom: 2px; }
+.gpm__thumb {
+  flex: 0 0 auto; width: 72px; height: 54px; padding: 0; border-radius: var(--radius-md);
+  overflow: hidden; border: 2px solid transparent; background: var(--color-muted-bg); cursor: pointer;
+}
+.gpm__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gpm__thumb.is-active { border-color: var(--color-primary-green); }
+.gpm__thumb:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+.gpm__reviews { margin-top: var(--space-sm); }
+.gpm__reviews-toggle {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--color-deep-emerald); font-weight: 600; font-size: var(--type-label-size);
+}
+.gpm__reviews-toggle:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+.gpm__reviews-list { list-style: none; margin: var(--space-sm) 0 0; padding: 0; display: grid; gap: var(--space-sm); }
+.gpm__review { background: var(--color-muted-bg); border-radius: var(--radius-md); padding: var(--space-sm); }
+.gpm__review-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.gpm__review-author { font-weight: 600; font-size: var(--type-label-size); }
+.gpm__review-rating { color: #d9a400; font-weight: 600; font-size: var(--type-label-size); }
+.gpm__review-text {
+  margin: 4px 0 0; font-size: var(--type-body-size); color: var(--color-secondary-text);
+  display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.gpm__attribution { font-size: 0.7rem; color: var(--color-secondary-text); opacity: 0.8; }
+
+/* ----- Discover realtime autocomplete dropdown ----- */
+.disc-search__wrap { position: relative; }
+.disc-ac {
+  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30;
+  list-style: none; margin: 0; padding: var(--space-xs);
+  background: var(--color-background); border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg); max-height: 360px; overflow-y: auto;
+}
+.disc-ac__item { margin: 0; }
+.disc-ac__btn {
+  display: flex; align-items: center; gap: var(--space-sm); width: 100%;
+  padding: var(--space-sm); border: none; background: none; cursor: pointer; text-align: left;
+  border-radius: var(--radius-sm); color: var(--color-primary-text);
+}
+.disc-ac__btn:hover, .disc-ac__btn:focus-visible { background: var(--color-muted-bg); outline: none; }
+.disc-ac__icon { color: var(--color-deep-emerald); display: inline-flex; }
+.disc-ac__text { display: flex; flex-direction: column; min-width: 0; }
+.disc-ac__primary { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.disc-ac__secondary { font-size: var(--type-label-size); color: var(--color-secondary-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.disc-ac__brand { padding: 6px var(--space-sm) 2px; font-size: 0.7rem; color: var(--color-secondary-text); opacity: 0.7; text-align: right; }
+
+/* ===========================================================================
+   Wide, gap-free layout pass (nav, footer, and all pages share one width).
+   Overrides the earlier 1120px .shell cap so the navbar, footer, and page
+   content all align at the same comfortable wide width with no empty side
+   bands. Fluid (min of a cap and the viewport) so it never reads as an abrupt
+   stretch and still leaves gentle gutters on ultra-wide displays.
+   =========================================================================== */
+.shell {
+  max-width: min(1600px, 92vw);
+}
+/* The plan + discover surfaces can breathe a touch wider for the large media. */
+.shell.disc,
+main.shell:has(.planner-itinerary) {
+  max-width: min(1720px, 94vw);
+}
+
+/* Save control row: keep the AI-regenerate CTA on the left and the save icon
+   aligned to it on the right, vertically centred (fixes the misplaced save). */
+.chat-message--done .timeline__actions:first-of-type {
+  align-items: center;
+}
+.planner-save-icon {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+}
+.planner-save-msg { margin-top: var(--space-xs); }
+
+/* Crisp Google hero: the high-res proxy width (w=1280) plus these hints keep
+   the large 16:9 photo sharp instead of upscaled/blurry. */
+.gpm__hero-img { image-rendering: auto; }
+@media (min-width: 1024px) {
+  /* Give the hero real pixels on desktop so it is never upscaled. */
+  .gpm__hero { aspect-ratio: 16 / 9; }
+}
+
+/* ===========================================================================
+   GooglePlaceMedia cross-fade hero + itinerary image-left / content-right.
+   =========================================================================== */
+/* Stack all hero photos; only the active one is visible (cross-fade every 5s). */
+.gpm__hero { position: relative; }
+.gpm__hero-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: 0; transition: opacity 700ms ease; display: block;
+}
+.gpm__hero-img.is-active { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .gpm__hero-img { transition: none; } }
+
+/* Itinerary day card: image column on the LEFT, content on the RIGHT, filling
+   the width with no empty band. The GooglePlaceMedia block spans the left; the
+   day head + activities + actions sit on the right. Collapses to a single
+   column on narrow screens. */
+.planner-day.timeline__card {
+  display: grid;
+  grid-template-columns: minmax(300px, 40%) 1fr;
+  column-gap: var(--space-lg);
+  row-gap: var(--space-xs);
+  align-items: start;
+}
+/* LEFT column: the media block spans every row of this card (one image column
+   beside the whole content stack). It is always the FIRST child. */
+.planner-day.timeline__card > .gpm {
+  grid-column: 1;
+  grid-row: 1 / span 30;
+  align-self: stretch;
+  margin: 0;
+  min-width: 0;
+}
+/* RIGHT column: every non-media child (head, each activity row, day total,
+   actions) flows normally, stacked in source order. No shared grid-area, so
+   nothing overlaps. */
+.planner-day.timeline__card > :not(.gpm) {
+  grid-column: 2;
+  min-width: 0;
+}
+/* The media hero fills the left column height in the side-by-side layout. */
+.planner-day.timeline__card .gpm__hero { height: 260px; min-height: 0; aspect-ratio: auto; }
+
+@media (max-width: 1023px) {
+  /* Single column: image on top, content below; everything spans column 1. */
+  .planner-day.timeline__card { grid-template-columns: 1fr; }
+  .planner-day.timeline__card > .gpm { grid-column: 1; grid-row: auto; }
+  .planner-day.timeline__card > :not(.gpm) { grid-column: 1; }
+  .planner-day.timeline__card .gpm__hero { min-height: 200px; aspect-ratio: 16 / 9; }
+}
+
+/* ===========================================================================
+   Itinerary: Trip summary moves to the BOTTOM (full width), below the whole
+   day-by-day plan - not beside it. The results grid becomes a single column so
+   the itinerary spans the full width and the summary stacks underneath.
+   =========================================================================== */
+main.shell:has(.planner-itinerary) .grid-2 {
+  grid-template-columns: 1fr;
+}
+/* The summary is no longer a sticky side rail; it sits inline at the bottom. */
+main.shell:has(.planner-itinerary) .planner-summary {
+  position: static;
+  top: auto;
+  margin-top: var(--space-lg);
+}
+
+/* ===========================================================================
+   Hotels section (real Google lodging near the trip, with approx distances).
+   =========================================================================== */
+.hotels { margin-top: var(--space-xl); }
+.hotels__title { margin-bottom: var(--space-xs); }
+.hotels__loading { color: var(--color-secondary-text); }
+.hotels__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-lg);
+  margin-top: var(--space-md);
+}
+.hotel-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.hotel-card__media { position: relative; width: 100%; aspect-ratio: 16 / 10; background: var(--color-muted-bg); }
+.hotel-card__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hotel-card__img--empty { display: block; }
+.hotel-card__rating {
+  position: absolute; top: var(--space-sm); left: var(--space-sm);
+  background: rgba(0,0,0,0.62); color: #fff; padding: 3px 9px;
+  border-radius: var(--radius-pill); font-size: var(--type-label-size); font-weight: 600;
+}
+.hotel-card__body { padding: var(--space-md); display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; }
+.hotel-card__name { margin: 0; font-size: var(--type-card-title-size); line-height: 1.2; }
+.hotel-card__price { color: var(--color-deep-emerald); font-weight: 700; font-size: var(--type-label-size); }
+.hotel-card__address { margin: 0; font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.hotel-card__distances { list-style: none; margin: var(--space-xs) 0 0; padding: 0; display: grid; gap: 2px; }
+.hotel-card__distance { font-size: var(--type-label-size); color: var(--color-secondary-text); }
+.hotel-card__distance-km { color: var(--color-primary-text); font-weight: 600; }
+.hotel-card__brand { margin-top: auto; padding-top: var(--space-xs); font-size: 0.7rem; color: var(--color-secondary-text); opacity: 0.7; }
+
+/* Day card: vertically center the content column against the image middle. */
+.planner-day.timeline__card { align-items: center; }
+.planner-day.timeline__card > .gpm { align-self: stretch; }
+/* On stacked (mobile) layout, revert to natural top alignment. */
+@media (max-width: 1023px) { .planner-day.timeline__card { align-items: start; } }
+
+/* === Fix: no scroll bar under the day photo — thumbnails wrap, not scroll. === */
+.gpm__thumbs { flex-wrap: wrap; overflow: visible; }
+.gpm__thumb { width: 64px; height: 48px; }
+
+/* === Activity rows: hover affordance + a little real-world detail line. === */
+.planner-day .row { border-radius: var(--radius-sm); padding: 4px 6px; transition: background 140ms ease; }
+.planner-day .row:hover { background: var(--color-muted-bg); }
+.planner-day__activity { cursor: default; }
+.planner-day__activity-hint { display: block; font-size: var(--type-helper-size); color: var(--color-secondary-text); opacity: 0; max-height: 0; overflow: hidden; transition: opacity 160ms ease, max-height 160ms ease; }
+.planner-day .row:hover .planner-day__activity-hint, .planner-day .row:focus-within .planner-day__activity-hint { opacity: 1; max-height: 4rem; margin-top: 2px; }
+
+/* === Edit Day inline panel === */
+.editday { margin-top: var(--space-sm); padding: var(--space-md); border: 1px solid var(--color-light-border); border-radius: var(--radius-md); background: var(--color-muted-bg); }
+.editday__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+.editday__title { margin: 0; font-size: var(--type-card-title-size); }
+.editday__search { margin-bottom: var(--space-sm); }
+.editday__status { color: var(--color-secondary-text); margin: 0; }
+.editday__grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-sm); }
+.editday__card { background: var(--color-background); border: 1px solid var(--color-light-border); border-radius: var(--radius-md); overflow: hidden; display: flex; flex-direction: column; }
+.editday__card-media { width: 100%; aspect-ratio: 4 / 3; background: var(--color-muted-bg); }
+.editday__card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.editday__card-body { padding: var(--space-sm); display: flex; flex-direction: column; gap: 4px; }
+.editday__card-name { font-weight: 600; font-size: var(--type-label-size); line-height: 1.2; }
+.editday__card-rating { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.editday__add { margin-top: 4px; padding: 6px 10px; font-size: var(--type-label-size); }
+
+/* === Know More modal === */
+.daydetail { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: var(--space-lg); }
+.daydetail__backdrop { position: absolute; inset: 0; background: rgba(28, 42, 37, 0.6); }
+.daydetail__panel { position: relative; z-index: 1; width: min(880px, 94vw); max-height: 88vh; overflow-y: auto; background: var(--color-background); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: var(--space-lg); }
+.daydetail__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-md); }
+.daydetail__title { margin: 2px 0 0; }
+.daydetail__theme { margin: 2px 0 0; color: var(--color-secondary-text); }
+.daydetail__body { display: grid; gap: var(--space-md); }
+.daydetail__place { display: grid; grid-template-columns: minmax(220px, 40%) 1fr; gap: var(--space-md); align-items: start; border-top: 1px solid var(--color-light-border); padding-top: var(--space-md); }
+.daydetail__place-media { position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: var(--radius-md); overflow: hidden; background: var(--color-muted-bg); }
+.daydetail__place-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.daydetail__place-rating { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.62); color: #fff; padding: 3px 9px; border-radius: var(--radius-pill); font-size: var(--type-label-size); font-weight: 600; }
+.daydetail__place-name { margin: 0; }
+.daydetail__place-time { margin: 2px 0; color: var(--color-secondary-text); }
+.daydetail__place-desc { margin: 2px 0; }
+.daydetail__place-review { margin: var(--space-sm) 0 0; padding: var(--space-sm); background: var(--color-muted-bg); border-radius: var(--radius-md); font-style: italic; }
+.daydetail__place-review cite { display: block; margin-top: 4px; font-style: normal; font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.daydetail__place-loading, .daydetail__place-noreview { color: var(--color-secondary-text); font-size: var(--type-label-size); margin: var(--space-sm) 0 0; }
+@media (max-width: 680px) { .daydetail__place { grid-template-columns: 1fr; } }
+
+/* === Fix: Discover autocomplete dropdown must sit ABOVE the gallery images. === */
+.disc-search__wrap { position: relative; z-index: 50; }
+.disc-ac { z-index: 200; }
+/* The intro section (which holds the search) stacks above the carousel/grid. */
+.disc__intro { position: relative; z-index: 40; }
+.disc-carousel, .disc-gallery { position: relative; z-index: 0; }
+
+/* === Edit Day: current places list + remove, and suggestion reasons. === */
+.editday__current { margin-bottom: var(--space-md); }
+.editday__current-list { list-style: none; margin: var(--space-xs) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.editday__current-item { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; background: var(--color-background); border: 1px solid var(--color-light-border); border-radius: var(--radius-pill); font-size: var(--type-label-size); }
+.editday__current-name { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editday__remove { width: 22px; height: 22px; border-radius: 50%; border: none; background: var(--color-muted-bg); color: var(--color-primary-text); cursor: pointer; line-height: 1; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; }
+.editday__remove:hover { background: var(--color-error, hsl(0,84%,60%)); color: #fff; }
+.editday__sugg-label { margin-top: var(--space-sm); }
+.editday__card-reason { font-size: var(--type-helper-size); color: var(--color-deep-emerald); }
+
+/* === Hotels sort/filter controls === */
+.hotels__controls { display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: end; margin: var(--space-md) 0; padding: var(--space-md); }
+.hotels__controls .field { margin: 0; min-width: 160px; flex: 1 1 160px; }
+.hotels__controls select { width: 100%; }
+
+/* === Hotel reviews expander (on-demand real Google reviews) === */
+.hotel-reviews { margin-top: var(--space-xs); }
+.hotel-reviews__toggle { background: none; border: none; padding: 0; cursor: pointer; color: var(--color-deep-emerald); font-weight: 600; font-size: var(--type-label-size); }
+.hotel-reviews__toggle:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: 2px; }
+.hotel-reviews__status { color: var(--color-secondary-text); font-size: var(--type-label-size); margin: var(--space-xs) 0 0; }
+.hotel-reviews__list { list-style: none; margin: var(--space-xs) 0 0; padding: 0; display: grid; gap: var(--space-xs); }
+.hotel-reviews__item { background: var(--color-muted-bg); border-radius: var(--radius-sm); padding: var(--space-xs) var(--space-sm); }
+.hotel-reviews__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); font-size: var(--type-label-size); }
+.hotel-reviews__stars { color: #d9a400; font-weight: 600; }
+.hotel-reviews__text { margin: 2px 0 0; font-size: var(--type-helper-size); color: var(--color-secondary-text); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hotel-reviews__attr { font-size: 0.7rem; color: var(--color-secondary-text); opacity: 0.7; }
+
+/* === Stays-near destination search === */
+.stays-near { display: block; }
+.stays-near__search { margin-bottom: var(--space-md); max-width: 420px; }
+
+/* === Fixed, consistent hotel image layout (never stretches/shifts) === */
+.hotel-card { height: 100%; }
+.hotel-card__media { width: 100%; aspect-ratio: 16 / 10; flex: 0 0 auto; }
+.hotel-card__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hotels__grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: stretch; }
+
+/* === AUTHORITATIVE fixed hotel layout (overrides earlier rules). Uniform
+   card height, fixed image height, aligned grid - no uneven/stretched look. === */
+.hotels__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-auto-rows: 1fr;
+  gap: var(--space-lg);
+  align-items: stretch;
+}
+.hotel-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+.hotel-card__media {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  aspect-ratio: auto;
+  flex: 0 0 180px;
+  background: var(--color-muted-bg);
+  overflow: hidden;
+}
+.hotel-card__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hotel-card__body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px; padding: var(--space-md); }
+.hotel-card__name {
+  margin: 0;
+  font-size: var(--type-card-title-size);
+  line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  min-height: 2.5em;
+}
+.hotel-card__address {
+  margin: 0;
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.hotel-card__distances { margin-top: auto; }
+
+/* === Edit Day panel + Know More must break OUT of the day-card 2-col grid
+   so they never overlap the image column that spans all rows. === */
+.planner-day.timeline__card > .editday { grid-column: 1 / -1; min-width: 0; }
+.planner-day.timeline__card .editday { width: 100%; }
+/* The Know More modal is fixed-position already; ensure it is not constrained
+   by the grid stacking context. */
+.planner-day.timeline__card > .daydetail { grid-column: 1 / -1; }
+/* Edit Day suggestion images: fixed height, never blurry/stretched. */
+.editday__card-media { height: 110px; aspect-ratio: auto; }
+.editday__card-img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ===========================================================================
+   RESTORE: original side-by-side day-card layout (image LEFT, content RIGHT).
+   Re-asserts the grid that was in place before, and keeps ONLY two safe
+   fixes: thumbnails wrap (no scroll bar) and Edit Day panel full-width.
+   =========================================================================== */
+.planner-day.timeline__card {
+  display: grid;
+  grid-template-columns: minmax(300px, 40%) 1fr;
+  column-gap: var(--space-lg);
+  row-gap: var(--space-xs);
+  align-items: start;
+}
+.planner-day.timeline__card > .gpm { grid-column: 1; grid-row: 1 / span 30; align-self: stretch; margin: 0; min-width: 0; }
+.planner-day.timeline__card > :not(.gpm) { grid-column: 2; min-width: 0; }
+.planner-day.timeline__card .gpm__hero { height: 100%; min-height: 280px; aspect-ratio: auto; }
+/* Edit Day + Know More break out to full width (do NOT sit in column 2). */
+.planner-day.timeline__card > .editday, .planner-day.timeline__card > .daydetail { grid-column: 1 / -1; width: 100%; }
+/* Thumbnails wrap instead of horizontal scroll. */
+.planner-day.timeline__card .gpm__thumbs { flex-wrap: wrap; overflow: visible; }
+.planner-day.timeline__card .gpm__thumb { width: 64px; height: 48px; }
+/* Edit Day suggestion images: fixed, crisp. */
+.editday__card-media { height: 110px; aspect-ratio: auto; }
+.editday__card-img { width: 100%; height: 100%; object-fit: cover; }
+
+@media (max-width: 1023px) {
+  .planner-day.timeline__card { grid-template-columns: 1fr; }
+  .planner-day.timeline__card > .gpm { grid-column: 1; grid-row: auto; }
+  .planner-day.timeline__card > :not(.gpm) { grid-column: 1; }
+  .planner-day.timeline__card .gpm__hero { min-height: 200px; aspect-ratio: 16 / 9; }
+}
+
+/* === Carousel card hardening: prevent a client-injected image from escaping
+   its card when aspect-ratio has not yet established a height (which could
+   otherwise paint the first photo at the page origin over the heading). === */
+.disc-card { min-height: 12rem; }
+.disc-carousel__track > .disc-card { min-height: 12rem; }
+/* disc-card__media .img-layer__img hardening */
+.disc-card { contain: paint; }
+.disc-card__media { overflow: hidden; }
+.disc-card__media .img-layer__img { position: absolute; inset: 0; }
+
+/* === stray-image containment fix ===
+   A discover card's image layer is position:absolute; inset:0. If a card ever
+   renders before it has a positioning context or size, that image can paint at
+   the page origin, overlapping the heading. Two guards:
+   1) every card is an explicit positioned, isolated, clipped box;
+   2) the intro gets an OPAQUE background so nothing can ever show through it. */
+.disc-card, .disc-result__photo { position: relative; isolation: isolate; overflow: hidden; }
+.disc-card > .img-layer, .disc-card__media.img-layer { position: absolute; inset: 0; }
+.disc__intro { background: var(--color-background); isolation: isolate; }
+
+/* ============================================================================
+   Motion_System primitives (Task 4, ui-premium-transformation)
+   Shared motion utilities. Animate ONLY transform and opacity. Durations use
+   the existing bands (--motion-fast 160 / --motion-panel 240 / --motion-standard
+   280 / --motion-normal 400) and easings (--ease-standard / --ease-emphasis).
+   Depth/anim values come from the non-token helpers added in Task 3
+   (--anim-stagger-step, --anim-reveal-shift, --elevation-hover, --shadow-xl,
+   --radius-xl, --gradient-image-scrim, --color-emerald-tint). No new mirrored
+   tokens are introduced here. The reduced-motion overrides live in the single
+   @media block at the END of this section.
+   ============================================================================ */
+
+/* .reveal — scroll/entrance primitive. Hidden until the use-reveal hook adds
+   .reveal--in (opacity 0->1, translateY(shift)->0). For a staggered group,
+   each child sets an inline transition-delay as a multiple of
+   --anim-stagger-step, e.g. style={{ transitionDelay: `calc(var(--anim-stagger-step) * ${i})` }}. */
+.reveal {
+  opacity: 0;
+  transform: translateY(var(--anim-reveal-shift));
+  transition:
+    opacity var(--motion-normal) var(--ease-emphasis),
+    transform var(--motion-normal) var(--ease-emphasis);
+  will-change: opacity, transform;
+}
+.reveal.reveal--in {
+  opacity: 1;
+  transform: none;
+}
+
+/* .press — tactile press feedback for buttons/chips. */
+.press {
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.press:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+/* .hoverable — card/tile elevation on hover; image child zooms inside a clipped
+   .image-frame so surrounding text stays put. */
+.hoverable {
+  transition:
+    transform var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+.hoverable:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elevation-hover);
+}
+.hoverable .image-frame img {
+  transition: transform var(--motion-standard) var(--ease-standard);
+}
+.hoverable:hover .image-frame img {
+  transform: scale(1.04);
+}
+
+/* .image-frame — fixed aspect-ratio, clipped box that RESERVES layout space to
+   prevent CLS. Default 4/3; the img fills and covers. Override aspect-ratio
+   inline or with a modifier where a different ratio is needed. */
+.image-frame {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+.image-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* .overlay-enter — generic overlay entrance mirroring the existing modal pattern
+   (.modal__backdrop / .modal__panel). Backdrop fades; panel fades + settles from
+   translateY(12px) scale(0.98) within --motion-standard. Add .overlay-enter--in
+   when mounted/open. The panel is the [data-overlay-panel] descendant. */
+.overlay-enter {
+  opacity: 0;
+  transition: opacity var(--motion-standard) var(--ease-standard);
+}
+.overlay-enter [data-overlay-panel] {
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
+  transition:
+    opacity var(--motion-standard) var(--ease-standard),
+    transform var(--motion-standard) var(--ease-standard);
+}
+.overlay-enter.overlay-enter--in {
+  opacity: 1;
+}
+.overlay-enter.overlay-enter--in [data-overlay-panel] {
+  opacity: 1;
+  transform: none;
+}
+
+/* .ai-pulse — subtle emerald "breathing" indicator shown only while an AI turn
+   is pending. Opacity/transform-only keyframe. */
+@keyframes ai-pulse {
+  0%   { opacity: 0.55; transform: scale(0.92); }
+  50%  { opacity: 1;    transform: scale(1.06); }
+  100% { opacity: 0.55; transform: scale(0.92); }
+}
+.ai-pulse {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-emerald-tint);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-emerald-tint) 45%, transparent);
+  animation: ai-pulse 1600ms var(--ease-standard) infinite;
+}
+
+/* .route-draw — DECORATIVE SVG path draw. The consumer sets a stroke-dasharray
+   equal to the path length; the keyframe animates stroke-dashoffset to 0.
+   (dashoffset is an SVG-draw property, acceptable alongside transform/opacity.) */
+@keyframes route-draw {
+  to { stroke-dashoffset: 0; }
+}
+.route-draw {
+  stroke-dasharray: var(--route-length, 1000);
+  stroke-dashoffset: var(--route-length, 1000);
+  animation: route-draw var(--motion-normal) var(--ease-emphasis) forwards;
+}
+
+/* .progress-line — HONEST progress indicator. The fill width is driven ONLY by
+   the inline --progress custom property (0..1) the consumer updates as real
+   backend stages advance. It never auto-advances. */
+.progress-line {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-emerald-tint) 40%, transparent);
+  overflow: hidden;
+}
+.progress-line::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--progress, 0) * 100%);
+  background: var(--color-emerald-tint);
+  transition: width var(--motion-standard) var(--ease-standard);
+}
+
+/* Reduced-motion overrides for the Motion_System primitives above.
+   Neutralize to opacity-only within --motion-reduced; disable translate/zoom/
+   parallax/ai-pulse/route-draw/auto-advance so content never depends on motion. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    transition: opacity var(--motion-reduced) linear;
+    transform: none;
+  }
+  .reveal.reveal--in {
+    transform: none;
+  }
+  .press {
+    transition: none;
+  }
+  .press:active {
+    transform: none;
+  }
+  .hoverable {
+    transition: box-shadow var(--motion-reduced) linear;
+  }
+  .hoverable:hover {
+    transform: none;
+  }
+  .hoverable .image-frame img,
+  .hoverable:hover .image-frame img {
+    transform: none;
+    transition: none;
+  }
+  .overlay-enter {
+    transition: opacity var(--motion-reduced) linear;
+  }
+  .overlay-enter [data-overlay-panel] {
+    transform: none;
+    transition: opacity var(--motion-reduced) linear;
+  }
+  .overlay-enter.overlay-enter--in [data-overlay-panel] {
+    transform: none;
+  }
+  .ai-pulse {
+    animation: none;
+  }
+  .route-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .progress-line::after {
+    transition: width var(--motion-reduced) linear;
+  }
+}
+/* ======================= end Motion_System primitives ======================= */
+
+/* ============================================================================
+   Phase 2 shared-control elevation (Task 5, ui-premium-transformation)
+   Elevate the EXISTING shared controls IN PLACE. No class is renamed and no
+   component markup/props change; these rules refine values on selectors that
+   already exist earlier in this file, keyed to the tokens/helpers added in
+   Tasks 3-4 (--radius-md/-lg/-xl, --shadow-sm/md/lg/xl, --elevation-hover,
+   --ease-standard/-emphasis, --motion-fast/-panel/-standard, --focus-*,
+   and the new --color-deep-pine/--color-warm-sand/--color-emerald-tint).
+   NO new --color-/--type-/--font-/--space-/--focus-/--motion- :root property
+   is introduced (the token<->CSS bijection stays intact). Only existing tokens
+   and non-token helpers are referenced.
+   Req 8.1 (premium identity on shared controls), 8.2 (eight states),
+   8.3 (focus ring + 44px targets), 8.5 (no oversized/repetitive treatment),
+   8.6 (loading feedback).
+   ============================================================================ */
+
+/* --- Buttons: refined radius + hover elevation, keep orange identity & focus -- */
+/* Primary_Action keeps its orange background and the existing --focus-* ring and
+   the existing .press-style active nudge (.cta:active translateY(1px) above). We
+   only refine the resting radius and add a real hover elevation. */
+.cta {
+  border-radius: var(--radius-md);
+}
+.cta:hover {
+  box-shadow: var(--elevation-hover);
+}
+.btn {
+  border-radius: var(--radius-md);
+}
+.btn:hover {
+  box-shadow: var(--shadow-md);
+}
+/* Primary variant of the neutral button lifts like the orange Primary_Action. */
+.btn--primary:hover {
+  box-shadow: var(--elevation-hover);
+}
+
+/* Disabled state (the missing one of the eight states): a consistent dimming +
+   not-allowed cursor, with hover/press neutralized so a disabled control reads
+   as inert. Scoped to both the :disabled pseudo and the [disabled]/aria-disabled
+   attribute forms so it covers <button> and <a role> alike. The existing
+   .planner-composer .cta[disabled] loading affordance (cursor: progress) is more
+   specific and continues to win for the in-flight request case. */
+.cta:disabled,
+.cta[disabled],
+.cta[aria-disabled="true"],
+.btn:disabled,
+.btn[disabled],
+.btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.cta:disabled:hover,
+.cta[disabled]:hover,
+.cta[aria-disabled="true"]:hover,
+.btn:disabled:hover,
+.btn[disabled]:hover,
+.btn[aria-disabled="true"]:hover {
+  box-shadow: none;
+}
+.cta:disabled:active,
+.cta[disabled]:active,
+.cta[aria-disabled="true"]:active,
+.btn:disabled:active,
+.btn[disabled]:active,
+.btn[aria-disabled="true"]:active {
+  transform: none;
+}
+
+/* --- Pills (chips / tab pills / prompt chips): consistent radius + refined hover -
+   These already carry :hover, :active and :focus-visible earlier in the file.
+   We keep the pill radius consistent across the family and refine the resting
+   border toward the warm neutral for a softer edge, and add the missing
+   :disabled state. We do NOT duplicate the hover/active/focus declarations. */
+.chip,
+.chat-chip,
+.tab-pill,
+.home-prompt-chip {
+  border-radius: var(--radius-pill);
+}
+.chip:disabled,
+.chip[disabled],
+.chip[aria-disabled="true"],
+.chat-chip:disabled,
+.chat-chip[disabled],
+.chat-chip[aria-disabled="true"],
+.tab-pill:disabled,
+.tab-pill[disabled],
+.tab-pill[aria-disabled="true"],
+.home-prompt-chip:disabled,
+.home-prompt-chip[disabled],
+.home-prompt-chip[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.chip:disabled:active,
+.chip[disabled]:active,
+.chat-chip:disabled:active,
+.chat-chip[disabled]:active,
+.tab-pill:disabled:active,
+.tab-pill[disabled]:active,
+.home-prompt-chip:disabled:active,
+.home-prompt-chip[disabled]:active {
+  transform: none;
+}
+
+/* --- Fields: light border + clear focus, 44px touch target retained ----------
+   Inputs/selects/textareas already have the light border, the green focus ring
+   (--focus-*), and min-height:44px earlier in the file. We align the resting
+   radius to --radius-md and add the disabled + error states (error via the
+   aria-invalid hook components already set) so the eight states are complete. */
+.field input,
+.field select,
+.field textarea {
+  border-radius: var(--radius-md);
+}
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled,
+.field input[readonly],
+.field textarea[readonly] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--color-muted-bg);
+}
+.field input[aria-invalid="true"],
+.field select[aria-invalid="true"],
+.field textarea[aria-invalid="true"] {
+  border-color: var(--color-action-orange);
+}
+.field input[aria-invalid="true"]:focus,
+.field select[aria-invalid="true"]:focus,
+.field textarea[aria-invalid="true"]:focus {
+  outline: var(--focus-ring-width) solid var(--color-action-orange);
+  outline-offset: 1px;
+  border-color: var(--color-action-orange);
+}
+
+/* --- Surfaces: refined radius; hover elevation ONLY where opted-in -----------
+   .card/.surface/.panel get a slightly softer radius. We do NOT force a hover
+   lift on every surface (static panels must not move). Interactive cards opt in
+   by adding the .hoverable helper (defined in Task 4), which supplies the
+   bounded translateY + --elevation-hover and the clipped image zoom. */
+.card,
+.surface,
+.panel {
+  border-radius: var(--radius-lg);
+}
+/* When a surface is explicitly interactive it may combine with .hoverable; make
+   sure the resting shadow steps up to --shadow-md so the hover delta reads. */
+.card.hoverable,
+.surface.hoverable {
+  box-shadow: var(--shadow-md);
+}
+
+/* --- Overlays: align modal + filter-drawer motion to the new bands -----------
+   Both already animate opacity + transform. We only re-point their durations to
+   the panel/standard bands and the standard easing so the open/close timing is
+   consistent with the Motion_System, without changing WHAT animates or breaking
+   the existing is-open behavior. */
+.modal__backdrop {
+  transition:
+    opacity var(--motion-standard) var(--ease-standard),
+    visibility var(--motion-standard) var(--ease-standard);
+}
+.modal__panel {
+  transition:
+    opacity var(--motion-standard) var(--ease-standard),
+    transform var(--motion-standard) var(--ease-standard);
+}
+.filter-drawer__backdrop {
+  transition:
+    opacity var(--motion-panel) var(--ease-standard),
+    visibility var(--motion-panel) var(--ease-standard);
+}
+.filter-drawer--offcanvas {
+  transition: transform var(--motion-panel) var(--ease-standard);
+}
+
+/* --- Notices + skeletons: token-consistent treatment -------------------------
+   Notices get the softer radius to match the elevated surfaces. The success and
+   error state colors are already token-based; no new color literals. */
+.notice,
+.estimated-notice {
+  border-radius: var(--radius-md);
+}
+/* Skeleton blocks share the elevated radius; the shimmer sweep (transform-only)
+   and its reduced-motion opacity fallback are defined earlier and remain intact.
+   Nothing here reintroduces motion under reduced-motion. */
+.skeleton__block,
+.skeleton__controls,
+.skeleton__card {
+  border-radius: var(--radius-md);
+}
+
+/* Reduced-motion: the hover elevation we added above is a box-shadow transition
+   (not transform) on .cta/.btn, which is allowed; the translate-based lift comes
+   only from .hoverable, already neutralized in the Task 4 reduced-motion block.
+   No additional overrides are required here. */
+/* ===================== end Phase 2 shared-control elevation ================== */
+
+/* ============================================================================
+   Task 7.1 - Immersive homepage hero (ConciergeHome "home" variant).
+   Asymmetric two-column composition on desktop: editorial copy + trip-intent
+   input on the left, a real-imagery .image-frame on the right. Collapses to a
+   single column at <=1023px. Uses only existing tokens + the non-token depth
+   helpers (--radius-xl, --shadow-xl, --gradient-image-scrim, --anim-*). No new
+   mirrored token is introduced. The staggered entrance is the shared .reveal
+   primitive; the orange Primary_Action is interactive immediately (never gated
+   behind the animation).
+   ============================================================================ */
+.concierge-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: var(--space-xl);
+  margin-bottom: var(--space-lg);
+}
+.concierge-hero__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+.concierge-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+}
+.concierge-hero__pulse { margin-right: var(--space-xxs, 2px); }
+.concierge-hero__title { margin: 0; }
+.concierge-hero__lead { margin: 0; max-width: 44ch; }
+.concierge-hero__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+.concierge-hero__field {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+.concierge-hero__submit {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+/* Right column: the fixed-ratio frame reserves space (no CLS), the photo covers
+   it, and the scrim + depth give an immersive, editorial feel. */
+.concierge-hero__media { min-width: 0; }
+.concierge-hero__frame {
+  aspect-ratio: 5 / 4;
+  width: 100%;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+}
+.concierge-hero__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* The illustration fallback is framed identically but sits centered on a soft
+   emerald-tint wash rather than stretched edge to edge. */
+.concierge-hero__photo--illustration {
+  object-fit: contain;
+  padding: var(--space-xl);
+  background: var(--color-emerald-tint);
+}
+.concierge-hero__scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-image-scrim);
+  pointer-events: none;
+}
+
+/* Single column at <=1023px: copy first, media second, full-bleed within the
+   shell with no fixed widths that could force horizontal overflow at >=320px. */
+@media (max-width: 1023px) {
+  .concierge-hero {
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-md);
+  }
+  .concierge-hero__content { order: 0; }
+  .concierge-hero__media { order: 1; }
+  .concierge-hero__frame { aspect-ratio: 16 / 10; }
+  .concierge-hero__submit { flex: 1 1 auto; }
+}
+/* ============================================================================
+   Task 7.2 - Below-the-fold editorial sections (homepage.tsx, Req 3.5/3.6/3.7/2.4).
+   Four VARIED, ALTERNATING compositions, each revealed on scroll with the shared
+   .reveal primitive. Uses only existing tokens + the Task-3 non-token helpers
+   (--radius-xl, --shadow-xl, --gradient-image-scrim, --surface-editorial,
+   --elevation-hover, --anim-*). No new mirrored :root token is introduced; all
+   new selectors use the non-token `home-*` namespace. Reduced motion is handled
+   by the shared .reveal/.hoverable rules in the single prefers-reduced-motion
+   block already present earlier in this file.
+   ============================================================================ */
+
+/* ── A. Featured destinations — alternating image/text feature blocks ──────── */
+.home-featured__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+.home-feature2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: var(--space-xl);
+  border-radius: var(--radius-xl);
+}
+/* Reversed order for every other block: image moves to the right, text left. */
+.home-feature2--reversed .home-feature2__media { order: 2; }
+.home-feature2--reversed .home-feature2__copy { order: 1; }
+.home-feature2__media { min-width: 0; }
+.home-feature2__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+.home-feature2__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-section-size);
+  line-height: 1.1;
+  color: var(--color-deep-pine);
+}
+.home-feature2__blurb {
+  margin: 0;
+  color: var(--color-secondary-text);
+  max-width: 46ch;
+}
+.home-feature2__cta {
+  align-self: flex-start;
+  margin-top: var(--space-xs);
+  min-height: 44px;
+}
+/* The real-image frame reserves space (no CLS); photo covers; scrim adds depth. */
+.home-feature2__frame {
+  aspect-ratio: 5 / 4;
+  width: 100%;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+}
+.home-feature2__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.home-feature2__photo--illustration {
+  object-fit: contain;
+  padding: var(--space-xl);
+  background: var(--color-emerald-tint);
+}
+.home-feature2__scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-image-scrim);
+  pointer-events: none;
+}
+
+/* ── B. Travel-style discovery row — quick booking tiles below the rail ────── */
+.home-discovery__quick {
+  list-style: none;
+  margin: var(--space-lg) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+/* ── C. AI-concierge explainer — descriptive steps on a warm editorial band ── */
+.home-explainer {
+  background: var(--surface-editorial);
+  border-top: 1px solid var(--color-light-border);
+  border-bottom: 1px solid var(--color-light-border);
+  border-radius: var(--radius-xl);
+}
+.home-explainer__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-width: 60ch;
+}
+.home-explainer__pulse { margin-right: var(--space-xxs, 2px); }
+.home-explainer__cta {
+  align-self: flex-start;
+  margin-top: var(--space-xs);
+  min-height: 44px;
+}
+.home-explainer__steps {
+  list-style: none;
+  margin: var(--space-xl) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-lg);
+  counter-reset: none;
+}
+.home-explainer__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.home-explainer__step-num {
+  font-family: var(--font-display);
+  font-size: var(--type-section-size);
+  line-height: 1;
+  color: var(--color-deep-emerald);
+}
+.home-explainer__step-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size, 1.125rem);
+  color: var(--color-deep-pine);
+}
+.home-explainer__step-copy {
+  margin: 0;
+  color: var(--color-secondary-text);
+}
+.home-explainer__features {
+  list-style: none;
+  margin: var(--space-xl) 0 0;
+  padding: var(--space-lg) 0 0;
+  border-top: 1px solid var(--color-light-border);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+.home-explainer__feature {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+.home-explainer__feature-icon {
+  flex: 0 0 auto;
+  color: var(--color-deep-emerald);
+  display: inline-flex;
+}
+.home-explainer__feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.home-explainer__feature-title {
+  font-weight: 700;
+  color: var(--color-primary-text);
+}
+.home-explainer__feature-copy {
+  color: var(--color-secondary-text);
+  font-size: 0.9rem;
+}
+
+/* ── Responsive: single column at <=1023px; no horizontal overflow >=320px ─── */
+@media (max-width: 1023px) {
+  .home-feature2 {
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+  }
+  /* Image always leads on small screens regardless of the desktop alternation. */
+  .home-feature2--reversed .home-feature2__media,
+  .home-feature2__media { order: 0; }
+  .home-feature2--reversed .home-feature2__copy,
+  .home-feature2__copy { order: 1; }
+  .home-feature2__frame { aspect-ratio: 16 / 10; }
+  .home-feature2__cta { align-self: stretch; }
+  .home-explainer__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-explainer__features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-discovery__quick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 599px) {
+  .home-explainer__steps { grid-template-columns: 1fr; }
+  .home-explainer__features { grid-template-columns: 1fr; }
+  .home-discovery__quick { grid-template-columns: 1fr; }
+}
+/* ===================== end Task 7.2 editorial sections ====================== */
+
+/* ============================================================================
+   Task 8 - Premium Discover gallery (discover-sights.tsx, Req 5.1-5.6).
+   A VARIED, image-led mosaic that replaces the old uniform .disc-grid: one
+   LARGE featured tile spanning 2 cols / 2 rows, the rest MEDIUM tiles, so no
+   two tiles read identically. The horizontal carousel above is kept as the
+   "collections" rail. Tiles reuse the shared .hoverable + .image-frame motion
+   pattern (Task 4): the real photo zooms inside a CLIPPED frame while the
+   overlaid serif name + location label stay stable and readable. Hover also
+   lifts the tile and nudges the directional arrow forward; on touch, a tap
+   opens the detail directly (the component's existing onOpen flow is unchanged).
+   Uses ONLY existing tokens + the Task-3 non-token helpers (--radius-lg/xl,
+   --shadow-md, --elevation-hover, --gradient-image-scrim, --surface-editorial,
+   --motion-*, --ease-*). No new mirrored :root token is introduced; every new
+   selector is in the namespaced disc-* family. Reduced motion is handled by the
+   shared .hoverable / .image-frame rules already in the single
+   prefers-reduced-motion block earlier in this file.
+   ============================================================================ */
+
+.disc-mosaic {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 11rem;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+/* The mosaic tile: full-bleed photo frame + gradient scrim + overlaid text.
+   The button itself carries .hoverable (lift + image zoom); the inner frame is
+   .image-frame (clipped, aspect-reserved) so text never shifts on zoom. */
+.disc-tile {
+  position: relative;
+  display: block;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: var(--surface-editorial);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  color: #fff;
+  min-height: 0;
+}
+.disc-tile:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* Grid footprints: one large featured tile, the rest medium. */
+.disc-tile--feature { grid-column: span 2; grid-row: span 2; border-radius: var(--radius-xl); }
+.disc-tile--medium  { grid-column: span 2; grid-row: span 1; }
+
+/* The image frame fills the whole tile (override the helper's default 4/3
+   aspect-ratio so the photo tracks the grid cell instead of forcing height). */
+.disc-tile__frame {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--color-primary-green) 10%, var(--surface-editorial));
+}
+.disc-tile__frame img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Placeholder rung of the fallback ladder: shown only while /api/image is
+   still resolving. A soft token-coloured wash - never a broken image, never
+   the old checkerboard. */
+.disc-tile__placeholder {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 120% at 30% 20%,
+      color-mix(in srgb, var(--color-primary-green) 22%, var(--surface-editorial)) 0%,
+      color-mix(in srgb, var(--color-deep-emerald) 16%, var(--surface-editorial)) 100%);
+}
+.disc-tile__scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-image-scrim);
+}
+
+.disc-tile__overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  z-index: 1;
+}
+.disc-tile__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.disc-tile__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--type-helper-size);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+/* Serif place name - editorial display type, stable over the zooming photo. */
+.disc-tile__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.1;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  font-size: var(--type-card-title-size);
+}
+.disc-tile--feature .disc-tile__title { font-size: var(--type-section-size); }
+
+/* Directional arrow: rests tucked + faded, nudges forward on hover (non-touch).
+   Transform/opacity only, bounded by --motion-fast; neutralised by the shared
+   reduced-motion block via .hoverable but also guarded here for safety. */
+.disc-tile__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-emphasis);
+}
+.disc-tile:hover .disc-tile__arrow,
+.disc-tile:focus-visible .disc-tile__arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Responsive: collapse the mosaic toward fewer columns on smaller viewports.
+   The feature tile stays prominent but never forces horizontal overflow. */
+@media (max-width: 1023px) {
+  .disc-mosaic { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 10rem; }
+  .disc-tile--feature { grid-column: span 2; grid-row: span 2; }
+  .disc-tile--medium { grid-column: span 1; }
+}
+@media (max-width: 560px) {
+  .disc-mosaic { grid-template-columns: 1fr; grid-auto-rows: 9rem; gap: var(--space-sm); }
+  .disc-tile--feature { grid-column: span 1; grid-row: span 2; }
+  .disc-tile--medium { grid-column: span 1; }
+}
+
+/* Touch devices: no hover affordance (tap opens the detail directly); keep the
+   arrow visible as a static "open" cue so the tile still reads as tappable. */
+@media (hover: none) {
+  .disc-tile__arrow { opacity: 0.9; transform: none; }
+  .disc-tile:hover { transform: none; }
+}
+
+.disc__h2--rail { margin-bottom: var(--space-sm); }
+/* ===================== end Task 8 Premium Discover gallery ================== */
+
+/* ============================================================================
+   Task 9 - Intelligent AI concierge conversation surface
+   (ui-premium-transformation, Req 4.1-4.5). Elevates the EXISTING transcript
+   in place: clearer role separation, refined bubbles with serif role accents,
+   an HONEST pending-bound indicator, and the shared .reveal appearance for new
+   messages. No message data shape changes; no class is renamed. Uses only
+   existing mirrored tokens + the Task 3/4 non-token helpers. NO new
+   --color-/--type-/--font-/--space-/--focus-/--motion- :root property is added.
+   ============================================================================ */
+
+/* Refined bubble depth + comfortable reading measure. Assistant and user keep
+   their existing token surfaces/accents (set earlier); here we only add a soft
+   resting shadow and a bounded max measure so long replies stay readable. */
+.concierge-message {
+  box-shadow: var(--shadow-sm);
+}
+.concierge-message__text {
+  max-width: 62ch;
+}
+
+/* Serif accent on the role heading so each turn reads as an editorial label,
+   visually separating speakers (Req 4.1). The assistant heading is deep
+   emerald; the user heading keeps its orange accent (set earlier). */
+.concierge-message__role {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+  font-weight: 700;
+  color: var(--color-deep-emerald);
+}
+
+/* The shared .reveal primitive is now the SINGLE source of a new message's
+   appearance (Req 4.4). Neutralize the older mount keyframe when .reveal is
+   present so a message never double-animates; .reveal + .reveal--in (added once
+   on mount by the row component) drives the opacity+transform entrance, and the
+   prefers-reduced-motion block collapses it to opacity-only automatically. */
+.concierge-message.reveal {
+  animation: none;
+}
+
+/* Honest in-progress indicator (Req 4.3, 4.5): rendered ONLY while `pending`
+   is true. It is indeterminate - the emerald .ai-pulse breathing dot plus a
+   "Thinking..." label - never a set of fabricated advancing stages and never a
+   timed/auto-advancing fill. It reuses the assistant bubble surface so the
+   "AI is working" moment reads as part of the conversation. */
+.concierge-thinking {
+  box-shadow: var(--shadow-sm);
+}
+.concierge-thinking__row {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.concierge-thinking__label {
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  color: var(--color-secondary-text);
+}
+
+/* Reduced motion: the shared .ai-pulse rule in the single
+   prefers-reduced-motion block already stops the breathing animation, so the
+   dot stays a calm static emerald indicator while a turn is pending. */
+/* ===================== end Task 9 concierge conversation ==================== */
+/* ===========================================================================
+   Phase 4 - Task 10: Premium itinerary companion (components/planner.tsx).
+   Adds (1) the .trip-cover block (real destination image + overlaid serif
+   title/dates/destination/travellers metadata) and (2) the desktop
+   main-itinerary + sticky side-panel layout that collapses to a single column
+   <=1023px. Uses ONLY existing design tokens plus the Task-3 non-token helpers
+   (--radius-xl, --shadow-xl, --gradient-image-scrim, --elevation-hover,
+   --surface-editorial). Defines NO new :root token-group custom property, so
+   the token<->CSS bijection is unchanged. All motion is opacity/transform via
+   the shared .reveal primitive, already neutralized under reduced motion.
+   =========================================================================== */
+
+/* --- Trip cover -------------------------------------------------------------
+   A full-width, aspect-reserved cover (no CLS). The .image-frame reserves the
+   space before the photo loads; the real image covers it, a scrim darkens the
+   lower band, and the serif title + metadata sit on top. */
+.trip-cover {
+  margin: 0 0 var(--space-lg);
+}
+.trip-cover__frame.image-frame {
+  aspect-ratio: 21 / 9;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+}
+.trip-cover__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Illustration/token fallback when no real image resolves (never broken img). */
+.trip-cover__fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 140% at 80% 0%, var(--color-emerald-tint) 0%, transparent 55%),
+    linear-gradient(135deg, var(--color-deep-emerald), var(--color-primary-green));
+}
+.trip-cover__scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-image-scrim);
+  pointer-events: none;
+}
+.trip-cover__content {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  color: var(--color-background);
+}
+.trip-cover__eyebrow {
+  margin: 0;
+  font-size: var(--type-label-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  opacity: 0.92;
+}
+.trip-cover__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-hero-size, var(--type-section-size));
+  line-height: 1.05;
+  color: var(--color-background);
+}
+.trip-cover__meta {
+  margin: var(--space-xs) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-lg);
+}
+.trip-cover__meta-item {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.trip-cover__meta-item dt {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+.trip-cover__meta-item dd {
+  margin: 0;
+  font-size: var(--type-body-size);
+  font-weight: 600;
+}
+
+/* Tablet/phone: a shorter cover and tighter padding so the title stays legible
+   and nothing overflows (Req 9.3, 9.4). */
+@media (max-width: 1023px) {
+  .trip-cover__frame.image-frame { aspect-ratio: 16 / 9; border-radius: var(--radius-lg); }
+  .trip-cover__content { padding: var(--space-md); }
+}
+@media (max-width: 560px) {
+  .trip-cover__frame.image-frame { aspect-ratio: 4 / 3; }
+  .trip-cover__meta { gap: var(--space-xs) var(--space-md); }
+}
+
+/* --- Desktop main + sticky side panel --------------------------------------
+   Reorganizes the EXISTING results content (itinerary main + Trip summary
+   aside) into a two-column editorial layout on desktop: a wide itinerary
+   column beside a contextual, sticky side panel. No new data is added - the
+   aside is the existing .planner-summary. <=1023px it collapses to a single
+   column with the summary below the plan. This overrides the earlier
+   "summary stacks at the bottom, full width" rule for desktop only. */
+@media (min-width: 1024px) {
+  main.shell:has(.planner-itinerary) .grid-2.planner-results {
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 26vw, 380px);
+    align-items: start;
+  }
+  main.shell:has(.planner-itinerary) .planner-results__main { min-width: 0; }
+  /* Contextual side panel: sticky so the trip overview stays in view while the
+     traveller scrolls the day-by-day plan. */
+  main.shell:has(.planner-itinerary) .planner-results__aside {
+    position: sticky;
+    top: var(--space-lg);
+    margin-top: 0;
+    align-self: start;
+  }
+}
+@media (max-width: 1023px) {
+  /* Single column: the summary sits below the itinerary (natural order). */
+  main.shell:has(.planner-itinerary) .grid-2.planner-results {
+    grid-template-columns: 1fr;
+  }
+  main.shell:has(.planner-itinerary) .planner-results__aside {
+    position: static;
+    top: auto;
+    margin-top: var(--space-lg);
+  }
+}
+/* ===========================================================================
+   PHASE 5 — Remaining-route premium elevation (ui-premium-transformation task 11).
+   Appended LAST so it wins the cascade. Elevates the shared offer cards
+   (stays / flights / cars / deals), My_Trips saved-trip cards, the editorial
+   Trip / Sights surfaces, and the Account / Signup auth surfaces to the
+   Premium_Identity WITHOUT touching any component markup, prop, export, data,
+   provenance, search, filter, or navigation behavior.
+
+   Uses ONLY existing Design_System tokens (--color-/--type-/--space-/--radius-/
+   --shadow-/--focus-/--motion-) plus the non-token depth helpers added in
+   Task 3 (--elevation-hover, --shadow-xl, --radius-xl, --ease-emphasis,
+   --surface-editorial, --gradient-image-scrim, --anim-*). Introduces NO new
+   :root token-group custom property, so the token<->CSS bijection stays intact.
+   All selectors are namespaced to existing classes the components already use.
+   =========================================================================== */
+
+/* ── Offer cards (stays / flights / cars / deals) — premium hover elevation ──
+   The card already carries a subtle shadow hover; lift it to the shared
+   premium elevation + a small translate (transform/opacity only, no layout
+   properties animated, so no CLS). Keeps the existing focus ring and the
+   existing `.offer-card__link` title-colour hover untouched. */
+.offer-card {
+  border-radius: var(--radius-lg);
+  transition:
+    box-shadow var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+.offer-card:hover {
+  box-shadow: var(--elevation-hover);
+  transform: translateY(-2px);
+}
+/* Reduced-motion: keep the elevation cue but drop the translate. */
+@media (prefers-reduced-motion: reduce) {
+  .offer-card:hover { transform: none; }
+}
+
+/* An optional image frame for any offer card that renders real imagery. The
+   component drops an `.offer-card__media.image-frame` wrapper around its <img>;
+   where no image surface is present the rule is simply unused. The frame
+   reserves 16/10 space (no CLS) and clips the hover zoom provided by the shared
+   `.image-frame img` rules. Rounds the top corners to match the card radius. */
+.offer-card__media.image-frame {
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  margin: 0 0 var(--space-sm);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--color-primary-green) 16%, var(--color-background)),
+    color-mix(in srgb, var(--color-action-orange) 12%, var(--color-background)));
+}
+.offer-card:hover .offer-card__media.image-frame img { transform: scale(1.04); }
+@media (prefers-reduced-motion: reduce) {
+  .offer-card:hover .offer-card__media.image-frame img { transform: none; }
+}
+
+/* Price hierarchy — make the PRIMARY price unmistakably dominant against the
+   SECONDARY unit/total details, using the existing type scale. The primary
+   amount steps up to the page-title scale in deep emerald; the unit and total
+   sit in muted helper type. Stays / flights / cars share the same three-part
+   price block, so one rule set covers all. */
+.offer-card__price-main {
+  font-size: var(--type-page-title-size);
+  line-height: var(--type-page-title-line);
+  letter-spacing: var(--type-page-title-spacing);
+  color: var(--color-deep-emerald);
+}
+.offer-card__price-unit {
+  font-size: var(--type-label-size);
+  color: var(--color-secondary-text);
+}
+.offer-card__price-total {
+  color: var(--color-secondary-text);
+}
+/* Flights use a dedicated fare block — give its amount the same dominance. */
+.offer-card__fare-amount {
+  font-size: var(--type-page-title-size);
+  line-height: var(--type-page-title-line);
+  letter-spacing: var(--type-page-title-spacing);
+}
+/* Deals bookable price label (a single `.offer-card__price` string, not the
+   three-part block) reads as the dominant figure on its card. */
+.deals-bookable .offer-card__price {
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+  font-weight: 700;
+  color: var(--color-deep-emerald);
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+/* Consistent Provenance_Label placement — the provenance block always sits in
+   the same spot (just above the card CTA / bottom of the card) with a hairline
+   top rule, across every offer-card family. Spacing only; the badge colours and
+   text are owned by the provenance component and left untouched. */
+.offer-card .provenance,
+.offer-card .offer-provenance {
+  margin-top: auto;
+  padding-top: var(--space-sm);
+}
+
+/* ── My_Trips — premium saved-trip cards + empty state ──────────────────────
+   Keep the itinerary/booking left-accent and badges; add the shared hover
+   elevation and a warm editorial empty-state band. Progress/metadata already
+   render through existing classes; this only elevates their frame. */
+.my-trips__card {
+  border-radius: var(--radius-lg);
+  transition:
+    box-shadow var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+.my-trips__card:hover {
+  box-shadow: var(--elevation-hover);
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .my-trips__card:hover { transform: none; }
+}
+.my-trips__card-title {
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+}
+/* Empty state reads as a warm editorial invitation (warm-sand surface) rather
+   than a plain card; the discovery/planning links inside it are preserved. */
+.my-trips__empty {
+  background: var(--surface-editorial);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+.my-trips__empty-title {
+  font-family: var(--font-display);
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+}
+
+/* ── Trip / Sights editorial polish ─────────────────────────────────────────
+   Trip (/trip) and Sights (/sights) render the Planner and DiscoverSights
+   components elevated in Phases 3–4 (trip cover, image-led gallery). Give the
+   Sights result tiles the shared premium hover elevation + image zoom so the
+   two surfaces read consistently with the itinerary companion. */
+.sight-card {
+  border-radius: var(--radius-lg);
+  transition:
+    box-shadow var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+.sight-card:hover {
+  box-shadow: var(--elevation-hover);
+  transform: translateY(-2px);
+}
+.sight-card .sight-card__media img {
+  transition: transform var(--motion-standard) var(--ease-standard);
+}
+.sight-card:hover .sight-card__media img { transform: scale(1.04); }
+@media (prefers-reduced-motion: reduce) {
+  .sight-card:hover { transform: none; }
+  .sight-card:hover .sight-card__media img { transform: none; }
+}
+
+/* ── Account / Signup — premium minimalist auth ─────────────────────────────
+   The auth surfaces keep their behavior and the descriptive error path exactly.
+   Elevation only: the heading reads as an expressive serif display, and the
+   editorial intro gains a warm-sand side accent so the auth page reads as a
+   premium editorial composition rather than a bare form. No markup change. */
+.auth .auth__intro {
+  position: relative;
+  padding: var(--space-lg) var(--space-lg) var(--space-lg) var(--space-xl);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(120deg,
+    var(--surface-editorial),
+    color-mix(in srgb, var(--color-emerald-tint) 40%, var(--surface-editorial)));
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+/* An editorial side band in the brand emerald, the "panel" accent the design
+   calls for, kept subtle so it never competes with the form. */
+.auth .auth__intro::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: linear-gradient(180deg,
+    var(--color-primary-green), var(--color-action-orange));
+}
+.auth .auth__intro .display {
+  font-family: var(--font-display);
+  font-size: var(--type-section-size);
+  line-height: var(--type-section-line);
+  letter-spacing: var(--type-section-spacing);
+  color: var(--color-deep-pine);
+}
+/* The auth heading inside the card stays serif + deep-pine for the premium
+   editorial read; the orange Primary_Action submit (`.auth__cta`) is unchanged. */
+.auth__heading {
+  font-family: var(--font-display);
+  color: var(--color-deep-pine);
+}
+
+/* ===========================================================================
+   Flights results - "Unlock a lower trip price" coupon strip + wide single-row
+   flight cards. Existing tokens and non-token helpers only; NO new :root
+   custom property is introduced (token<->CSS bijection unchanged). Motion is
+   colour/background/shadow only, so no reduced-motion override is needed.
+   =========================================================================== */
+.flight-coupons {
+  margin: var(--space-lg) 0;
+  padding: var(--space-lg);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(120deg, var(--color-pale-mint) 0%, var(--color-background) 55%, var(--color-warm-sand) 100%);
+}
+.flight-coupons__head { display: flex; align-items: flex-start; gap: var(--space-sm); margin-bottom: var(--space-md); }
+.flight-coupons__icon { color: var(--color-deep-emerald); display: inline-flex; margin-top: 2px; }
+.flight-coupons__title { margin: 0; font-family: var(--font-body); font-size: var(--type-body-size); font-weight: 700; letter-spacing: 0; color: var(--color-primary-text); }
+.flight-coupons__lead { margin: 2px 0 0; font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.flight-coupons__grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-sm); }
+.flight-coupon {
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  transition: box-shadow var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+.flight-coupon:hover { border-color: var(--color-soft-green); box-shadow: var(--shadow-sm); }
+.flight-coupon__code { margin: 0; font-weight: 700; color: var(--color-deep-emerald); letter-spacing: 0.02em; }
+.flight-coupon__name { margin: var(--space-xs) 0 0; color: var(--color-primary-text); }
+.flight-coupon__desc { margin: var(--space-xs) 0 0; font-size: var(--type-helper-size); line-height: var(--type-helper-line); color: var(--color-secondary-text); }
+
+.offer-list .flight-row {
+  padding: 0;
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-background);
+  box-shadow: var(--shadow-sm);
+}
+.flight-row .estimated-notice { margin: 0 var(--space-lg) var(--space-md); }
+.flight-row__link {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(9rem, 1.1fr) 4.75rem minmax(7rem, 1.3fr) 4.75rem minmax(9rem, 1fr) minmax(9.5rem, auto);
+  grid-template-areas: "pick carrier dep path arr info price";
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+.flight-row__link:hover { color: var(--color-primary-text); }
+.flight-row__pick { grid-area: pick; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-xs); }
+.flight-row__badge {
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--color-deep-emerald); background: var(--color-pale-mint);
+  border: 1px solid var(--color-soft-green); border-radius: var(--radius-sm); padding: 2px 8px;
+}
+.flight-row__match { font-size: var(--type-helper-size); font-weight: 600; color: var(--color-secondary-text); }
+.flight-row__carrier { grid-area: carrier; display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
+.flight-row__icon {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: var(--radius-md);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-pale-mint); color: var(--color-deep-emerald);
+}
+.flight-row__carrier-text { display: flex; flex-direction: column; min-width: 0; }
+.flight-row__flightno { font-weight: 700; color: var(--color-primary-text); }
+.flight-row__cabin { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.flight-row__time { grid-area: dep; display: flex; flex-direction: column; }
+.flight-row__time--arrive { grid-area: arr; align-items: flex-end; text-align: right; }
+.flight-row__clock { font-size: var(--type-card-title-size); font-weight: 700; line-height: 1.2; color: var(--color-primary-text); font-variant-numeric: tabular-nums; }
+.flight-row__nextday { margin-left: 2px; font-size: 0.65rem; color: var(--color-action-orange); }
+.flight-row__city { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.flight-row__path { grid-area: path; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.flight-row__duration,
+.flight-row__stops { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.flight-row__line { position: relative; display: block; width: 100%; height: 1px; background: var(--color-light-border); }
+.flight-row__plane {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%) rotate(90deg);
+  display: inline-flex; padding: 0 4px;
+  color: var(--color-primary-green); background: var(--color-background);
+}
+.flight-row__info { grid-area: info; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.flight-row__info li { display: flex; align-items: center; gap: 6px; }
+.flight-row__date { color: var(--color-primary-text); }
+.flight-row__highlight svg { color: var(--color-primary-green); }
+.flight-row__price { grid-area: price; display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 2px; }
+.flight-row .flight-row__price .provenance { margin: 0 0 var(--space-xs); padding: 0; justify-content: flex-end; }
+.flight-row__price .provenance__dot { display: none; }
+.flight-row__price .provenance__text {
+  font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--color-orange-hover);
+  background: color-mix(in srgb, var(--color-action-orange) 16%, var(--color-background));
+  border-radius: var(--radius-pill); padding: 3px 10px;
+}
+.flight-row__price .provenance--live .provenance__text { color: var(--color-deep-emerald); background: var(--color-pale-mint); }
+.flight-row__amount { font-size: calc(var(--type-card-title-size) * 1.2); font-weight: 700; line-height: 1.15; color: var(--color-primary-text); font-variant-numeric: tabular-nums; }
+.flight-row__unit { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.flight-row__total { font-size: var(--type-helper-size); font-weight: 700; color: var(--color-primary-text); }
+.flight-row__select {
+  margin-top: var(--space-sm); padding: 8px 16px; border-radius: var(--radius-md);
+  font-weight: 600; color: var(--color-primary-text);
+  transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.flight-row__link:hover .flight-row__select,
+.flight-row__link:focus-visible .flight-row__select { background: var(--color-action-orange); color: var(--color-background); }
+
+/* Tablet / narrow laptop: two-tier row, price column on the right. */
+@media (max-width: 1180px) {
+  .flight-row__link {
+    grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) minmax(0, 1fr);
+    grid-template-areas:
+      "pick pick price"
+      "carrier carrier price"
+      "dep path arr"
+      "info info info";
+    row-gap: var(--space-sm);
+  }
+  .flight-coupons__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Phone: fully stacked, full-width orange Select button. */
+@media (max-width: 600px) {
+  .flight-row__link {
+    grid-template-areas:
+      "pick pick pick"
+      "carrier carrier carrier"
+      "dep path arr"
+      "info info info"
+      "price price price";
+    padding: var(--space-md);
+  }
+  .flight-row__price { align-items: stretch; text-align: left; padding-top: var(--space-sm); border-top: 1px solid var(--color-light-border); }
+  .flight-row .flight-row__price .provenance { justify-content: flex-start; }
+  .flight-row__select { text-align: center; background: var(--color-action-orange); color: var(--color-background); }
+  .flight-coupons__grid { grid-template-columns: 1fr; }
+}
+/* Flights: the results list holds full-width rows, not a card grid. */
+.offer-list.offer-list--rows { grid-template-columns: 1fr; gap: var(--space-md); }
+
+/* ===========================================================================
+   Stays - live hotel prices (Google Hotels via SerpApi) and per-site booking
+   offers. Existing tokens and non-token helpers only; no new :root property.
+   =========================================================================== */
+.live-hotel-notice { margin: var(--space-md) 0; padding: var(--space-sm) var(--space-md); font-size: var(--type-helper-size); color: var(--color-secondary-text); background: var(--color-muted-bg); }
+.live-hotel-list { list-style: none; margin: var(--space-lg) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-md); }
+.live-hotel { border: 1px solid var(--color-light-border); border-radius: var(--radius-xl); background: var(--color-background); box-shadow: var(--shadow-sm); overflow: hidden; transition: box-shadow var(--motion-fast) var(--ease-standard); }
+.live-hotel:hover { box-shadow: var(--elevation-hover); }
+.live-hotel__row { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(12rem, auto); gap: var(--space-lg); align-items: stretch; padding: var(--space-md); }
+.live-hotel__media { aspect-ratio: 4 / 3; border-radius: var(--radius-lg); overflow: hidden; background: var(--color-pale-mint); }
+.live-hotel__media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.live-hotel__placeholder { display: block; width: 100%; height: 100%; background: linear-gradient(135deg, var(--color-pale-mint), var(--color-warm-sand)); }
+.live-hotel__body { min-width: 0; display: flex; flex-direction: column; gap: var(--space-xs); }
+.live-hotel__name { margin: 0; font-family: var(--font-display); font-size: var(--type-card-title-size); line-height: var(--type-card-title-line); color: var(--color-primary-text); }
+.live-hotel__meta { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-sm); font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.live-hotel__stars { font-weight: 700; color: var(--color-deep-emerald); }
+.live-hotel__rating { font-weight: 600; color: var(--color-primary-text); }
+.live-hotel__desc { margin: 0; font-size: var(--type-helper-size); line-height: var(--type-helper-line); color: var(--color-secondary-text); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.live-hotel__amenities { list-style: none; margin: var(--space-xs) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.live-hotel__amenities li { font-size: 0.75rem; padding: 2px 10px; border-radius: var(--radius-pill); background: var(--color-muted-bg); border: 1px solid var(--color-light-border); color: var(--color-secondary-text); }
+.live-hotel__price { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; text-align: right; gap: 2px; }
+.live-hotel__price .provenance { justify-content: flex-end; margin: 0 0 var(--space-xs); padding: 0; }
+.live-hotel__price .provenance__dot { display: none; }
+.live-hotel__price .provenance__text { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-deep-emerald); background: var(--color-pale-mint); border-radius: var(--radius-pill); padding: 3px 10px; }
+.live-hotel__amount { font-size: calc(var(--type-card-title-size) * 1.2); font-weight: 700; line-height: 1.15; color: var(--color-primary-text); font-variant-numeric: tabular-nums; }
+.live-hotel__unit,
+.live-hotel__checked { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.live-hotel__total { font-size: var(--type-helper-size); font-weight: 700; color: var(--color-primary-text); }
+.live-hotel__compare { margin-top: var(--space-sm); }
+.live-hotel__offers { border-top: 1px solid var(--color-light-border); background: var(--color-muted-bg); padding: var(--space-md); }
+.live-hotel__status { margin: 0 0 var(--space-sm); font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.live-hotel__status--error { color: var(--color-orange-hover); }
+.live-hotel__note { margin: var(--space-sm) 0 0; font-size: var(--type-helper-size); line-height: var(--type-helper-line); color: var(--color-secondary-text); }
+.live-offer-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-xs); }
+.live-offer { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-md); padding: var(--space-sm) var(--space-md); background: var(--color-background); border: 1px solid var(--color-light-border); border-radius: var(--radius-md); }
+.live-offer__source { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); min-width: 0; }
+.live-offer__logo { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 4px; object-fit: contain; }
+.live-offer__logo--blank { display: inline-block; background: var(--color-light-border); }
+.live-offer__name { font-weight: 600; color: var(--color-primary-text); }
+.live-offer__badge { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-deep-emerald); background: var(--color-pale-mint); border-radius: var(--radius-sm); padding: 1px 6px; }
+.live-offer__perk { font-size: var(--type-helper-size); color: var(--color-deep-emerald); }
+.live-offer__price { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.live-offer__amount { font-weight: 700; color: var(--color-primary-text); font-variant-numeric: tabular-nums; }
+.live-offer__unit,
+.live-offer__total { font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.live-offer__book { white-space: nowrap; }
+
+@media (max-width: 1023px) {
+  .live-hotel__row { grid-template-columns: 160px minmax(0, 1fr); }
+  .live-hotel__price { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; text-align: left; gap: var(--space-sm); border-top: 1px solid var(--color-light-border); padding-top: var(--space-sm); }
+  .live-hotel__price .provenance { margin: 0; }
+  .live-hotel__compare { margin: 0 0 0 auto; }
+}
+@media (max-width: 600px) {
+  .live-hotel__row { grid-template-columns: 1fr; }
+  .live-hotel__compare { width: 100%; margin-left: 0; }
+  .live-offer { grid-template-columns: minmax(0, 1fr) auto; }
+  .live-offer__book { grid-column: 1 / -1; text-align: center; }
+}
+/* ===========================================================================
+   Stays search form (/stays). Existing tokens and non-token helpers only.
+   =========================================================================== */
+.stays-search { margin: var(--space-md) 0; padding: var(--space-lg); border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); }
+.stays-search--compact { padding: var(--space-md) var(--space-lg); }
+.stays-search__intro { margin-bottom: var(--space-md); }
+.stays-search__intro h2 { margin: 0 0 var(--space-sm); }
+.stays-search__intro p { margin: 0; color: var(--color-secondary-text); }
+.stays-search__fields { display: grid; grid-template-columns: minmax(12rem, 2fr) repeat(2, minmax(9rem, 1fr)) repeat(2, minmax(5rem, 0.6fr)) auto; gap: var(--space-md); align-items: start; }
+.stays-search__fields .field { margin: 0; }
+.stays-search__submit { align-self: end; min-height: 44px; white-space: nowrap; }
+.stays-search__submit:disabled { opacity: 0.7; cursor: progress; }
+@media (max-width: 960px) {
+  .stays-search__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stays-search__destination, .stays-search__submit { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .stays-search__fields { grid-template-columns: 1fr; }
+}
+
+/* ===========================================================================
+   Live travel pricing (task 13.1) - flights search form, results toolbar +
+   filter pills, live flight rows, the flight "Compare & book" booking panel,
+   the shared "AI's pick" badge, and the outbound BookingRequestButton.
+
+   These extend the EXISTING visual language established just above by the
+   .live-hotel, .live-offer, .flight-row and .stays-search blocks: the same
+   white card surfaces, color-light-border hairlines, the radius and shadow
+   helpers, the green/mint accent (color-deep-emerald on color-pale-mint),
+   and the orange Primary_Action CTA. No NEW :root custom property is added -
+   only existing token custom properties and the
+   free radius, shadow and elevation helpers - so the token to CSS
+   bijection (token-css-consistency.test) is untouched. Any component-local
+   custom property uses a non-token prefix on the component selector, never in
+   :root. All new transitions are disabled under prefers-reduced-motion in the
+   dedicated block at the end. (Req 16.7, 17.5, 19.1, 19.4, 19.5, 19.6, 19.7,
+   22.3.)
+   =========================================================================== */
+
+/* -- Shared "AI's pick" badge + reason ------------------------------------
+   The badge means "pick" by its text, so meaning never relies on colour alone
+   (Req 19.7). Deep-emerald text on pale-mint meets AA contrast (Req 19.4). The
+   reason is a small muted line placed under the badge. Used by the stay card
+   (.offer-card__pick), the hotel card (.live-hotel__pick) and, via its own
+   .flight-row__badge, the flight row. */
+.ai-pick-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-deep-emerald);
+  background: var(--color-pale-mint);
+  border: 1px solid var(--color-soft-green);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+}
+.offer-card__pick,
+.live-hotel__pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  margin: 0 0 var(--space-xs);
+}
+.stay-card__reason,
+.live-hotel__reason,
+.flight-row__reason {
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  color: var(--color-primary-text);
+  overflow-wrap: anywhere;
+}
+/* In the flight row the reason sits directly under the badge in the pick
+   column; keep it compact and left-aligned. */
+.flight-row__reason { font-weight: 600; }
+
+/* -- Live flight row additions --------------------------------------------
+   The live row reuses the already-styled .flight-row / .flight-row__* grid; it
+   only needs the few pieces the live component adds (airline name, carrier
+   logo, layover codes, the "Checked ..." line, and the Compare & book CTA +
+   expanding panel). Everything else is inherited. */
+.flight-row__logo {
+  display: block;
+  width: 24px;
+  height: 24px;
+  max-width: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.flight-row__airline {
+  font-weight: 700;
+  color: var(--color-primary-text);
+  overflow-wrap: anywhere;
+}
+.flight-row__layovers { color: var(--color-secondary-text); }
+.flight-row__checked {
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+}
+/* Compare & book: an orange CTA sized to the price column, matching the hotel
+   "Compare & book" control. */
+.flight-row__compare {
+  margin-top: var(--space-sm);
+  min-height: 44px;
+  white-space: nowrap;
+}
+.flight-row__compare:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+/* The expanding booking area spans the full width of the row below the grid,
+   separated by the same hairline the hotel offers panel uses. */
+.flight-row__panel {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--color-light-border);
+}
+.flight-row--live .flight-row__panel { margin-top: var(--space-md); }
+
+/* On wide screens the live row's pick column can get crowded by the reason
+   line; let it wrap under the badge without stretching the grid. */
+@media (min-width: 768px) {
+  .flight-row--live .flight-row__pick { max-width: 12rem; }
+}
+
+/* -- Flight booking panel ("Compare & book") ------------------------------
+   The panel container reuses .live-hotel__offers (muted-bg, top hairline,
+   padded) and the option rows reuse .live-offer-list / .live-offer, so flight
+   booking options line up exactly like hotel offer rows. These rules add the
+   return-leg list, the selected-leg bar with a "Change return flight" link, and
+   comfortable spacing so nothing is cramped. */
+.flight-booking { display: flex; flex-direction: column; gap: var(--space-md); }
+.flight-booking__status { margin: 0; }
+.flight-booking__hint {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--type-helper-size);
+  color: var(--color-primary-text);
+}
+.flight-booking__returns,
+.flight-booking__options-wrap { display: flex; flex-direction: column; gap: var(--space-sm); }
+
+/* Return legs: each a full-width selectable button, times on the left and the
+   airline / stops / fare on the right, aligned. */
+.flight-booking__legs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.flight-booking__leg { margin: 0; }
+.flight-booking__leg-btn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  text-align: left;
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  color: var(--color-primary-text);
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+.flight-booking__leg-btn:hover {
+  border-color: var(--color-soft-green);
+  box-shadow: var(--shadow-sm);
+}
+.flight-booking__leg-btn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+.flight-booking__leg-times {
+  font-weight: 700;
+  color: var(--color-primary-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.flight-booking__leg-offset { color: var(--color-action-orange); font-weight: 700; }
+.flight-booking__leg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--type-helper-size);
+  color: var(--color-secondary-text);
+}
+.flight-booking__leg-airline { color: var(--color-primary-text); font-weight: 600; }
+.flight-booking__leg-stops { color: var(--color-secondary-text); }
+.flight-booking__leg-fare {
+  font-weight: 700;
+  color: var(--color-deep-emerald);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Selected-return bar with the inline "Change return flight" link. */
+.flight-booking__selected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-pale-mint);
+  border: 1px solid var(--color-soft-green);
+  border-radius: var(--radius-md);
+  font-size: var(--type-helper-size);
+  color: var(--color-primary-text);
+  overflow-wrap: anywhere;
+}
+.flight-booking__change {
+  margin-left: auto;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.flight-booking__change:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+/* The options list is the shared .live-offer-list; give it a little top room
+   when it follows the selected-leg bar. */
+.flight-booking__options { margin: 0; }
+.flight-booking__options-wrap .flight-booking__options { margin-top: var(--space-xs); }
+/* The trailing "Checked ..." line sits as a plain full-width row, not an offer
+   grid, so reset the inherited .live-offer grid for it. */
+.flight-booking__checked {
+  display: block;
+  padding: var(--space-xs) var(--space-md) 0;
+  border: 0;
+  background: transparent;
+}
+.flight-booking__note { margin: 0; }
+
+/* -- Outbound BookingRequestButton ----------------------------------------
+   CRITICAL for the alignment complaint: the POST variant is a
+   <form class="booking-request ... cta"> wrapping an inner
+   <button class="booking-request__submit">. The form must behave as an inline
+   control (not a full-width block that breaks the .live-offer row grid), and the
+   inner submit button must look exactly like the hotel .live-offer__book CTA so
+   flight booking options align like hotel offer rows. The GET variant is a
+   single <a> and already reads as the .cta anchor. */
+.booking-request {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  white-space: nowrap;
+}
+/* Form wrapper carries .cta from the component for compatibility, but it must
+   not paint as a button itself - the inner submit is the real control. Reset
+   the wrapper so only the submit shows the orange CTA treatment. */
+.booking-request--post {
+  background: none;
+  box-shadow: none;
+}
+.booking-request--post:hover { background: none; box-shadow: none; }
+/* The inner submit mirrors the base .cta/.live-offer__book pill. */
+.booking-request__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.6rem 1.1rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-background);
+  background: var(--color-action-orange);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+.booking-request__submit:hover { background: var(--color-orange-hover); }
+.booking-request__submit:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+/* The GET anchor keeps the .cta look; just pin the touch target and alignment. */
+.booking-request--get {
+  align-items: center;
+  min-height: 44px;
+}
+/* logo + text + price, aligned on one baseline-centred row. */
+.booking-request__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.booking-request__logo {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  max-width: 100%;
+  border-radius: 4px;
+  object-fit: contain;
+}
+.booking-request__text { overflow-wrap: anywhere; }
+.booking-request__price {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- Results toolbar + filter pills ---------------------------------------
+   The toolbar is a bar (count on the left, Sort + Filters toggle on the right)
+   over a filters panel. On desktop (>=769px) the panel is always visible; on
+   small screens (<=768px) it collapses and the "Filters (n)" toggle reveals it
+   via the .is-open class (the component also sets `hidden`, so the desktop
+   override must re-show it). Pills are a wrapping row of removable mint/green
+   chips. */
+.results-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-background);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.results-toolbar__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-md);
+}
+.results-toolbar__count {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-primary-text);
+}
+.results-toolbar__sort { margin: 0; min-width: 12rem; }
+.results-toolbar__sort > span {
+  margin-bottom: 0.25rem;
+}
+.results-toolbar__sort select { min-height: 44px; }
+/* The "Filters (n)" toggle is only needed on small screens; hide it on desktop
+   where the filter panel is always open. */
+.results-toolbar__toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+.results-toolbar__toggle:hover { border-color: var(--color-primary-green); }
+.results-toolbar__toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+.results-toolbar__filters {
+  border-top: 1px solid var(--color-light-border);
+  padding-top: var(--space-md);
+}
+.results-toolbar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-lg);
+}
+.results-toolbar__controls .field { margin: 0; min-width: 10rem; flex: 1 1 10rem; }
+.results-toolbar__group {
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+  margin: 0;
+  min-width: 12rem;
+  flex: 1 1 14rem;
+}
+.results-toolbar__group legend {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-secondary-text);
+  padding: 0 var(--space-xs);
+}
+/* Checkbox fields line up as an aligned row (box + label) inside groups. */
+.field--checkbox {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 var(--space-xs);
+  min-height: 44px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.field--checkbox input { width: auto; min-height: 0; margin: 0; cursor: pointer; }
+.field--checkbox span { font-weight: 600; color: var(--color-primary-text); }
+.field--checkbox input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Active-filter pills: a wrapping row of removable mint/green chips. */
+.results-toolbar__pills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--color-soft-green);
+  border-radius: var(--radius-pill);
+  background: var(--color-pale-mint);
+  color: var(--color-deep-emerald);
+  font: inherit;
+  font-size: var(--type-helper-size);
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+.filter-pill:hover { border-color: var(--color-primary-green); }
+.filter-pill:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+.filter-pill__label { overflow-wrap: anywhere; }
+.filter-pill__remove { font-weight: 700; line-height: 1; }
+/* "Clear all" reads as a quieter outline chip so it is distinct from a value. */
+.filter-pill--clear {
+  background: var(--color-background);
+  border-color: var(--color-light-border);
+  color: var(--color-primary-text);
+}
+.filter-pill--clear:hover { border-color: var(--color-action-orange); color: var(--color-orange-hover); }
+
+/* Desktop: the filter panel is always visible regardless of the component's
+   collapsed state, and the small-screen toggle is not shown. */
+/* The filter panel stays collapsed at every width until the traveller clicks
+   "Filters"; the component drives the hidden attribute and .is-open, so the
+   toggle is always shown and the panel never occupies space while closed. */
+/* Small screens: the panel is collapsed until the toggle opens it. The
+   component drives `hidden`/`.is-open`; this keeps the open state laid out as a
+   stacked column of full-width controls. */
+@media (max-width: 768px) {
+  .results-toolbar__controls { flex-direction: column; align-items: stretch; gap: var(--space-md); }
+  .results-toolbar__controls .field,
+  .results-toolbar__group { min-width: 0; flex-basis: auto; width: 100%; }
+  .results-toolbar__sort { width: 100%; }
+}
+
+/* Show-more wrapper (both results components). */
+.results__more {
+  display: flex;
+  justify-content: center;
+  margin: var(--space-lg) 0;
+}
+
+/* -- Flights search form --------------------------------------------------
+   Mirrors the .stays-search* grid approach exactly, with the added trip-type
+   radio row and the origin<->destination swap button aligned into the field
+   grid. */
+.flights-search { margin: var(--space-md) 0; padding: var(--space-lg); border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); }
+.flights-search--compact { padding: var(--space-md) var(--space-lg); }
+.flights-search__intro { margin-bottom: var(--space-md); }
+.flights-search__intro h2 { margin: 0 0 var(--space-sm); }
+.flights-search__intro p { margin: 0; color: var(--color-secondary-text); }
+
+/* Trip-type radios on one wrapping row, like the shared .triptype fieldset. */
+.flights-search__triptype {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-md);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-lg);
+}
+.flights-search__triptype legend {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-secondary-text);
+  padding: 0;
+}
+.flights-search__radio {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  min-height: 44px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.flights-search__radio input { width: auto; min-height: 0; margin: 0; cursor: pointer; }
+.flights-search__radio span { font-weight: 600; color: var(--color-primary-text); }
+.flights-search__radio input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Field grid: from, swap, to, depart, return, travellers, cabin, submit. */
+.flights-search__fields {
+  display: grid;
+  grid-template-columns:
+    minmax(10rem, 1.4fr) auto minmax(10rem, 1.4fr)
+    repeat(2, minmax(9rem, 1fr)) minmax(5rem, 0.6fr)
+    minmax(8rem, 0.9fr) auto;
+  gap: var(--space-md);
+  align-items: start;
+}
+.flights-search__fields .field { margin: 0; }
+/* The swap button aligns with the input row (below the field labels). */
+.flights-search__swap {
+  align-self: start;
+  margin-top: 1.7rem;
+  appearance: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.flights-search__swap:hover { border-color: var(--color-primary-green); color: var(--color-deep-emerald); }
+.flights-search__swap:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+}
+.flights-search__submit { align-self: end; min-height: 44px; white-space: nowrap; }
+.flights-search__submit:disabled { opacity: 0.7; cursor: progress; }
+
+@media (max-width: 960px) {
+  .flights-search__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flights-search__origin,
+  .flights-search__destination,
+  .flights-search__submit { grid-column: 1 / -1; }
+  .flights-search__swap { margin-top: 0; align-self: center; justify-self: center; }
+}
+@media (max-width: 480px) {
+  .flights-search__fields { grid-template-columns: 1fr; }
+}
+
+/* -- Live flight row: stacked on phones, horizontal from 768px --------------
+   The shared .flight-row grid already stacks via its own breakpoints at 1180px
+   and 600px; this adds the 767px stacked / 768px horizontal seam the live row
+   calls for (Req 17.5) without disturbing the estimate card's existing rules. */
+@media (max-width: 767px) {
+  .flight-row--live .flight-row__panel { margin-top: var(--space-sm); }
+}
+
+/* -- Reduced motion: disable the new transitions ---------------------------
+   The shared .skeleton shimmer and the .live-hotel / .flight-row / card
+   transitions already have their own reduced-motion guards earlier in the file;
+   this block covers the controls ADDED by task 13.1. Nothing here reintroduces
+   motion. (Req 19.5.) */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skeleton__block,
+  .skeleton__card,
+  .flight-booking__leg-btn,
+  .booking-request__submit,
+  .results-toolbar__toggle,
+  .filter-pill {
+    transition: none;
+  }
+  .flight-booking__leg-btn:hover { box-shadow: none; }
+}
+
+/* ===========================================================================
+   AI Travel Assistant - bento-grid trip summary (visual only, scoped).
+   Replaces the plain summary list with a grid of varied-size tiles. Uses only
+   existing tokens plus the non-token radius, shadow, elevation and ease
+   helpers; adds no :root property. Motion has a reduced-motion fallback below.
+   =========================================================================== */
+.trip-bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin: var(--space-md) 0 0;
+}
+.trip-bento__tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: var(--space-md);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-light-border);
+  background: var(--color-muted-bg);
+  transition: transform var(--motion-fast) var(--ease-standard),
+              box-shadow var(--motion-fast) var(--ease-standard),
+              border-color var(--motion-fast) var(--ease-standard);
+}
+.trip-bento__tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+/* The route tile is the hero of the grid: full width, richer surface. */
+.trip-bento__tile--route {
+  grid-column: 1 / -1;
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--color-emerald-tint) 0%, rgba(255,255,255,0) 60%),
+    var(--color-pale-mint);
+  border-color: var(--color-soft-green);
+}
+/* Filled tiles earn a confident green edge and a corner check badge. */
+.trip-bento__tile[data-filled="true"] {
+  border-color: var(--color-primary-green);
+  background: var(--color-background);
+}
+.trip-bento__tile[data-filled="true"].trip-bento__tile--route {
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--color-emerald-tint) 0%, rgba(255,255,255,0) 60%),
+    var(--color-pale-mint);
+}
+.trip-bento__tile[data-filled="true"]::after {
+  content: "";
+  position: absolute; top: 0.6rem; right: 0.6rem;
+  width: 1.1rem; height: 1.1rem; border-radius: var(--radius-pill);
+  background:
+    var(--color-primary-green)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    center / 0.8rem no-repeat;
+  box-shadow: 0 0 0 3px var(--color-pale-mint);
+}
+/* Empty tiles read as "to do": dashed border, muted fill. */
+.trip-bento__tile[data-filled="false"] {
+  border-style: dashed;
+  border-color: var(--color-light-border);
+}
+.trip-bento__head {
+  display: inline-flex; align-items: center; gap: 0.5ch;
+  color: var(--color-deep-emerald);
+}
+.trip-bento__icon { flex: 0 0 auto; }
+.trip-bento__label {
+  font-size: var(--type-label-size); font-weight: var(--type-label-weight);
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-deep-emerald);
+}
+.trip-bento__value {
+  font-size: var(--type-body-size); font-weight: 600; color: var(--color-primary-text);
+  overflow-wrap: anywhere;
+}
+.trip-bento__value--headline {
+  font-family: var(--font-display); font-weight: 400;
+  font-size: calc(var(--type-card-title-size) * 1.15); line-height: 1.2;
+}
+.trip-bento__value--muted { color: var(--color-secondary-text); font-weight: 400; font-style: italic; }
+.trip-bento__change {
+  align-self: flex-start; margin-top: 0.2rem;
+  appearance: none; cursor: pointer; font: inherit; font-weight: 700;
+  padding: 0.25rem 0; border: 0; background: transparent;
+  color: var(--color-deep-emerald);
+}
+.trip-bento__change:hover { text-decoration: underline; }
+.trip-bento__change:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); border-radius: var(--radius-sm); }
+
+@media (max-width: 420px) {
+  .trip-bento { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trip-bento__tile { transition: none; }
+  .trip-bento__tile:hover { transform: none; }
+}
+/* ===========================================================================
+   Brand loader - the TripGenie animated mark used for loading states.
+   The SVG self-animates; this only centres it with a label. Uses existing
+   tokens and non-token helpers; adds no :root property.
+   =========================================================================== */
+.brand-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  text-align: center;
+}
+.brand-loader__mark { display: block; height: auto; max-width: 100%; }
+.brand-loader__label {
+  font-size: var(--type-helper-size);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-deep-emerald);
+}
+/* Skeleton: the branded loader sits above the placeholder blocks as the focal
+   point, on a soft mint card so it reads as a deliberate loading moment. */
+.skeleton__loader {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-lg);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(120% 120% at 50% 0%, var(--color-pale-mint) 0%, rgba(255,255,255,0) 70%),
+    var(--color-muted-bg);
+  border: 1px solid var(--color-light-border);
+}
+/* The live hotel / flight booking panels centre the loader in their status row. */
+.live-hotel__status .brand-loader,
+.flight-booking__status .brand-loader { padding: var(--space-md); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Pause the SVG animation for travellers who prefer reduced motion. The mark
+     stays visible as a static logo, and the label still announces progress. */
+  .brand-loader__mark { animation: none; }
+}
+/* ===========================================================================
+   Planner live prices (stays + flights) + a less-empty planner intro.
+   Scoped classes; only existing tokens and non-token helpers. No :root change.
+   =========================================================================== */
+/* The planner intro + composer sit on a soft mint canvas so the top of the
+   page reads as a designed panel rather than a blank area. */
+.planner-chat {
+  margin-top: var(--space-lg);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-soft-green);
+  background:
+    radial-gradient(120% 120% at 100% 0%, var(--color-emerald-tint) 0%, rgba(255,255,255,0) 55%),
+    linear-gradient(135deg, var(--color-pale-mint) 0%, var(--color-warm-sand) 100%);
+}
+.planner-chat .planner-composer { background: var(--color-background); }
+
+/* While the itinerary is drafting, the panel holds only the branded loader
+   plus rotating facts, so the surrounding mint canvas is dropped and the
+   loading state reads as transparent (no band, border, or padding box). */
+/* Full inline live results inside the trip plan: stays then flights, each
+   full width, reusing the dedicated-page card and row components so the
+   plan shows the same live SerpApi results without a click-through. */
+.trip-live__sections { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); }
+@media (max-width: 720px) { .trip-live__sections { grid-template-columns: 1fr; } }
+.trip-live__card {
+  display: flex; flex-direction: column; gap: var(--space-xs);
+  padding: var(--space-lg); border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-lg); background: var(--color-background);
+  box-shadow: var(--shadow-sm); color: var(--color-primary-text); text-decoration: none;
+  transition: transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+.trip-live__card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--color-soft-green); }
+.trip-live__card:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+.trip-live__card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md); }
+.trip-live__card-go { font-weight: 700; color: var(--color-deep-emerald); white-space: nowrap; }
+.trip-live__card-meta { margin: 0; color: var(--color-secondary-text); font-size: var(--type-helper-size); }
+.trip-live__card-meta strong { color: var(--color-primary-text); }
+@media (prefers-reduced-motion: reduce) { .trip-live__card { transition: none; } .trip-live__card:hover { transform: none; } }
+.trip-live__section { display: flex; flex-direction: column; gap: var(--space-md); }
+.trip-live__colhead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; }
+.trip-live__coltitle { margin: 0; font-size: var(--type-card-title-size); font-weight: 700; color: var(--color-primary-text); }
+.trip-live__all { font-weight: 600; color: var(--color-deep-emerald); white-space: nowrap; }
+.trip-live__all:hover { color: var(--color-primary-green); }
+.trip-live__empty { margin: 0; color: var(--color-secondary-text); font-size: var(--type-helper-size); }
+.planner-chat:has(.planner-drafting) {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-top: var(--space-lg);
+}
+
+/* Live prices section under the itinerary. */
+.trip-live {
+  margin-top: var(--space-xl);
+  padding: var(--space-lg);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-soft-green);
+  background:
+    radial-gradient(120% 80% at 0% 0%, var(--color-pale-mint) 0%, rgba(255,255,255,0) 60%),
+    var(--color-background);
+  box-shadow: var(--shadow-sm);
+}
+.trip-live__head { margin-bottom: var(--space-md); }
+.trip-live__title {
+  margin: 0 0 var(--space-xs);
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+  color: var(--color-primary-text);
+}
+.trip-live__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+.trip-live__colhead {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-light-border); padding-bottom: var(--space-xs);
+}
+.trip-live__coltitle { margin: 0; font-size: var(--type-label-size); text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-deep-emerald); }
+.trip-live__all { color: var(--color-deep-emerald); font-weight: 700; text-decoration: none; white-space: nowrap; font-size: var(--type-helper-size); }
+.trip-live__all:hover { text-decoration: underline; }
+.trip-live__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-xs); }
+.trip-live__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name price" "meta price";
+  align-items: center; column-gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-light-border); border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+.trip-live__item-name { grid-area: name; font-weight: 600; color: var(--color-primary-text); overflow-wrap: anywhere; }
+.trip-live__item-meta { grid-area: meta; font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.trip-live__item-price { grid-area: price; text-align: right; font-weight: 700; color: var(--color-primary-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trip-live__item-price small { display: block; font-weight: 400; font-size: var(--type-helper-size); color: var(--color-secondary-text); }
+.trip-live__empty { margin: 0; color: var(--color-secondary-text); font-size: var(--type-helper-size); }
+.trip-live__note {
+  margin: var(--space-md) 0 0; padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md); background: var(--color-muted-bg);
+  color: var(--color-secondary-text); font-size: var(--type-helper-size);
+}
+@media (max-width: 720px) {
+  .trip-live__grid { grid-template-columns: 1fr; }
+}
+/* ===========================================================================
+   Planner drafting state - branded loader + rotating travel facts.
+   Replaces the old grey skeleton while an itinerary generates. Existing tokens
+   and non-token helpers only; no :root change. Reduced-motion safe.
+   =========================================================================== */
+.planner-drafting {
+  text-align: center;
+  background:
+    radial-gradient(120% 120% at 50% 0%, var(--color-pale-mint) 0%, rgba(255,255,255,0) 65%),
+    var(--color-background);
+  border: 1px solid var(--color-soft-green);
+}
+.planner-drafting .chat-message__role {
+  display: block;
+  color: var(--color-deep-emerald);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: var(--type-label-size);
+}
+.planner-drafting__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) 0 var(--space-sm);
+}
+.travel-facts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  max-width: 44ch;
+  margin: 0 auto;
+  min-height: 3.2em;
+}
+.travel-facts__tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-deep-emerald);
+  background: var(--color-pale-mint);
+  border: 1px solid var(--color-soft-green);
+  border-radius: var(--radius-pill);
+  padding: 2px 10px;
+}
+.travel-facts__text {
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  color: var(--color-primary-text);
+  animation: travel-facts-in var(--motion-panel) var(--ease-standard) both;
+}
+@keyframes travel-facts-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .travel-facts__text { animation: none; }
+}
+
+/* Drafting state: ONLY the branded loader + rotating facts, no card/heading. */
+.planner-drafting {
+  margin: var(--space-xl) auto 0;
+  max-width: 48ch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  text-align: center;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+
+/* flights-visual-upgrade: a more polished, lightly animated flights results
+   page. Pure presentation on top of the existing .flight-row grid and the
+   shared .results__summary header. Reuses existing tokens only; no new
+   reserved-prefix token is introduced. All motion is reduced-motion safe. */
+
+/* Results header reads as a soft hero strip (shared by results pages). */
+.results .results__summary {
+  padding: var(--space-lg) var(--space-xl);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-soft-green);
+  background:
+    radial-gradient(130% 120% at 100% 0%, var(--color-emerald-tint) 0%, rgba(255,255,255,0) 55%),
+    linear-gradient(135deg, var(--color-pale-mint) 0%, var(--color-warm-sand) 100%);
+}
+.results .results__summary .eyebrow { color: var(--color-deep-emerald); }
+.results .results__summary h1 { color: var(--color-primary-text); }
+.results .results__summary-line { color: var(--color-secondary-text); font-weight: 600; }
+
+/* Elevated, hover-lifting flight cards. */
+.offer-list .flight-row {
+  transition:
+    transform var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+  will-change: transform;
+}
+.offer-list .flight-row:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-soft-green);
+}
+/* The carrier chip gets a touch more presence. */
+.flight-row__icon { box-shadow: inset 0 0 0 1px var(--color-soft-green); }
+/* The AI-pick row gets a green left accent so it stands out. */
+.offer-list .flight-row--live:has(.flight-row__badge),
+.offer-list .flight-row:has(.flight-row__badge) {
+  border-left: 3px solid var(--color-primary-green);
+}
+/* The big price pops a little more. */
+.flight-row__amount { letter-spacing: -0.01em; }
+
+/* Gentle staggered entrance for the rows. */
+@keyframes flight-row-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.offer-list.offer-list--rows > .flight-row {
+  animation: flight-row-in var(--motion-panel) var(--ease-standard) both;
+}
+.offer-list.offer-list--rows > .flight-row:nth-child(1) { animation-delay: 0ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(2) { animation-delay: 60ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(3) { animation-delay: 120ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(4) { animation-delay: 180ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(5) { animation-delay: 240ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(n+6) { animation-delay: 300ms; }
+
+/* Polished Show-more and empty states. */
+.results__more .btn { padding: 10px 22px; border-radius: var(--radius-pill); font-weight: 700; }
+.results__empty { text-align: center; padding: var(--space-xl); }
+
+@media (prefers-reduced-motion: reduce) {
+  .offer-list .flight-row { transition: none; }
+  .offer-list .flight-row:hover { transform: none; }
+  .offer-list.offer-list--rows > .flight-row { animation: none; }
+}
+
+
+/* flight-card-redesign: bring the flights results list to the same polished,
+   animated quality as the stays live cards - a prominent airline-logo chip, a
+   clean route timeline, a strong price block with the live badge and Compare &
+   book, hover lift and a staggered entrance. Reuses existing tokens only; all
+   motion is reduced-motion safe. Builds on the existing .flight-row grid. */
+
+.offer-list.offer-list--rows { gap: var(--space-md); }
+.offer-list .flight-row {
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-background);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+}
+.offer-list .flight-row:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--color-soft-green); }
+
+/* Bigger, bolder airline logo chip. */
+.flight-row__icon {
+  width: 48px; height: 48px; border-radius: var(--radius-md);
+  background: var(--color-pale-mint); color: var(--color-deep-emerald);
+  box-shadow: inset 0 0 0 1px var(--color-soft-green);
+}
+.flight-row__logo { width: 30px; height: 30px; border-radius: 6px; object-fit: contain; background: var(--color-background); }
+.flight-row__airline { font-family: var(--font-display); font-size: var(--type-card-title-size); line-height: 1.2; color: var(--color-primary-text); font-weight: 700; }
+.flight-row__flightno { font-size: var(--type-helper-size); color: var(--color-secondary-text); font-variant-numeric: tabular-nums; }
+.flight-row__cabin { font-size: var(--type-helper-size); color: var(--color-deep-emerald); font-weight: 600; }
+
+/* Route timeline: emphasise the clocks and draw a clear flight path. */
+.flight-row__clock { font-size: calc(var(--type-card-title-size) * 1.05); font-weight: 700; }
+.flight-row__path { gap: 6px; }
+.flight-row__line { height: 2px; background: linear-gradient(90deg, var(--color-soft-green), var(--color-primary-green)); border-radius: 2px; }
+.flight-row__plane { color: var(--color-primary-green); background: var(--color-background); box-shadow: 0 0 0 3px var(--color-background); }
+.flight-row__duration { font-weight: 600; color: var(--color-primary-text); }
+.flight-row__stops { color: var(--color-secondary-text); }
+
+/* Price block: make the fare pop and the live badge read as a quote. */
+.flight-row__amount { font-size: calc(var(--type-card-title-size) * 1.3); letter-spacing: -0.01em; }
+.flight-row__price .provenance--live .provenance__text { color: var(--color-deep-emerald); background: var(--color-pale-mint); border-radius: var(--radius-pill); padding: 3px 10px; }
+.flight-row__compare { margin-top: var(--space-sm); border-radius: var(--radius-pill); font-weight: 700; }
+
+/* AI pick accent. */
+.offer-list .flight-row:has(.flight-row__badge) { border-left: 3px solid var(--color-primary-green); }
+
+/* Staggered entrance. */
+@keyframes flight-card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.offer-list.offer-list--rows > .flight-row { animation: flight-card-in var(--motion-panel) var(--ease-standard) both; }
+.offer-list.offer-list--rows > .flight-row:nth-child(1) { animation-delay: 0ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(2) { animation-delay: 70ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(3) { animation-delay: 140ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(4) { animation-delay: 210ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(5) { animation-delay: 280ms; }
+.offer-list.offer-list--rows > .flight-row:nth-child(n+6) { animation-delay: 340ms; }
+
+/* The Compare & book panel: logos + per-site prices, polished like the hotel offers. */
+.flight-booking { border-top: 1px solid var(--color-light-border); background: var(--color-muted-bg); padding: var(--space-md); }
+.flight-booking__options .live-offer__logo { width: 24px; height: 24px; }
+.flight-booking__hint, .flight-booking__selected { font-size: var(--type-helper-size); color: var(--color-secondary-text); margin: 0 0 var(--space-sm); }
+
+@media (prefers-reduced-motion: reduce) {
+  .offer-list .flight-row { transition: none; }
+  .offer-list .flight-row:hover { transform: none; }
+  .offer-list.offer-list--rows > .flight-row { animation: none; }
+}

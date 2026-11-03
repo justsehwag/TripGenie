@@ -1,4 +1,8 @@
 import type { CarOffer, FlightOffer, OfferMeta, PlaceOffer, Provenance, StayOffer } from "./types";
+// Type-only import to avoid any runtime import cycle. google-places.ts imports
+// ProviderReview from reviews.ts (not from this module), but the import is kept
+// type-only regardless so it is fully erased at compile time.
+import type { PlaceEnrichment } from "@/lib/providers/google-places";
 
 /**
  * Inventory Adapter (pure core + estimator) - design section 5.
@@ -15,6 +19,26 @@ export interface AttributableReview {
   rating: number;
   count: number;
   source: string;
+}
+
+/**
+ * Build the existing `AttributableReview` from a live Google `PlaceEnrichment`
+ * (google-places-integration design "Components and Interfaces §4"). Pure
+ * mapping with no side effects.
+ *
+ * Returns `{ rating, count, source: "Google" }` if and only if the enrichment
+ * carries a real rating (`rating !== null`), a truthy positive user rating
+ * count, and at least one review; otherwise returns `undefined` so the stay
+ * keeps its existing estimated labelling and no-verified-reviews state
+ * (Req 6.2, 6.3, 6.4, 6.5).
+ *
+ * The returned shape carries NO amount/price field: Google data must never
+ * enter any price computation. `priceLevel` is surfaced elsewhere as an
+ * indicative band only (Req 6.7).
+ */
+export function toAttributableReview(e: PlaceEnrichment): AttributableReview | undefined {
+  if (e.rating === null || !e.userRatingCount || e.reviews.length === 0) return undefined;
+  return { rating: e.rating, count: e.userRatingCount, source: "Google" };
 }
 
 export interface InventoryQuery {

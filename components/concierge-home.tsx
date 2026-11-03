@@ -10,9 +10,34 @@ import { advance, uncollected, REQUIRED_FIELDS, type ControllerState, type Contr
 import { syncFallbackModel } from "@/lib/intake-fallback";
 import { useTripContext } from "@/components/trip-context";
 import { useSpeechInput } from "@/components/use-speech-input";
+import { useDestinationImage } from "@/components/destination-image";
+import { useReveal } from "@/lib/use-reveal";
 
 /** A single conversation turn shown in the planner transcript. */
 type ChatMessage = { role: "assistant" | "user"; text: string };
+
+/**
+ * One transcript row. Messages render VISIBLE immediately (no opacity-0
+ * reveal gate) so a message can never get stuck invisible; a gentle one-time
+ * entrance is supplied purely by the `concierge-message` CSS (keyframe),
+ * which begins and ends fully opaque. No JS reveal state is used. Hydration-
+ * safe: server and first client render produce identical markup.
+ */
+function ConciergeMessage({ role, text }: ChatMessage) {
+  return (
+    <div
+      className={`chat-message concierge-message concierge-message--${role}`}
+    >
+      <span className="chat-message__role concierge-message__role">
+        {role === "assistant" && (
+          <span className="concierge-message__avatar" aria-hidden="true" />
+        )}
+        {role === "assistant" ? "TripGenie" : "You"}
+      </span>
+      <p className="concierge-message__text">{text}</p>
+    </div>
+  );
+}
 
 /**
  * Captured Live_Trip_Profile categories (Req 21.5). Each field is optional and
@@ -66,6 +91,30 @@ const CATEGORY_ROWS: ReadonlyArray<{
   { key: "tripVibe", label: "Trip vibe", prompt: "What's the vibe — relaxed, adventure, culture, budget, or luxury?" },
   { key: "specialNeeds", label: "Special needs", prompt: "Any special needs we should plan for — accessibility, infants, or medical?" },
 ];
+
+/**
+ * Decorative line icons for each Live_Trip_Profile category, keyed by the same
+ * category key. Presentational only (aria-hidden); they add nothing to the
+ * captured data and change no behaviour. Rendered inside the bento tiles.
+ */
+const CATEGORY_ICON: Record<string, string> = {
+  route: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z",
+  dates: "M7 2v3M17 2v3M3.5 9h17M5 5h14a1.5 1.5 0 0 1 1.5 1.5V19A1.5 1.5 0 0 1 19 20.5H5A1.5 1.5 0 0 1 3.5 19V6.5A1.5 1.5 0 0 1 5 5Z",
+  flightsClass: "M21 15.5v-1.8l-8-4.9V3.5a1.5 1.5 0 0 0-3 0v5.3l-8 4.9v1.8l8-2.4v5.1l-2 1.5V21l3.5-1 3.5 1v-1.3l-2-1.5v-5.1l8 2.4Z",
+  whosJoining: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 20v-1.5C3 15.5 6 14 9 14s6 1.5 6 4.5V20M15.5 14c2.6.2 5.5 1.6 5.5 4.5V20",
+  foodDietary: "M6 3v8a2 2 0 0 0 2 2v8M9 3v6M18 3c-1.6 0-3 2-3 5s1.4 4 3 4v8",
+  tripVibe: "M12 3l2.5 5.2 5.7.8-4.1 4 1 5.7L12 21l-5.1 2.7 1-5.7-4.1-4 5.7-.8L12 3Z",
+  specialNeeds: "M12 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-4 6h8M12 10v5l3 5M12 15l-3 5",
+};
+
+function CategoryIcon({ k }: { k: string }) {
+  const d = CATEGORY_ICON[k] ?? CATEGORY_ICON.route;
+  return (
+    <svg className="trip-bento__icon" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+      <path d={d} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 /**
  * Best-effort keyword heuristics over a lowercased answer. Each returns the
@@ -239,6 +288,48 @@ function MicIcon() {
 }
 
 /**
+ * The immersive hero's right column (Task 7.1). Fetches a REAL destination
+ * photo client-side via the existing `/api/image` route (through the shared
+ * `useDestinationImage` hook), framed inside a fixed-aspect `.image-frame` so
+ * there is no CLS. Until a real image resolves — and if the fetch fails —
+ * it renders the local `traveler-globe` illustration framed identically, so
+ * the frame is NEVER a broken or empty image.
+ *
+ * Hydration safety: `useDestinationImage` starts with `url: null` and only
+ * fetches inside `useEffect` after mount, so the server render and the first
+ * client render are identical (the illustration). No time/random value is used
+ * during render.
+ */
+function HeroImage({ query }: { query: string }) {
+  const { url, alt } = useDestinationImage(query, 0);
+  const fallback = illustration("traveler-globe");
+  return (
+    <div className="image-frame concierge-hero__frame">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="concierge-hero__photo"
+          src={url}
+          alt={alt || query}
+          loading="eager"
+          decoding="async"
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="concierge-hero__photo concierge-hero__photo--illustration"
+          src={fallback.src}
+          width={fallback.width}
+          height={fallback.height}
+          alt={fallback.alt}
+        />
+      )}
+      <span className="concierge-hero__scrim" aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
  * Props for the unified AI Travel Assistant (Req 21).
  *
  * `variant` selects how the concierge presents itself:
@@ -254,6 +345,8 @@ function MicIcon() {
 export interface ConciergeHomeProps {
   variant?: "home" | "assistant";
   initialQuery?: string;
+  /** Seed a destination directly from a Discover hand-off (/plan?dest=). */
+  initialDestination?: string;
 }
 
 /**
@@ -266,6 +359,7 @@ export interface ConciergeHomeProps {
 export default function ConciergeHome({
   variant = "home",
   initialQuery,
+  initialDestination,
 }: ConciergeHomeProps = {}) {
   const router = useRouter();
   const sharedContext = useTripContext();
@@ -288,6 +382,10 @@ export default function ConciergeHome({
   /** Guards the one-shot seeding so React 18 StrictMode double-mount or any
    *  re-render never replays the seed query more than once. */
   const seededRef = useRef(false);
+  /** Reveal container for the immersive home hero's staggered entrance (Task
+   *  7.1). SSR-safe: the hook adds `.reveal--in` only after mount, so the
+   *  server render is stable. */
+  const heroRevealRef = useReveal<HTMLElement>();
 
   // Keep the newest message in view after each turn so the user never has to
   // scroll manually (the conversation is a fixed-height scroll area).
@@ -322,12 +420,29 @@ export default function ConciergeHome({
     },
   });
 
-  // Seed the conversation once from ?q= on the assistant variant so the
-  // profile pre-fills from the homepage hand-off (Req 21.10). Empty deps: run
-  // at most once on mount; the ref makes it idempotent.
+  // Seed the conversation once on mount for the assistant variant. A
+  // destination from Discover (/plan?dest=) is seeded DIRECTLY into the
+  // controller + shared context so the assistant is immediately aware of the
+  // picked place and asks only for the REMAINING details (never restarting,
+  // never mis-reading the place as the origin). A legacy ?q= hand-off still
+  // runs through submit(). Empty deps + ref make it idempotent.
   useEffect(() => {
     if (variant !== "assistant") return;
     if (seededRef.current) return;
+    const dest = initialDestination?.trim();
+    if (dest) {
+      seededRef.current = true;
+      const ctx: TripContext = { ...controllerState.context, destination: dest };
+      setControllerState((prev) => ({ ...prev, context: ctx }));
+      sharedContext.patchContext({ destination: dest });
+      setCaptured((prev) => capturedFromContext(prev, ctx));
+      setRouteState((prev) => ({ ...prev, destination: dest, destinationConfirmed: true, routeCandidate: "" }));
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: `Great choice - ${dest}! Which city are you travelling from?` },
+      ]);
+      return;
+    }
     const seed = initialQuery?.trim();
     if (!seed) return;
     seededRef.current = true;
@@ -407,14 +522,13 @@ export default function ConciergeHome({
     const answer = text.trim();
     if (!answer || pending) return;
 
-    // Append the user's message first, then an INSTANT local acknowledgement so
-    // the chat reacts with zero delay (no network wait). The controller's next
-    // question is appended afterwards when /api/ai responds.
-    const ack = instantAck(answer, routeState);
+    // Append ONLY the user's message. Exactly one assistant reply is appended
+    // per turn (the controller's next question from /api/ai, or the offline
+    // fallback). The earlier instant local acknowledgement was removed because
+    // it produced a SECOND assistant bubble for every single turn.
     setMessages((prev) => [
       ...prev,
       { role: "user", text: answer },
-      ...(ack ? [{ role: "assistant" as const, text: ack }] : []),
     ]);
     setDraft("");
     setPending(true);
@@ -553,6 +667,12 @@ export default function ConciergeHome({
     [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
   const canProceed = Boolean(captured.route);
 
+  // Hero image query (Task 7.1): prefer a captured destination so the hero
+  // reflects the real trip in progress, otherwise a stable editorial default.
+  // This is a plain derived string (no time/random), so it is identical on the
+  // server and the first client render — the actual photo loads post-mount.
+  const heroImageQuery = (captured.route?.to ?? "scenic travel destination").trim();
+
   function openFullPlanner() {
     const summary = planSummary(routeState, lastUser);
     router.push(`/plan?q=${encodeURIComponent(summary)}`);
@@ -567,6 +687,73 @@ export default function ConciergeHome({
           <p className="lead">
             Answer a few short questions and TripGenie builds your trip as you go.
           </p>
+        </header>
+      )}
+
+      {variant === "home" && (
+        <header
+          ref={heroRevealRef}
+          className="concierge-hero"
+          aria-label="Plan your trip with TripGenie"
+        >
+          {/* LEFT — editorial copy + the trip-intent input (reuses the existing
+              draft/submit pipeline, so validation and navigation are unchanged).
+              Each element reveals in sequence via an incremental transition-delay
+              that is a multiple of --anim-stagger-step. The orange Primary_Action
+              is interactive immediately and is NEVER gated behind the animation. */}
+          <div className="concierge-hero__content">
+            <p
+              className="eyebrow reveal concierge-hero__eyebrow"
+              style={{ transitionDelay: "calc(var(--anim-stagger-step) * 0)" }}
+            >
+              <span className="ai-pulse concierge-hero__pulse" aria-hidden="true" />
+              AI travel concierge
+            </p>
+            <h1
+              className="display concierge-hero__title reveal"
+              style={{ transitionDelay: "calc(var(--anim-stagger-step) * 1)" }}
+            >
+              Plan the whole trip in one conversation.
+            </h1>
+            <p
+              className="lead concierge-hero__lead reveal"
+              style={{ transitionDelay: "calc(var(--anim-stagger-step) * 2)" }}
+            >
+              Tell TripGenie where you&apos;re headed and it designs flights,
+              stays and a day-by-day itinerary around how you like to travel.
+            </p>
+            <form
+              className="concierge-hero__form reveal"
+              style={{ transitionDelay: "calc(var(--anim-stagger-step) * 3)" }}
+              onSubmit={handleSubmit}
+            >
+              <label className="field concierge-hero__field">
+                <span className="sr-only">Where are you travelling from and to?</span>
+                <input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="From Delhi to Switzerland"
+                  aria-label="Where are you travelling from and to?"
+                />
+              </label>
+              <button
+                type="submit"
+                className="cta concierge-hero__submit"
+                disabled={pending}
+                aria-busy={pending}
+              >
+                {pending ? "Thinking\u2026" : "Start planning"}
+              </button>
+            </form>
+          </div>
+
+          {/* RIGHT — immersive real-imagery frame with the illustration fallback. */}
+          <div
+            className="concierge-hero__media reveal"
+            style={{ transitionDelay: "calc(var(--anim-stagger-step) * 4)" }}
+          >
+            <HeroImage query={heroImageQuery} />
+          </div>
         </header>
       )}
 
@@ -609,19 +796,34 @@ export default function ConciergeHome({
             aria-label="Conversation with TripGenie"
           >
             {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`chat-message concierge-message concierge-message--${m.role}`}
-              >
-                <span className="chat-message__role">
-                  {m.role === "assistant" && (
-                    <span className="concierge-message__avatar" aria-hidden="true" />
-                  )}
-                  {m.role === "assistant" ? "TripGenie" : "You"}
-                </span>
-                <p className="concierge-message__text">{m.text}</p>
-              </div>
+              <ConciergeMessage key={i} role={m.role} text={m.text} />
             ))}
+
+            {/* Honest in-progress indicator (Req 4.3, 4.5). It is rendered ONLY
+                while the existing `pending` flag is true — i.e. strictly between
+                firing the single `POST /api/ai` for this turn and its
+                resolution (success, fallback, or error) — and disappears the
+                instant the turn resolves. It is an INDETERMINATE indicator (the
+                emerald `.ai-pulse` breathing dot + a "Thinking…" label); it does
+                NOT fabricate discrete advancing stages, uses NO timer, and adds
+                NO artificial delay. It never implies completion while the
+                request is still running. */}
+            {pending && (
+              <div
+                className="concierge-message concierge-message--assistant concierge-thinking"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="chat-message__role concierge-message__role">
+                  <span className="concierge-message__avatar" aria-hidden="true" />
+                  TripGenie
+                </span>
+                <p className="concierge-thinking__row">
+                  <span className="ai-pulse concierge-thinking__pulse" aria-hidden="true" />
+                  <span className="concierge-thinking__label">Thinking{"\u2026"}</span>
+                </p>
+              </div>
+            )}
           </div>
 
           <div
@@ -633,7 +835,7 @@ export default function ConciergeHome({
               <button
                 key={prompt}
                 type="button"
-                className="chat-chip"
+                className="chat-chip press"
                 onClick={() => submit(prompt)}
               >
                 {prompt}
@@ -671,7 +873,7 @@ export default function ConciergeHome({
               disabled={pending}
               aria-busy={pending}
             >
-              {pending ? "Thinking…" : "Send"}
+              {pending ? "Thinking\u2026" : "Send"}
             </button>
           </form>
         </div>
@@ -693,52 +895,63 @@ export default function ConciergeHome({
             </button>
           </div>
 
-          <ul className="concierge-profile__list">
-          <li className="concierge-profile__row concierge-profile__row--route">
-            <span className="eyebrow concierge-profile__label">Route</span>
-            {captured.route ? (
-              <span className="concierge-profile__value concierge-profile__value--headline">
-                {captured.route.from} → {captured.route.to}
-              </span>
-            ) : (
-              <span className="concierge-profile__value concierge-profile__value--headline concierge-profile__value--muted">
-                From? → To?
-              </span>
-            )}
-            <button
-              type="button"
-              className="btn concierge-profile__change"
-              onClick={() =>
-                changeCategory("Where are you travelling from and to?")
-              }
+          <div className="trip-bento" role="list">
+            <div
+              className="trip-bento__tile trip-bento__tile--route"
+              role="listitem"
+              data-filled={captured.route ? "true" : "false"}
             >
-              Change
-            </button>
-          </li>
+              <span className="trip-bento__head">
+                <CategoryIcon k="route" />
+                <span className="trip-bento__label">Route</span>
+              </span>
+              {captured.route ? (
+                <span className="trip-bento__value trip-bento__value--headline">
+                  {captured.route.from} <span aria-hidden="true">{"\u2192"}</span> {captured.route.to}
+                </span>
+              ) : (
+                <span className="trip-bento__value trip-bento__value--headline trip-bento__value--muted">
+                  From? <span aria-hidden="true">{"\u2192"}</span> To?
+                </span>
+              )}
+              <button
+                type="button"
+                className="trip-bento__change"
+                onClick={() => changeCategory("Where are you travelling from and to?")}
+              >
+                Change
+              </button>
+            </div>
 
-          {CATEGORY_ROWS.map((row) => {
-            const value = captured[row.key];
-            return (
-              <li key={row.key} className="concierge-profile__row">
-                <span className="eyebrow concierge-profile__label">{row.label}</span>
-                {value ? (
-                  <span className="concierge-profile__value">{value}</span>
-                ) : (
-                  <span className="concierge-profile__value concierge-profile__value--muted">
-                    Not shared yet
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="btn concierge-profile__change"
-                  onClick={() => changeCategory(row.prompt)}
+            {CATEGORY_ROWS.map((row) => {
+              const value = captured[row.key];
+              return (
+                <div
+                  key={row.key}
+                  className="trip-bento__tile"
+                  role="listitem"
+                  data-filled={value ? "true" : "false"}
                 >
-                  Change
-                </button>
-              </li>
-            );
-          })}
-          </ul>
+                  <span className="trip-bento__head">
+                    <CategoryIcon k={row.key} />
+                    <span className="trip-bento__label">{row.label}</span>
+                  </span>
+                  {value ? (
+                    <span className="trip-bento__value">{value}</span>
+                  ) : (
+                    <span className="trip-bento__value trip-bento__value--muted">Not shared yet</span>
+                  )}
+                  <button
+                    type="button"
+                    className="trip-bento__change"
+                    onClick={() => changeCategory(row.prompt)}
+                  >
+                    Change
+                  </button>
+                </div>
+              );
+            })}
+          </div>
 
           <p className="concierge-profile__helper">
             Each answer is captured here. You can change any category.

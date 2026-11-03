@@ -35,10 +35,11 @@ import {
   type CarsCriteria,
   type FlightTripType,
 } from "@/lib/search-criteria";
-import { DestinationImageLayer } from "@/components/destination-image";
+import { DestinationImageLayer, useDestinationImage } from "@/components/destination-image";
 import DestinationPanel from "@/components/destination-panel";
 import { useTripContext } from "@/components/trip-context";
-import { illustration } from "@/lib/illustrations";
+import { illustration, type IllustrationId } from "@/lib/illustrations";
+import { useReveal } from "@/lib/use-reveal";
 
 type BookingTab = "stays" | "flights" | "cars";
 
@@ -167,6 +168,84 @@ const PLANNER_PROMPTS: string[] = [
   "A long weekend of art and cafes in Paris",
 ];
 
+/**
+ * AI-concierge explainer steps (Req 3.5) — a DESCRIPTIVE, four-step summary that
+ * MIRRORS the real planning flow the app already performs (preferences ->
+ * exploring places -> organizing an itinerary -> preparing the trip). This is a
+ * static editorial explainer, NOT a live/fake process: it renders no spinner,
+ * no progress bar, and triggers no request. Each step maps to a real capability
+ * (the concierge intake, Google Places discovery, the day-by-day itinerary, and
+ * the booking/export surfaces) so it is honest about what TripGenie does.
+ */
+const CONCIERGE_STEPS: { step: string; title: string; copy: string }[] = [
+  {
+    step: "01",
+    title: "Understands your preferences",
+    copy: "Describe the trip in your own words and TripGenie AI reads the pace, places and style you are after.",
+  },
+  {
+    step: "02",
+    title: "Explores real places",
+    copy: "It surfaces destinations, stays and sights with real photos and ratings from live travel data.",
+  },
+  {
+    step: "03",
+    title: "Organizes your itinerary",
+    copy: "A day-by-day plan takes shape that you can refine, reorder and adjust until it feels right.",
+  },
+  {
+    step: "04",
+    title: "Prepares the trip",
+    copy: "Compare flights, stays and cars, then save or export your plan so everything is ready to go.",
+  },
+];
+
+/**
+ * A real destination photo framed for an editorial feature block. Follows the
+ * same fallback ladder as the hero (Task 7.1): fetch via the existing
+ * `useDestinationImage` hook (/api/image) inside useEffect, render a local
+ * illustration framed identically until/if no real image resolves — so the
+ * frame is NEVER a broken or empty image and there is no CLS (the `.image-frame`
+ * reserves space). Hydration-safe: starts at `url: null` on both server and
+ * first client render (the illustration), with no time/random value.
+ */
+function FeatureImage({
+  query,
+  slot,
+  fallbackId,
+}: {
+  query: string;
+  slot: number;
+  fallbackId: IllustrationId;
+}) {
+  const { url, alt } = useDestinationImage(query, slot);
+  const fallback = illustration(fallbackId);
+  return (
+    <div className="image-frame home-feature2__frame">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="home-feature2__photo"
+          src={url}
+          alt={alt || query}
+          loading="lazy"
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="home-feature2__photo home-feature2__photo--illustration"
+          src={fallback.src}
+          width={fallback.width}
+          height={fallback.height}
+          alt={fallback.alt}
+          loading="lazy"
+        />
+      )}
+      <span className="home-feature2__scrim" aria-hidden="true" />
+    </div>
+  );
+}
+
 const RECENT_KEY = "tripgenie:recently-viewed";
 
 interface RecentItem {
@@ -252,6 +331,14 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
   useEffect(() => {
     setRecent(readRecent());
   }, []);
+
+  // Scroll-reveal refs — one per below-the-fold editorial section group. The
+  // hook is SSR-safe and no-ops under prefers-reduced-motion (final state shown
+  // immediately), so motion never gates content or interactivity.
+  const featuredRevealRef = useReveal<HTMLElement>();
+  const discoveryRevealRef = useReveal<HTMLElement>();
+  const explainerRevealRef = useReveal<HTMLElement>();
+  const continueRevealRef = useReveal<HTMLElement>();
 
   // ---- Stays form state ----------------------------------------------------
   const [stays, setStays] = useState<Partial<StaysCriteria>>({
@@ -779,72 +866,86 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
       </section>
       )}
 
-      {/* ── 2. FEATURED EXPLORATION — asymmetric illustration + text (Req 5.5) ── */}
-      <section className="shell home-feature-explore" aria-labelledby="explore-heading">
-        <div className="home-feature-explore__grid grid-2">
-          <div className="home-feature-explore__art" aria-hidden="true">
-            {(() => {
-              const art = illustration("winding-path");
-              return (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  className="illustration home-feature-explore__img"
-                  src={art.src}
-                  width={art.width}
-                  height={art.height}
-                  alt={art.alt}
-                />
-              );
-            })()}
-          </div>
-          <div className="home-feature-explore__copy motion-rise">
-            <h2 id="explore-heading" className="section-title">A new way to explore the world</h2>
+      {/*
+        ══════════════════════════════════════════════════════════════════════
+        BELOW-THE-FOLD EDITORIAL SECTIONS (Task 7.2, Req 3.5/3.6/3.7/2.4)
+
+        Four VARIED, ALTERNATING compositions — not one repeated uniform card
+        grid — each revealing on scroll via `.reveal` + the useReveal hook (one
+        ref per section group; reduced-motion handled by the hook/CSS). All data
+        and navigation are REUSED, not invented:
+          A. Featured destinations — alternating image/text feature blocks over
+             the existing POPULAR_DESTINATIONS, each CTA calling the existing
+             `selectDestination` handler (same form-population + panel behavior).
+          B. Travel-style discovery row — the existing auto-advancing `dest-rail`
+             + live DestinationPanel, with the Quick-Access flights/stays/cars
+             booking links folded in as varied tiles (existing routes).
+          C. AI-concierge explainer — a DESCRIPTIVE four-step summary mirroring
+             the real planning flow (no fake/live process), with the existing
+             planner prompt chips and /plan Primary_Action; the existing feature
+             highlights become supporting value props within this section.
+          D. Continue planning — the existing recently-viewed/saved data with its
+             empty state (no invented data).
+        No second hero is introduced here (the hero is owned by ConciergeHome).
+        ══════════════════════════════════════════════════════════════════════
+      */}
+
+      {/* ── A. FEATURED DESTINATIONS — alternating image/text (Req 3.5) ─────── */}
+      <section
+        ref={featuredRevealRef}
+        className="shell home-featured reveal"
+        aria-labelledby="featured-heading"
+      >
+        <header className="section-head">
+          <div>
+            <p className="eyebrow">Featured</p>
+            <h2 id="featured-heading" className="section-title">Destinations worth the journey</h2>
             <p className="section-sub">
-              TripGenie AI learns what you love — the pace, the places, the little
-              detours — and turns it into a journey that feels made for you. Discover
-              fresh destinations and shape a personalized plan without the busywork.
+              A new way to explore the world — TripGenie AI learns the pace and places
+              you love and turns them into a journey that feels made for you.
             </p>
-            <a className="cta home-feature-explore__cta" href="/plan">
-              Start exploring {"\u2192"}
-            </a>
           </div>
+        </header>
+        <div className="home-featured__list">
+          {popular.slice(0, 2).map((d, i) => (
+            <article
+              key={d.name}
+              className={`home-feature2 hoverable${i % 2 === 1 ? " home-feature2--reversed" : ""}`}
+            >
+              <div className="home-feature2__media">
+                <FeatureImage
+                  query={d.name}
+                  slot={i}
+                  fallbackId={i % 2 === 1 ? "hot-air-balloon" : "winding-path"}
+                />
+              </div>
+              <div className="home-feature2__copy">
+                <p className="eyebrow">{d.country}</p>
+                <h3 className="home-feature2__title">{d.name}</h3>
+                <p className="home-feature2__blurb">{d.blurb}</p>
+                <button
+                  type="button"
+                  className="cta home-feature2__cta"
+                  onClick={() => selectDestination(d.name)}
+                  aria-label={`Plan a trip to ${d.name}, ${d.country}`}
+                >
+                  Plan this trip {"\u2192"}
+                </button>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
-      {/*
-        ── 3. QUICK ACCESS — Flights / Stays / Cars (Req 7.1, 7.13) ────────
-        A compact row of quick-access entries so the Home surface itself
-        always offers direct routing to the three booking pages, independent
-        of the (optionally suppressed) hero trip-finder and the Global_Nav.
-        Each target is an EXISTING App Router route (Req 7.13); the markup
-        reuses the existing `home-section` / `section-head` / `recent-list`
-        grid and the `recent-link booking-surface` card-link pattern — no new
-        CSS class and no change to the shared nav manifest.
-      */}
-      <section className="shell home-section" aria-labelledby="quick-access-heading">
+      {/* ── B. TRAVEL-STYLE DISCOVERY ROW — horizontal rail + booking tiles ─── */}
+      <section
+        ref={discoveryRevealRef}
+        className="shell home-section home-discovery reveal"
+        aria-labelledby="popular-heading"
+      >
         <header className="section-head">
           <div>
-            <h2 id="quick-access-heading" className="section-title">Quick access</h2>
-            <p className="section-sub">Jump straight into flights, stays, or cars</p>
-          </div>
-        </header>
-        <ul className="recent-list">
-          {QUICK_ACCESS.map((q) => (
-            <li key={q.href}>
-              <a className="recent-link booking-surface" href={q.href}>
-                <span className="eyebrow">{q.eyebrow}</span>
-                <span className="dest-card__name">{q.label}</span>
-                <span className="dest-card__blurb">{q.blurb}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* ── 4. POPULAR DESTINATIONS ───────────────────────────────────────── */}
-      <section className="shell home-section" aria-labelledby="popular-heading">
-        <header className="section-head">
-          <div>
+            <p className="eyebrow">Discover</p>
             <h2 id="popular-heading" className="section-title">Popular destinations</h2>
             <p className="section-sub">Explore handpicked destinations for your next adventure</p>
           </div>
@@ -885,64 +986,105 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
         {/*
           Additive live Destination_Panel (realtime-ai-integration tasks 9.2/9.4,
           Req 5.1/5.2/5.4/5.5/5.6/7.3/10.1–10.4). Mounted BELOW the existing rail
-          inside this same section — it adds no new homepage section and
-          restyles nothing. It shows its Empty_State until a destination is
-          chosen (from the rail above or seeded from the shared context), then
+          inside this same section — it shows its Empty_State until a destination
+          is chosen (from the rail above or seeded from the shared context), then
           surfaces live details, attractions, weather, local time, and generic
           travel tips, each through existing classes + the Freshness_Indicator.
         */}
         <DestinationPanel destination={selectedDestination} />
-      </section>
 
-      {/* ── 7. FEATURE ICONS ROW ──────────────────────────────────────────── */}
-      <section className="shell home-features" aria-label="Why TripGenie">
-        <ul className="feature-row">
-          {FEATURES.map((f) => (
-            <li key={f.title} className="feature">
-              <span className="feature__icon" aria-hidden="true">
-                <FeatureGlyph name={f.icon} />
-              </span>
-              <h3 className="feature__title">{f.title}</h3>
-              <p className="feature__copy">{f.copy}</p>
+        {/* Quick-access booking tiles — direct routing to the three EXISTING
+            booking routes (/flights, /stays, /cars). Reuses the existing
+            booking-surface card-link pattern. */}
+        <ul className="home-discovery__quick" aria-label="Quick access">
+          {QUICK_ACCESS.map((q) => (
+            <li key={q.href}>
+              <a className="recent-link booking-surface hoverable" href={q.href}>
+                <span className="eyebrow">{q.eyebrow}</span>
+                <span className="dest-card__name">{q.label}</span>
+                <span className="dest-card__blurb">{q.blurb}</span>
+              </a>
             </li>
           ))}
         </ul>
       </section>
 
-      {/* ── 8. AI PLANNER PROMO — heading + copy + example prompts (Req 5.7) ── */}
-      <section className="shell home-planner-promo" aria-labelledby="planner-promo-heading">
-        <div className="home-planner-promo__inner">
-          <h2 id="planner-promo-heading" className="section-title">Plan it with a sentence</h2>
+      {/* ── C. AI-CONCIERGE EXPLAINER — descriptive steps mirroring the real
+             planning flow (Req 3.5). This is static editorial content: NO
+             spinner, NO progress bar, NO request is triggered here. ─────────── */}
+      <section
+        ref={explainerRevealRef}
+        className="shell home-explainer reveal"
+        aria-labelledby="explainer-heading"
+      >
+        <div className="home-explainer__intro">
+          <p className="eyebrow">
+            <span className="ai-pulse home-explainer__pulse" aria-hidden="true" />
+            How TripGenie AI plans
+          </p>
+          <h2 id="explainer-heading" className="section-title">Plan it with a sentence</h2>
           <p className="section-sub">
-            Tell TripGenie AI the trip you are dreaming about and watch a day-by-day
-            plan take shape. No forms, no tabs — just describe it in your own words.
+            Tell TripGenie AI the trip you are dreaming about and a day-by-day plan
+            takes shape. No forms, no tabs — just describe it in your own words.
           </p>
           <ul className="home-prompt-chips" aria-label="Example prompts">
             {PLANNER_PROMPTS.map((p) => (
               <li key={p}>
-                <a
-                  className="home-prompt-chip"
-                  href={`/plan?q=${encodeURIComponent(p)}`}
-                >
+                <a className="home-prompt-chip" href={`/plan?q=${encodeURIComponent(p)}`}>
                   {p}
                 </a>
               </li>
             ))}
           </ul>
-          <a className="cta home-planner-promo__cta" href="/plan">
+          <a className="cta home-explainer__cta" href="/plan">
             Plan with TripGenie AI {"\u2192"}
           </a>
         </div>
+
+        <ol className="home-explainer__steps">
+          {CONCIERGE_STEPS.map((s) => (
+            <li key={s.step} className="home-explainer__step">
+              <span className="home-explainer__step-num" aria-hidden="true">{s.step}</span>
+              <h3 className="home-explainer__step-title">{s.title}</h3>
+              <p className="home-explainer__step-copy">{s.copy}</p>
+            </li>
+          ))}
+        </ol>
+
+        {/* Existing value highlights, folded into this section as supporting
+            props rather than a standalone uniform grid. */}
+        <ul className="home-explainer__features" aria-label="Why TripGenie">
+          {FEATURES.map((f) => (
+            <li key={f.title} className="home-explainer__feature">
+              <span className="home-explainer__feature-icon" aria-hidden="true">
+                <FeatureGlyph name={f.icon} />
+              </span>
+              <span className="home-explainer__feature-text">
+                <span className="home-explainer__feature-title">{f.title}</span>
+                <span className="home-explainer__feature-copy">{f.copy}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      {/* Continue exploring: recently viewed/saved, else empty state (Req 22.9/22.10) */}
-      <section className="shell home-section" aria-labelledby="continue-heading">
-        <h2 id="continue-heading" className="section-title">Continue exploring</h2>
+      {/* ── D. CONTINUE PLANNING — recently viewed/saved, else empty state ──── */}
+      <section
+        ref={continueRevealRef}
+        className="shell home-section home-continue reveal"
+        aria-labelledby="continue-heading"
+      >
+        <header className="section-head">
+          <div>
+            <p className="eyebrow">Pick up where you left off</p>
+            <h2 id="continue-heading" className="section-title">Continue planning</h2>
+          </div>
+        </header>
         {recent.length > 0 ? (
           <ul className="recent-list">
             {recent.map((item, i) => (
               <li key={`${item.href}-${i}`}>
-                <a className="recent-link booking-surface" href={item.href}>
+                <a className="recent-link booking-surface hoverable" href={item.href}>
                   {item.label}
                 </a>
               </li>
@@ -951,10 +1093,8 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
         ) : (
           <div className="booking-surface empty-state">
             <p>You have not viewed or saved anything yet.</p>
-            <p>Start a search above to pick up where you leave off.</p>
-            <button type="button" className="cta" onClick={() => setActive("stays")}>
-              Start a search
-            </button>
+            <p>Describe a trip above, or explore a destination, to pick up where you leave off.</p>
+            <a className="cta" href="/plan">Plan with TripGenie AI</a>
           </div>
         )}
       </section>

@@ -24,6 +24,9 @@ export interface ColorTokens {
   softGreen: string; // #C8F2DF
   lightBorder: string; // #E8ECE9
   mutedBg: string; // #F8FBF9
+  deepPine: string; // #1C2A25
+  warmSand: string; // #FBF7F0
+  emeraldTint: string; // #D3F3E6
 }
 
 /** Exact approved hex values for every color token (Requirement 2.1). */
@@ -39,6 +42,9 @@ export const COLOR_TOKENS: ColorTokens = {
   softGreen: "#C8F2DF",
   lightBorder: "#E8ECE9",
   mutedBg: "#F8FBF9",
+  deepPine: "#1C2A25",
+  warmSand: "#FBF7F0",
+  emeraldTint: "#D3F3E6",
 } as const;
 
 /** A single named text style in the typography scale. */
@@ -156,6 +162,11 @@ export function contrastRatio(fg: string, bg: string): number {
 /** Motion policy durations in ms. */
 export const MOTION_NORMAL_MS = 400;
 export const MOTION_REDUCED_MS = 200;
+
+/** Premium motion durations in ms (Requirements 7.1, 7.2). */
+export const MOTION_FAST_MS = 160;
+export const MOTION_PANEL_MS = 240;
+export const MOTION_STANDARD_MS = 280;
 
 export type MotionTrigger = "user-action" | "state-change" | "none";
 
@@ -320,6 +331,9 @@ export function tokenEntries(): TokenEntry[] {
   entries.push({ cssVar: cssVarName("motion", "max"), value: ms(MOTION_MAX_MS) });
   entries.push({ cssVar: cssVarName("motion", "normal"), value: ms(MOTION_NORMAL_MS) });
   entries.push({ cssVar: cssVarName("motion", "reduced"), value: ms(MOTION_REDUCED_MS) });
+  entries.push({ cssVar: cssVarName("motion", "fast"), value: ms(MOTION_FAST_MS) });
+  entries.push({ cssVar: cssVarName("motion", "panel"), value: ms(MOTION_PANEL_MS) });
+  entries.push({ cssVar: cssVarName("motion", "standard"), value: ms(MOTION_STANDARD_MS) });
 
   return entries;
 }

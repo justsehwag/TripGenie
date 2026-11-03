@@ -1,11 +1,11 @@
 /**
- * Bedrock_Model â€” server-only Amazon Bedrock implementation of the controller's
+ * Bedrock_Model — server-only Amazon Bedrock implementation of the controller's
  * Extraction_Model plus itinerary generation (design: Components and Interfaces
- * â†’ Bedrock_Model). Realtime AI integration, tasks 2.1â€“2.4.
+ * → Bedrock_Model). Realtime AI integration, tasks 2.1–2.4.
  *
  * SERVER-ONLY. This module must never be imported by a `"use client"` module
  * (Req 2.7: Bedrock is invoked only from the server-side Bedrock_Route, never
- * from the browser). The AWS SDK is NOT imported statically here â€” the real
+ * from the browser). The AWS SDK is NOT imported statically here — the real
  * invoke wrapper is built via `createBedrockInvoke()` using a dynamic import so
  * this module stays unit-testable without AWS and without a live model call.
  *
@@ -33,7 +33,7 @@ import { durationFromText } from "./date-intake";
 import { awsConfig } from "./config";
 
 /* ===========================================================================
- * 2.1 â€” Contract, deps, and strict JSON extraction schema
+ * 2.1 — Contract, deps, and strict JSON extraction schema
  * ======================================================================== */
 
 /** A single bounded model call. `system` begins with SYSTEM_PROMPT_PREFIX. */
@@ -60,7 +60,7 @@ export interface BedrockModelDeps {
 const BUDGET_LEVELS = new Set(["budget", "mid", "luxury"]);
 /** Allowed pace values (schema-constrained). */
 const PACE_VALUES = new Set(["relaxed", "balanced", "packed"]);
-/** Keys the extraction schema may ever produce (Property 2: keys âŠ† schema). */
+/** Keys the extraction schema may ever produce (Property 2: keys ⊆ schema). */
 export const EXTRACTION_SCHEMA_KEYS: readonly (keyof TripContext)[] = [
   "origin",
   "destination",
@@ -132,7 +132,7 @@ function cleanInterests(v: unknown): string[] | undefined {
  * Validate a raw JSON model output against the strict extraction schema and
  * VALIDATE-AND-DROP anything non-conforming. The result only ever contains
  * fields the traveler actually supplied (no-fabrication, Req 2.10). Non-JSON,
- * parse error, or empty input â‡’ `{}` (Req 2.5).
+ * parse error, or empty input ⇒ `{}` (Req 2.5).
  */
 export function parseExtraction(text: string): Partial<TripContext> {
   if (typeof text !== "string" || text.trim().length === 0) return {};
@@ -262,7 +262,7 @@ export function buildItineraryPrompt(context: TripContext): ModelPrompt {
 }
 
 /* ===========================================================================
- * 2.2 â€” Deterministic rule-based fallback extractor and phrasing
+ * 2.2 — Deterministic rule-based fallback extractor and phrasing
  * ======================================================================== */
 
 /** Keyword heuristics lifted from components/concierge-home.tsx. */
@@ -334,7 +334,7 @@ export function fallbackExtract(delta: string, context: TripContext): Partial<Tr
     const interests = detectInterests(lower);
     if (interests) out.interests = interests;
   } catch {
-    // Never throw â€” degrade to whatever was parsed so far (possibly {}).
+    // Never throw — degrade to whatever was parsed so far (possibly {}).
   }
   return out;
 }
@@ -358,7 +358,7 @@ export function fallbackPhrase(field: RequiredField, _context: TripContext): str
 }
 
 /* ===========================================================================
- * 2.3 â€” Async primitives (bounded timeout + deterministic fallback)
+ * 2.3 — Async primitives (bounded timeout + deterministic fallback)
  * ======================================================================== */
 
 /** Max question length enforced on every phrasing (Req 2.3). */
@@ -367,7 +367,7 @@ const MAX_QUESTION_CHARS = 160;
 /**
  * Run a model call bounded by an AbortController timeout. Resolves with the raw
  * text, or rejects on error/timeout. The timeout is treated as an error by the
- * callers (â‡’ deterministic fallback). `invokeModel` implementations that honor
+ * callers (⇒ deterministic fallback). `invokeModel` implementations that honor
  * the AbortSignal abort promptly; those that do not are still bounded by the
  * timeout race here.
  */
@@ -392,7 +392,7 @@ async function invokeWithTimeout(deps: BedrockModelDeps, prompt: ModelPrompt): P
 /**
  * Async extraction: invoke the model, parse+validate the output into a
  * `Partial<TripContext>`. On ANY error/timeout/non-JSON, return the rule-based
- * `fallbackExtract`. Keys are always âŠ† schema and values always validated
+ * `fallbackExtract`. Keys are always ⊆ schema and values always validated
  * (Property 2); the planner never breaks (Req 2.2, 2.5).
  */
 export async function extractAsync(
@@ -540,7 +540,7 @@ export async function generateItineraryAsync(
 }
 
 /* ===========================================================================
- * 2.4 â€” Synchronous model adapter
+ * 2.4 — Synchronous model adapter
  * ======================================================================== */
 
 /**
@@ -549,7 +549,7 @@ export async function generateItineraryAsync(
  * returns the pre-resolved `extracted`; `phrase` delegates to `phraseFor`. This
  * lets `advance()`/`runPlanningTurn()` consume pre-resolved async results with
  * NO change to the controller signature (Req 2.1, 2.4; Design: Planning-turn
- * request/response flow â†’ sync adapter).
+ * request/response flow → sync adapter).
  */
 export function syncModelFrom(
   extracted: Partial<TripContext>,
@@ -570,7 +570,7 @@ export function syncModelFrom(
  * resolving the model id + region from `awsConfig.bedrock`. The AWS SDK is
  * imported DYNAMICALLY inside the returned function so this module stays
  * unit-testable without the SDK and performs no AWS work at import time (Req
- * 2.7, 3.1). Credentials resolve via the Amplify execution role at runtime â€”
+ * 2.7, 3.1). Credentials resolve via the Amplify execution role at runtime —
  * no secret is read here (Req 3.2, 3.3). Tests inject a mock instead of calling
  * this.
  */
