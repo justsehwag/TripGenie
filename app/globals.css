@@ -9238,3 +9238,282 @@ main.shell:has(.planner-itinerary) .planner-results__aside {
 @media (prefers-reduced-motion: reduce) {
   .sync-status__retry { transition: none; }
 }
+
+/* =========================================================================
+   account-page-styles
+   /account page: cinematic backdrop (.account-cine*), stage layout
+   (.account-stage*), profile card (.account-card*) and quick-link tiles
+   (.account-tile*). Token-only; no new :root vars.
+   ========================================================================= */
+.account-stage {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
+  align-items: center;
+  gap: var(--space-xl);
+  width: 100%;
+  min-height: min(100vh, 860px);
+  padding: var(--space-xxl) var(--space-xl);
+  overflow: hidden;
+  background: var(--color-deep-pine);
+  color: var(--color-background);
+}
+.account-stage__panel {
+  position: relative;
+  z-index: 2;
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+/* --- Cinematic backdrop --- */
+.account-cine {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  background: linear-gradient(135deg, var(--color-deep-pine), var(--color-deep-emerald));
+}
+.account-cine__media { position: absolute; inset: 0; overflow: hidden; }
+.account-cine__img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: account-kenburns 28s var(--ease-standard) infinite alternate;
+}
+.account-cine__placeholder {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, var(--color-deep-pine), var(--color-deep-emerald), var(--color-primary-green));
+  background-size: 200% 200%;
+  animation: account-gradient 14s var(--ease-standard) infinite alternate;
+}
+.account-cine__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(0deg, rgba(28, 42, 37, 0.82) 0%, rgba(28, 42, 37, 0.35) 55%, rgba(28, 42, 37, 0.45) 100%),
+    linear-gradient(90deg, rgba(28, 42, 37, 0.6) 0%, rgba(28, 42, 37, 0) 70%);
+}
+.account-cine__bloom {
+  position: absolute;
+  top: -20%;
+  right: -10%;
+  width: 60%;
+  height: 70%;
+  background: radial-gradient(closest-side, rgba(255, 144, 31, 0.28), rgba(255, 144, 31, 0));
+  pointer-events: none;
+  animation: account-bloom 16s var(--ease-standard) infinite alternate;
+}
+.account-cine__arc { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0.8; }
+.account-cine__arc-path { animation: account-dash 24s linear infinite; }
+.account-cine__arc-dot { filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.9)); }
+.account-cine__content {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 46%);
+  padding: var(--space-xxl) var(--space-xl);
+  color: var(--color-background);
+}
+.account-cine__eyebrow {
+  margin: 0 0 var(--space-sm);
+  color: var(--color-soft-green);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.account-cine__title {
+  margin: 0;
+  color: var(--color-background);
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 4.2vw, var(--type-hero-size));
+  line-height: var(--type-hero-line);
+  letter-spacing: var(--type-hero-spacing);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
+  overflow-wrap: anywhere;
+}
+.account-cine__subtitle {
+  margin: var(--space-md) 0 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+}
+.account-cine__points { list-style: none; margin: var(--space-lg) 0 0; padding: 0; display: grid; gap: var(--space-sm); }
+.account-cine__points li {
+  position: relative;
+  padding-left: 28px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: var(--type-body-size);
+  line-height: 1.4;
+}
+.account-cine__points li::before {
+  content: "\2713";
+  position: absolute;
+  left: 0;
+  top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-green);
+  color: var(--color-background);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* --- Profile card --- */
+.account-card {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--space-xl);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  box-sizing: border-box;
+}
+.account-card--rise { animation: rise var(--motion-normal) var(--ease-standard) both; }
+.account-card__eyebrow {
+  margin: 0 0 var(--space-md);
+  color: var(--color-deep-emerald);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.account-card__head { display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-lg); min-width: 0; }
+.account-card__avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  box-shadow: 0 0 0 3px var(--color-soft-green);
+}
+.account-card__avatar svg { display: block; width: 100%; height: 100%; }
+.account-card__id { min-width: 0; flex: 1 1 auto; }
+.account-card__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-card-title-size);
+  font-weight: var(--type-card-title-weight);
+  line-height: var(--type-card-title-line);
+  color: var(--color-primary-text);
+  overflow-wrap: anywhere;
+}
+.account-card__email {
+  margin: var(--space-xs) 0 0;
+  color: var(--color-secondary-text);
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  overflow-wrap: anywhere;
+}
+.account-card__signout { display: flex; width: 100%; min-height: 44px; margin-top: var(--space-lg); justify-content: center; align-items: center; }
+
+/* --- Quick-link tiles --- */
+.account-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: var(--space-sm); }
+.account-tiles > li { margin: 0; padding: 0; list-style: none; min-width: 0; }
+.account-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: 44px;
+  padding: var(--space-md);
+  background: var(--color-muted-bg);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  color: var(--color-primary-text);
+  text-decoration: none;
+  transition: background var(--motion-fast) var(--ease-standard),
+              border-color var(--motion-fast) var(--ease-standard),
+              box-shadow var(--motion-fast) var(--ease-standard),
+              transform var(--motion-fast) var(--ease-standard);
+}
+.account-tile:hover {
+  background: var(--color-pale-mint);
+  border-color: var(--color-primary-green);
+  box-shadow: var(--shadow-sm);
+}
+.account-tile:active { transform: scale(0.99); }
+.account-tile:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+.account-tile__badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--color-emerald-tint);
+  color: var(--color-deep-emerald);
+}
+.account-tile__icon { display: block; }
+.account-tile__text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.account-tile__title { font-size: var(--type-label-size); font-weight: var(--type-label-weight); line-height: var(--type-label-line); color: var(--color-primary-text); }
+.account-tile__sub { font-size: var(--type-helper-size); line-height: var(--type-helper-line); color: var(--color-secondary-text); overflow-wrap: anywhere; }
+.account-tile__chevron { flex: 0 0 auto; color: var(--color-secondary-text); font-size: 18px; transition: transform var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard); }
+.account-tile:hover .account-tile__chevron { color: var(--color-deep-emerald); transform: translateX(3px); }
+
+@keyframes account-kenburns { from { transform: scale(1); } to { transform: scale(1.08); } }
+@keyframes account-gradient { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+@keyframes account-bloom { from { transform: translate(0, 0); opacity: 0.7; } to { transform: translate(-6%, 8%); opacity: 1; } }
+@keyframes account-dash { to { stroke-dashoffset: -480; } }
+
+/* Tablet and below: single column; backdrop becomes a banner above the card. */
+@media (max-width: 1023px) {
+  .account-stage {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 0;
+    min-height: 0;
+    padding: 0 var(--space-md) var(--space-xl);
+  }
+  .account-cine {
+    position: relative;
+    inset: auto;
+    grid-column: 1;
+    grid-row: 1;
+    width: calc(100% + 2 * var(--space-md));
+    margin: 0 calc(-1 * var(--space-md));
+    min-height: 320px;
+  }
+  .account-cine__content { width: 100%; padding: var(--space-xl) var(--space-lg) calc(var(--space-xl) + var(--space-xxl)); }
+  .account-stage__panel { grid-column: 1; grid-row: 2; margin-top: calc(-1 * var(--space-xxl)); }
+}
+@media (max-width: 480px) {
+  .account-card { padding: var(--space-lg) var(--space-md); }
+  .account-card__avatar { width: 56px; height: 56px; }
+  .account-cine { min-height: 280px; }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .account-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .account-card { max-width: 640px; }
+  .account-tile { flex-direction: column; align-items: flex-start; }
+  .account-tile__chevron { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-cine__img,
+  .account-cine__placeholder,
+  .account-cine__bloom,
+  .account-cine__arc-path,
+  .account-card--rise { animation: none; }
+  .account-tile,
+  .account-tile__chevron { transition: none; }
+  .account-tile:hover .account-tile__chevron,
+  .account-tile:active { transform: none; }
+}
