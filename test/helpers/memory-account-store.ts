@@ -14,6 +14,8 @@ export class MemoryAccountStore implements AccountStore {
   private readonly profiles = new Map<string, TravelerProfile>();
   private readonly prefs = new Map<string, { data: unknown; version: number }>();
 
+  private readonly xp = new Map<string, { data: unknown; version: number }>();
+
   private static key(owner: string, tripId: string): string {
     return `${owner}\u0000${tripId}`;
   }
@@ -79,6 +81,18 @@ export class MemoryAccountStore implements AccountStore {
     if (current !== expectedVersion) throw new VersionConflictError(current);
     const version = expectedVersion + 1;
     this.prefs.set(userId, { data, version });
+    return { version };
+  }
+
+  async getXp(userId: string): Promise<{ data: unknown; version: number } | null> {
+    return this.xp.get(userId) ?? null;
+  }
+
+  async putXp(userId: string, data: unknown, expectedVersion: number): Promise<{ version: number }> {
+    const current = this.xp.get(userId)?.version ?? 0;
+    if (current !== expectedVersion) throw new VersionConflictError(current);
+    const version = expectedVersion + 1;
+    this.xp.set(userId, { data, version });
     return { version };
   }
 }

@@ -27,6 +27,7 @@ import { useDestinationImage } from "@/components/destination-image";
 import EditDayPanel from "@/components/edit-day-panel";
 import DayDetailModal from "@/components/day-detail-modal";
 import GamificationPanel from "@/components/gamification-panel";
+import { useAccountXp } from "@/lib/client/use-account-xp";
 import { emptyXp, award, type XpState, type XpEvent } from "@/lib/gamification";
 import type { Activity, Itinerary, TripContext } from "@/lib/types";
 import { serializeCriteria } from "@/lib/search-criteria";
@@ -342,9 +343,12 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   const roomsDerived = !(Number.isInteger(ctxRooms) && ctxRooms >= 1);
   const roomsCount = roomsDerived ? Math.max(1, Math.ceil(travellersCount / 2)) : ctxRooms;
   // Deterministic, idempotent gamification state for this planning session.
-  const [xp, setXp] = useState<XpState>(emptyXp);
+  // XP lives on the account (server-validated); guests earn nothing.
+  const [sessionSignedIn, setSessionSignedIn] = useState<boolean | null>(null);
+  const accountXp = useAccountXp(sessionSignedIn);
+  const xp: XpState = accountXp.state ?? emptyXp();
   function earn(event: XpEvent) {
-    setXp((prev) => award(prev, event));
+    void accountXp.award(event, `${event}:${draftIdRef.current}`);
   }
 
   // Save-to-account state. A stable per-session draft id keeps saves idempotent
@@ -376,10 +380,14 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   useEffect(() => {
     let alive = true;
     void fetchSession().then((s) => {
-      if (alive) signedInRef.current = s.signedIn;
+      if (alive) {
+        signedInRef.current = s.signedIn;
+        setSessionSignedIn(s.signedIn);
+      }
     });
     const unsub = subscribeSession((s) => {
       signedInRef.current = s.signedIn;
+      setSessionSignedIn(s.signedIn);
     });
     return () => {
       alive = false;
@@ -1592,7 +1600,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
             <div className="planner-xp-strip">
               {/* Gamification: deterministic XP/level/badges/quests for this
                   planning session (TripSaathi parity, FR-06). */}
-              <GamificationPanel state={xp} compact />
+              <GamificationPanel state={accountXp.state ?? undefined} guest={accountXp.status === "guest"} loading={accountXp.status === "loading"} error={accountXp.error} onRetry={accountXp.retry} compact />
             </div>
             <ItinerarySearch value={searchQuery} onQueryChange={setSearchQuery} count={filter.count} active={filter.active} />
             <ol className="timeline planner-itinerary">

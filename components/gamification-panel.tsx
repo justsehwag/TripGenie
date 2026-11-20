@@ -10,15 +10,10 @@
  * Token-only styling via the xp-* classes in globals.css; no new :root tokens.
  */
 
+import Link from "next/link";
 import { summarize, type XpState } from "@/lib/gamification";
 
-export default function GamificationPanel({
-  state,
-  compact = false,
-}: {
-  state: XpState;
-  compact?: boolean;
-}) {
+function XpSummary({ state, compact = false }: { state: XpState; compact?: boolean }) {
   const { total, level, badges, quests } = summarize(state);
   const span = level.nextAt !== null ? level.nextAt - level.min : 1;
   const progressed = total - level.min;
@@ -136,5 +131,63 @@ export default function GamificationPanel({
         ))}
       </ul>
     </section>
+  );
+}
+
+export default function GamificationPanel({
+  state,
+  compact = false,
+  guest = false,
+  loading = false,
+  error = null,
+  onRetry,
+}: {
+  state?: XpState | null;
+  compact?: boolean;
+  guest?: boolean;
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+}) {
+  if (!guest && !loading && !error) {
+    return state ? <XpSummary state={state} compact={compact} /> : null;
+  }
+
+  const wrapperClass = compact ? "xp-panel xp-panel--compact" : "card xp-panel";
+
+  if (guest) {
+    return (
+      <section className={wrapperClass} aria-label="Your travel progress">
+        <p className="xp-panel__next">Sign in to earn XP</p>
+        <Link className="btn btn--primary" href="/account">
+          Sign in
+        </Link>
+      </section>
+    );
+  }
+
+  if (loading) {
+    return (
+      <section className={wrapperClass} aria-label="Your travel progress" aria-busy="true">
+        <div className="skeleton" role="status" aria-label="Loading your progress">
+          <div className="skeleton__block skeleton__block--title" />
+          <div className="skeleton__block skeleton__block--line" />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <div className={wrapperClass} role="alert">
+        <p className="xp-panel__next">{error}</p>
+        {onRetry && (
+          <button type="button" className="btn" onClick={onRetry}>
+            Retry
+          </button>
+        )}
+      </div>
+      {state ? <XpSummary state={state} compact={compact} /> : null}
+    </>
   );
 }

@@ -20,6 +20,7 @@ import { dynamoRegion, profilesTableName, tripsTableName } from "./env";
 export const OWNER_UPDATED_INDEX = "owner-updated";
 export const PROFILE_RECORD = "PROFILE";
 export const PREFS_RECORD = "PREFS";
+export const XP_RECORD = "XP";
 
 const BATCH_SIZE = 25;
 const MAX_QUERY_PAGES = 50;
@@ -36,6 +37,9 @@ export interface AccountStore extends KvStore {
   getPreferences(userId: string): Promise<{ data: unknown; version: number } | null>;
   /** Compare-and-swap on `expectedVersion`; returns the new version. */
   putPreferences(userId: string, data: unknown, expectedVersion: number): Promise<{ version: number }>;
+  getXp(userId: string): Promise<{ data: unknown; version: number } | null>;
+  /** Compare-and-swap on `expectedVersion`; returns the new version. */
+  putXp(userId: string, data: unknown, expectedVersion: number): Promise<{ version: number }>;
 }
 
 export interface DynamoAccountStoreOptions {
@@ -236,6 +240,24 @@ export class DynamoAccountStore implements AccountStore {
   async putPreferences(userId: string, data: unknown, expectedVersion: number): Promise<{ version: number }> {
     const version = expectedVersion + 1;
     await this.conditionalPut(userId, PREFS_RECORD, { userId, data, version }, expectedVersion);
+    return { version };
+  }
+
+  async getXp(userId: string): Promise<{ data: unknown; version: number } | null> {
+    const res = await this.doc.send(
+      new GetCommand({
+        TableName: this.profilesTable,
+        Key: { userId, recordType: XP_RECORD },
+        ConsistentRead: true,
+      }),
+    );
+    if (!res.Item) return null;
+    return { data: res.Item.data, version: Number(res.Item.version) || 0 };
+  }
+
+  async putXp(userId: string, data: unknown, expectedVersion: number): Promise<{ version: number }> {
+    const version = expectedVersion + 1;
+    await this.conditionalPut(userId, XP_RECORD, { userId, data, version }, expectedVersion);
     return { version };
   }
 

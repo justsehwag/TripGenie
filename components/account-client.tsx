@@ -109,7 +109,7 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
         {user === null && (
           <p className="account-card__note" role="note" style={{ textAlign: "center", padding: "var(--space-4, 16px)" }}>
             You are browsing as a guest. Your trips are saved on this device only. Sign in above to save them to an account.
-            XP and level are stored on this device only.
+            Sign in to earn XP. Guests do not earn or store XP.
           </p>
         )}
       </>
@@ -194,7 +194,7 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
           </button>
           <p className="account-card__note" role="note">{accountNote}</p>
           <p className="account-card__note">
-            XP and level are stored on this device only.{" "}
+            XP and level are saved to your account.{" "}
             <button type="button" className="inline-link" onClick={() => { void signOut().then(() => router.push("/account")); }}>
               Use a different account
             </button>
