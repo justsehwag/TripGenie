@@ -46,6 +46,8 @@ import { mergeBatch, settlePending, buildTimeline, hasVerificationData, isComple
 import { DayCarousel } from "@/components/day-carousel";
 import { Toast } from "@/components/toast";
 import { toastForSave, saveFingerprint, shouldSkipSave, type SaveOutcome, type ToastModel } from "@/lib/save-feedback";
+import { fetchSession, subscribeSession, handleUnauthorized } from "@/lib/client/account-session";
+import { setSyncSaving, setSyncSaved, setSyncFailed, setSyncUnavailable } from "@/lib/client/use-sync-status";
 import { StopDetails } from "@/components/stop-details";
 import { stopKey, isStopOpen, toggleStop, type StopOpenMap } from "@/lib/itinerary/stop-expand";
 import { useMiscEstimates, miscKeyForDay } from "@/components/use-misc-estimate";
@@ -368,24 +370,29 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   // Live stays + flights for the generated trip (auto-fetched once ready).
   const [live, setLive] = useState<TripLive>(EMPTY_LIVE);
 
-  /** Resolve the signed-in owner from the browser-local session (My Trips key). */
-  function currentOwner(): string | null {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = window.localStorage.getItem("tripgenie.session");
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as { userId?: string };
-      return typeof parsed.userId === "string" && parsed.userId.trim() ? parsed.userId.trim() : null;
-    } catch {
-      return null;
-    }
-  }
+  // Signed-in state comes from the server session (account-session helpers),
+  // kept in a ref: null until the first answer arrives.
+  const signedInRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void fetchSession().then((s) => {
+      if (alive) signedInRef.current = s.signedIn;
+    });
+    const unsub = subscribeSession((s) => {
+      signedInRef.current = s.signedIn;
+    });
+    return () => {
+      alive = false;
+      unsub();
+    };
+  }, []);
 
   /**
    * Save the current itinerary to the user's account via POST /api/trips, which
-   * persists through the DynamoDB-backed Trip_Store (newest-5 retention) - not
-   * just browser-local. Signed-out users are prompted to sign in; the API also
-   * refuses to persist without an owner.
+   * persists through the DynamoDB-backed Trip_Store (the newest five trips are
+   * kept) - not just browser-local. The owner is derived server-side from the
+   * session cookie, so no owner or user id is sent. Signed-out users, and
+   * 401/503 responses, fall back to the device-local save with an honest toast.
    */
   async function saveTrip() {
     // Partial trips save as drafts; pending days are settled so none are persisted as pending.
@@ -397,10 +404,14 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       notify({ kind: "unchanged" });
       return;
     }
-    const owner = currentOwner();
-    if (!owner) {
-      // Guests (no signed-in owner) save to the device-local store so Save always works.
-      setSaving(true);
+    setSaving(true);
+    let signedIn = signedInRef.current;
+    if (signedIn === null) {
+      signedIn = (await fetchSession()).signedIn;
+      signedInRef.current = signedIn;
+    }
+    if (!signedIn) {
+      // Guests (no signed-in session) save to the device-local store so Save always works.
       try {
         saveLocal({
           owner: "@local",
@@ -426,13 +437,13 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       }
       return;
     }
-    setSaving(true);
+    setSyncSaving();
     try {
       const res = await fetch("/api/trips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          owner,
+          mode: "save",
           clientDraftId: draftIdRef.current,
           name: state.itinerary.title,
           status: savedStatus,
@@ -446,15 +457,48 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
           },
         }),
       });
-      const data = (await res.json()) as { persisted?: boolean; error?: string };
+      const data = (await res.json().catch(() => ({}))) as { persisted?: boolean; error?: string };
       if (res.ok && data.persisted) {
+        // Sync status is shown only after the Trips_API confirms the save.
+        setSyncSaved();
         earn("trip_confirmed");
         lastSavedFpRef.current = fp;
         notify({ kind: "saved", scope: "account" });
+      } else if (res.status === 401 || res.status === 503) {
+        if (res.status === 401) {
+          handleUnauthorized();
+          signedInRef.current = false;
+          setSyncFailed(undefined, "Signed out. Saved on this device only.");
+        } else {
+          setSyncUnavailable("Account saving is unavailable. Saved on this device only.");
+        }
+        try {
+          saveLocal({
+            owner: "@local",
+            clientDraftId: draftIdRef.current,
+            name: state.itinerary.title,
+            status: savedStatus,
+            payload: {
+              destination: route.destination || sharedContext.context.destination || "",
+              origin: route.origin || sharedContext.context.origin || "",
+              days: state.itinerary.days.length,
+              totalCost: state.itinerary.totalCost,
+              pricing: state.pricing,
+              itinerary: savedItinerary ?? state.itinerary,
+            },
+          });
+          earn("trip_confirmed");
+          lastSavedFpRef.current = fp;
+          notify({ kind: "saved", scope: "device" });
+        } catch {
+          notify({ kind: "failed" });
+        }
       } else {
-        notify({ kind: "failed", reason: data.error || "Sign in to save this trip to your account." });
+        setSyncFailed(() => void saveTrip());
+        notify({ kind: "failed", reason: data.error });
       }
     } catch {
+      setSyncFailed(() => void saveTrip());
       notify({ kind: "failed" });
     } finally {
       setSaving(false);

@@ -5,37 +5,27 @@
  *
  * Signed-in: a floating glass PROFILE card (greeting, explorer avatar, quick-
  * link tiles, sign-out) over the immersive AccountHero backdrop. Anonymous:
- * the redesigned AuthLanding sign-in (same backdrop).
+ * the AuthLanding sign-in (same backdrop) plus a plain note that guest trips
+ * stay on this device.
  *
- * Behavior is unchanged: readSession/the session switch, signOut, the
- * "use a different account" flow, the My trips / Plan / Discover hrefs, and the
- * SSR-safe "undefined|null -> AuthLanding" fallback are all preserved.
+ * Identity comes from the server session (lib/client/account-session). The copy
+ * about where data lives is honest (account-sync requirement 7): the account
+ * claim shows only when account storage works, XP and level are always labelled
+ * device-only.
  */
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthLanding from "@/components/auth-landing";
 import { AccountHero } from "@/components/account-hero";
-import type { IdentityProviderPolicy, IdentitySession } from "@/lib/identity";
-
-function readSession(): IdentitySession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem("tripgenie.session");
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<IdentitySession>;
-    if (parsed && typeof parsed.userId === "string" && parsed.userId.trim()) {
-      return {
-        userId: parsed.userId.trim(),
-        firstName: typeof parsed.firstName === "string" ? parsed.firstName : undefined,
-        email: typeof parsed.email === "string" ? parsed.email : undefined,
-      };
-    }
-  } catch {
-    // corrupt -> anonymous
-  }
-  return null;
-}
+import type { IdentityProviderPolicy } from "@/lib/identity";
+import {
+  fetchSession,
+  signOut as signOutAccount,
+  subscribeSession,
+  type SessionUser,
+} from "@/lib/client/account-session";
+import { useSyncStatus } from "@/lib/client/use-sync-status";
 
 function ExplorerAvatar() {
   return (
@@ -66,39 +56,93 @@ function TileIcon({ kind }: { kind: "trips" | "plan" | "discover" }) {
 
 export default function AccountClient({ policy }: { policy: IdentityProviderPolicy }) {
   const router = useRouter();
-  const [session, setSession] = useState<IdentitySession | null | undefined>(undefined);
+  const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
+  // Account storage probe: a signed-in GET /api/trips returns 503 when unavailable.
+  const [storage, setStorage] = useState<"checking" | "ok" | "unavailable">("checking");
+  const sync = useSyncStatus();
 
   useEffect(() => {
-    setSession(readSession());
-    function onStorage(e: StorageEvent) {
-      if (e.key === "tripgenie.session" || e.key === null) setSession(readSession());
-    }
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    let alive = true;
+    void fetchSession().then((s) => {
+      if (alive && !s.error) setUser(s.signedIn && s.user ? s.user : null);
+      else if (alive) setUser((prev) => (prev === undefined ? null : prev));
+    });
+    const unsub = subscribeSession((s) => {
+      setUser(s.signedIn && s.user ? s.user : null);
+    });
+    return () => {
+      alive = false;
+      unsub();
+    };
   }, []);
 
-  function signOut() {
-    if (typeof window !== "undefined") {
-      try { window.localStorage.removeItem("tripgenie.session"); } catch {}
+  const signedInEmail = user?.email;
+  useEffect(() => {
+    if (!signedInEmail) {
+      setStorage("checking");
+      return;
     }
-    setSession(null);
+    let alive = true;
+    fetch("/api/trips", { method: "GET", credentials: "same-origin", cache: "no-store" })
+      .then((res) => {
+        if (alive) setStorage(res.status === 503 ? "unavailable" : "ok");
+      })
+      .catch(() => {
+        if (alive) setStorage("ok");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [signedInEmail]);
+
+  async function signOut() {
+    await signOutAccount();
+    setUser(null);
   }
 
-  // Still resolving (first paint) - render the sign-in so SSR/CSR agree; it is
-  // swapped for the profile view immediately if a session is found.
-  if (session === undefined || session === null) {
-    return <AuthLanding policy={policy} />;
+  // Still resolving (first paint) or a guest - render the sign-in so SSR/CSR
+  // agree. Guests are told plainly where their data lives.
+  if (user === undefined || user === null) {
+    return (
+      <>
+        <AuthLanding policy={policy} />
+        {user === null && (
+          <p className="account-card__note" role="note" style={{ textAlign: "center", padding: "var(--space-4, 16px)" }}>
+            You are browsing as a guest. Your trips are saved on this device only. Sign in above to save them to an account.
+            XP and level are stored on this device only.
+          </p>
+        )}
+      </>
+    );
   }
 
-  const name = session.firstName?.trim() || session.email?.split("@")[0] || "Explorer";
+  const unavailable = storage === "unavailable" || sync.state === "unavailable";
+  const saveFailed = !unavailable && sync.state === "failed";
+
+  const name = user.name?.trim() || user.email.split("@")[0] || "Explorer";
+
+  let accountNote: string;
+  if (unavailable) {
+    accountNote = "Account sync is unavailable right now. Your trips stay on this device until it is back.";
+  } else if (saveFailed) {
+    accountNote = "We could not save your latest changes to your account. Use Retry in the status message.";
+  } else if (storage === "ok") {
+    accountNote = "Your trips, preferences and profile are saved to your account.";
+  } else {
+    accountNote = "Checking your account storage\u2026";
+  }
 
   return (
     <main className="account-stage">
       <AccountHero
         eyebrow="Your account"
         title="Your next journey awaits"
-        subtitle="Every trip you plan stays synced and ready wherever you go."
-        points={["Live hotel & flight prices", "AI day-by-day itineraries", "Synced across your devices"]}
+        subtitle="Plan trips with live prices and AI itineraries."
+        points={[
+          "Live hotel & flight prices",
+          "AI day-by-day itineraries",
+          unavailable ? "Account sync is unavailable right now" : "Saved to your account when you are signed in",
+        ]}
       />
 
       <div className="account-stage__panel">
@@ -108,7 +152,7 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
             <span className="account-card__avatar"><ExplorerAvatar /></span>
             <div className="account-card__id">
               <p className="account-card__name">{name}</p>
-              {session.email && <p className="account-card__email">{session.email}</p>}
+              <p className="account-card__email">Signed in as {user.email}</p>
             </div>
           </div>
 
@@ -145,12 +189,13 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
             </li>
           </ul>
 
-          <button type="button" className="cta account-card__signout" onClick={signOut}>
+          <button type="button" className="cta account-card__signout" onClick={() => { void signOut(); }}>
             Sign out
           </button>
+          <p className="account-card__note" role="note">{accountNote}</p>
           <p className="account-card__note">
-            Signed in, so your saved trips sync to your account.{" "}
-            <button type="button" className="inline-link" onClick={() => { signOut(); router.push("/account"); }}>
+            XP and level are stored on this device only.{" "}
+            <button type="button" className="inline-link" onClick={() => { void signOut().then(() => router.push("/account")); }}>
               Use a different account
             </button>
           </p>

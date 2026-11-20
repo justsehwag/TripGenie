@@ -7,17 +7,22 @@
  *
  * One interface, two scope-backed implementations:
  *   • Guest scope   → Local_Store (device-only localStorage; owner "@local").
- *   • Signed-in scope → the Trip_Store adapter over `/api/trips`
- *                       (GET ?owner=<userId>, idempotent POST, owner-scoped DELETE).
+ *   • Signed-in scope → the account trips API at `/api/trips` (GET, idempotent
+ *                       POST, DELETE). The server derives the owner from the
+ *                       session cookie; the client never sends `owner`/`userId`.
  *
- * Scope is resolved by the single pure resolver `resolveScope(readSession())`.
- * `readSession()` parses the browser-local `tripgenie.session` key with the
- * EXACT logic used by my-trips-client.tsx and global-nav.tsx (JSON-parse,
- * require a non-empty trimmed `userId`, treat corrupt JSON as anonymous). The
- * hook re-reads scope on a window `storage` event for `tripgenie.session`
- * (mirroring the global-nav session bridge), so a sign-out immediately
- * re-scopes the Drawer/History and never leaks the prior user's cloud records
- * to a later guest.
+ * Scope is resolved from the SERVER session: `fetchSession()` on mount, then
+ * `subscribeSession()` for sign-in / sign-out / 401 changes (account-sync
+ * Req 4.1, 4.7). The browser-local `tripgenie.session` value is only a display
+ * cache and is never used to decide signed-in state. A sign-out immediately
+ * re-scopes the Drawer/History and never leaks the prior user's records to a
+ * later guest.
+ *
+ * Retention: the account keeps the newest 20 trips (enforced by the server);
+ * the device-only guest store keeps the newest 5 (`lib/history/local-store`).
+ *
+ * After sign-in is detected the hook runs `runMigrationV2()` and
+ * `runGuestMerge()` once each per page load, then reloads the account trips.
  *
  * Signed-in draft persist-failure fallback (R5.4): when a signed-in `save`
  * returns `persisted !== true` or throws, the Draft is written to Local_Store
@@ -40,35 +45,30 @@ import {
 } from "@/lib/history/local-store";
 import { toSharedContext, type CapturedPlan } from "@/lib/history/record-codec";
 import type { SaveInput, StoredTrip } from "@/lib/trip-retention";
+import {
+  fetchSession,
+  handleUnauthorized,
+  runMigrationV2,
+  subscribeSession,
+  type SessionState,
+} from "@/lib/client/account-session";
+import { runGuestMerge } from "@/lib/client/run-guest-merge";
+import {
+  setSyncFailed,
+  setSyncSaved,
+  setSyncSaving,
+  setSyncUnavailable,
+} from "@/lib/client/use-sync-status";
 
-/** The browser-local key the session seam reads (same as my-trips/global-nav). */
-const SESSION_KEY = "tripgenie.session";
-
-/**
- * Resolve the current session from the browser-local seam, using the same parse
- * logic as my-trips-client.tsx / global-nav.tsx: JSON-parse the stored value,
- * require `typeof userId === "string"` with a non-empty trimmed value, and
- * treat any corrupt / missing value as anonymous (never as another traveler).
- * SSR-guarded: returns null on the server.
- */
-function readSession(): IdentitySession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<IdentitySession>;
-    if (parsed && typeof parsed.userId === "string" && parsed.userId.trim()) {
-      return {
-        userId: parsed.userId.trim(),
-        firstName: typeof parsed.firstName === "string" ? parsed.firstName : undefined,
-        email: typeof parsed.email === "string" ? parsed.email : undefined,
-      };
-    }
-  } catch {
-    // A corrupt session is treated as anonymous, never as another traveler.
-  }
-  return null;
+/** Display label used as the scope's non-authoritative id (never sent to the server). */
+function scopeFromSession(state: SessionState): Scope {
+  return state.signedIn && state.user
+    ? resolveScope({ userId: state.user.email })
+    : { kind: "guest" };
 }
+
+/** Migration and guest merge each run at most once per page load, after sign-in. */
+let postSignInStarted = false;
 
 /** A trip whose stored status marks it a confirmed booking (reused from my-trips). */
 function isConfirmedBooking(trip: StoredTrip): boolean {
@@ -105,27 +105,43 @@ export interface ScopedHistory {
 export function useScopedHistory(
   sessionOverride?: IdentitySession | null,
 ): ScopedHistory {
-  // Resolve scope once on mount (or from the override), then re-resolve on a
-  // `storage` event for `tripgenie.session` (or a cleared key). SSR-guarded.
+  // Scope comes from the server session. `resolved` stays false until the first
+  // fetchSession() settles, so the drawer shows a skeleton instead of flashing
+  // the guest list (Req 4.1, 4.2). An explicit override resolves immediately.
   const [scope, setScope] = useState<Scope>(() =>
-    resolveScope(sessionOverride === undefined ? readSession() : sessionOverride),
+    sessionOverride === undefined ? { kind: "guest" } : resolveScope(sessionOverride),
   );
+  const [resolved, setResolved] = useState<boolean>(sessionOverride !== undefined);
 
   useEffect(() => {
     if (sessionOverride !== undefined) {
-      // Explicit override drives scope directly; no storage bridge needed.
+      // Explicit override drives scope directly; no server session check.
       setScope(resolveScope(sessionOverride));
+      setResolved(true);
       return;
     }
-    if (typeof window === "undefined") return;
-    setScope(resolveScope(readSession()));
-    function onStorage(e: StorageEvent) {
-      if (e.key === SESSION_KEY || e.key === null) {
-        setScope(resolveScope(readSession()));
-      }
-    }
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    let cancelled = false;
+    const apply = (state: SessionState) => {
+      if (cancelled) return;
+      const next = scopeFromSession(state);
+      setScope((prev) =>
+        prev.kind === next.kind &&
+        (prev.kind === "guest" || (next.kind === "signed-in" && prev.userId === next.userId))
+          ? prev
+          : next,
+      );
+      if (!state.error) setResolved(true);
+      if (!state.signedIn && !state.error) postSignInStarted = false;
+    };
+    const unsubscribe = subscribeSession(apply);
+    void fetchSession().then((state) => {
+      // A network error leaves local data usable as a guest list.
+      if (state.error) setResolved(true);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [sessionOverride]);
 
   const [items, setItems] = useState<StoredTrip[]>([]);
@@ -134,8 +150,10 @@ export function useScopedHistory(
 
   /**
    * Reload the current scope's records. Guest → Local_Store; signed-in →
-   * GET /api/trips?owner=<userId> (parsed `{ trips }`). Never throws; on a
-   * signed-in load failure it surfaces an error and leaves items unchanged.
+   * GET /api/trips (the server derives the owner from the session cookie).
+   * Never throws. On a 401 it calls handleUnauthorized(); on any signed-in load
+   * failure it surfaces an error and keeps the data already on screen, falling
+   * back to the device's local records when nothing is loaded yet (Req 4.3).
    */
   const reload = useCallback(async () => {
     setLoading(true);
@@ -146,29 +164,49 @@ export function useScopedHistory(
       return;
     }
     try {
-      const res = await fetch(
-        `/api/trips?owner=${encodeURIComponent(scope.userId)}`,
-        { headers: { accept: "application/json" }, cache: "no-store" },
-      );
+      const res = await fetch("/api/trips", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { accept: "application/json" },
+        cache: "no-store",
+      });
+      if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error("Signed out.");
+      }
       if (!res.ok) throw new Error(`Request failed (${res.status}).`);
       const body = (await res.json()) as { trips?: StoredTrip[] };
       setItems(Array.isArray(body.trips) ? body.trips : []);
     } catch {
       setError("We could not load your plans. Please try again.");
+      setItems((prev) => (prev.length > 0 ? prev : readLocalHistory()));
     } finally {
       setLoading(false);
     }
   }, [scope]);
 
-  // Initial load, re-run whenever scope changes (sign-in / sign-out re-scopes).
+  // Load once the session is known; re-run when scope changes (sign-in / sign-out).
   useEffect(() => {
+    if (!resolved) return;
     void reload();
-  }, [reload]);
+  }, [reload, resolved]);
+
+  // After sign-in is detected: one-time storage migration, then the guest merge,
+  // each once per page load. Reload the account trips if the merge uploaded any.
+  useEffect(() => {
+    if (!resolved || scope.kind !== "signed-in" || postSignInStarted) return;
+    postSignInStarted = true;
+    runMigrationV2();
+    void runGuestMerge().then((summary) => {
+      if (summary.uploaded > 0) void reload();
+    });
+  }, [resolved, scope, reload]);
 
   /**
    * Save a draft/plan. Guest saves go to Local_Store and are always locally
-   * "persisted" (device-only). Signed-in saves POST to /api/trips (idempotent
-   * by owner+clientDraftId). On a signed-in persist-failure (non-OK response,
+   * "persisted" (device-only, newest 5). Signed-in saves POST to /api/trips
+   * (idempotent by session owner + clientDraftId; the account keeps the newest
+   * 20) and set the sync status around the call. On a signed-in persist-failure (non-OK response,
    * `persisted !== true`, or a thrown error) the Draft falls back to
    * Local_Store for this device and an error is surfaced (R5.4); the promise
    * still resolves with `{ persisted: false }`.
@@ -181,40 +219,53 @@ export function useScopedHistory(
         return { persisted: true };
       }
 
-      const signedInput: SaveInput = { ...input, owner: scope.userId };
+      // The server derives the owner from the session cookie; none is sent.
+      const syncFailedMessage =
+        "We saved this plan on this device, but could not sync it to your account. Please try again.";
+      const fallback = (): { persisted: false } => {
+        // Persist-failure fallback: keep the Draft on this device (R5.4).
+        saveLocal(input);
+        setError(syncFailedMessage);
+        return { persisted: false };
+      };
+      setSyncSaving();
       try {
         const res = await fetch("/api/trips", {
           method: "POST",
+          credentials: "same-origin",
           headers: { "content-type": "application/json" },
           cache: "no-store",
           body: JSON.stringify({
-            owner: scope.userId,
-            clientDraftId: signedInput.clientDraftId,
-            name: signedInput.name,
-            status: signedInput.status,
-            payload: signedInput.payload,
-            ttl: signedInput.ttl,
+            clientDraftId: input.clientDraftId,
+            name: input.name,
+            status: input.status,
+            payload: input.payload,
+            mode: "save",
           }),
         });
+        if (res.status === 401) {
+          handleUnauthorized();
+          setSyncFailed();
+          return fallback();
+        }
+        if (res.status === 503) {
+          setSyncUnavailable();
+          return fallback();
+        }
         if (!res.ok) throw new Error(`Save failed (${res.status}).`);
         const body = (await res.json()) as { persisted?: boolean };
         if (body.persisted !== true) {
-          // Persist-failure fallback: keep the Draft on this device (R5.4).
-          saveLocal(signedInput);
-          setError(
-            "We saved this plan on this device, but could not sync it to your account. Please try again.",
-          );
-          return { persisted: false };
+          setSyncFailed(() => void save(input));
+          return fallback();
         }
+        // Saved is shown only after the server confirms persistence (Req 4.5).
+        setSyncSaved();
         await reload();
         return { persisted: true };
       } catch {
         // Network / non-OK failure fallback: keep the Draft on this device (R5.4).
-        saveLocal(signedInput);
-        setError(
-          "We saved this plan on this device, but could not sync it to your account. Please try again.",
-        );
-        return { persisted: false };
+        setSyncFailed(() => void save(input));
+        return fallback();
       }
     },
     [scope, reload],
@@ -236,10 +287,15 @@ export function useScopedHistory(
       try {
         const res = await fetch("/api/trips", {
           method: "DELETE",
+          credentials: "same-origin",
           headers: { "content-type": "application/json" },
           cache: "no-store",
-          body: JSON.stringify({ owner: scope.userId, tripId }),
+          body: JSON.stringify({ tripId }),
         });
+        if (res.status === 401) {
+          handleUnauthorized();
+          throw new Error("Signed out.");
+        }
         if (!res.ok) throw new Error(`Delete failed (${res.status}).`);
         await reload();
       } catch {

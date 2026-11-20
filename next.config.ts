@@ -33,6 +33,15 @@ const passthrough = [
   "TRIPGENIE_SEARXNG_ENABLED",
   // Web-grounded pricing flag (server-only; read by lib/config.ts accessor).
   "TRIPGENIE_WEB_PRICING_ENABLED",
+  // Account sync (server-only; DynamoDB tables, Cognito hosted domain, session).
+  "TRIPGENIE_TRIPS_TABLE",
+  "TRIPGENIE_PROFILES_TABLE",
+  "TRIPGENIE_DYNAMO_REGION",
+  "TRIPGENIE_APP_ORIGIN",
+  "COGNITO_DOMAIN",
+  "TRIPGENIE_SESSION_MAX_DAYS",
+  // Assistant Bedrock model override (read by lib/assistant/bedrock-tools.ts).
+  "TRIPGENIE_ASSISTANT_MODEL_ID",
 ] as const;
 
 const bakedEnv: Record<string, string> = {};

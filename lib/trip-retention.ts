@@ -16,7 +16,8 @@ export interface StoredTrip {
   ttl?: number;
 }
 
-const MAX_KEPT = 5;
+export const GUEST_MAX_TRIPS = 5;
+export const ACCOUNT_MAX_TRIPS = 20;
 const SENSITIVE = ["payment", "card", "cvv", "passport", "pan", "ssn", "auth", "token", "secret"];
 
 /** Remove sensitive keys from a payload (Req 13.6). */
@@ -67,12 +68,16 @@ export function applySave(
 }
 
 /** Newest-5 retention; returns kept and deleted ids (Req 13.4/13.5). */
-export function retainNewest(owner: string, trips: StoredTrip[]): { kept: StoredTrip[]; deleted: string[] } {
+export function retainNewest(
+  owner: string,
+  trips: StoredTrip[],
+  limit = GUEST_MAX_TRIPS,
+): { kept: StoredTrip[]; deleted: string[] } {
   const owned = trips
     .filter((t) => t.owner === owner)
     .slice()
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
-  const kept = owned.slice(0, MAX_KEPT);
-  const deleted = owned.slice(MAX_KEPT).map((t) => t.tripId);
+  const kept = owned.slice(0, limit);
+  const deleted = owned.slice(limit).map((t) => t.tripId);
   return { kept, deleted };
 }

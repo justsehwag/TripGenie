@@ -4,27 +4,26 @@
  * My_Trips_Page client (Task 35.2) — design section
  * "Booking Site (Hopper-style Multi-page Experience) → My_Trips_Page (Req 27)".
  *
- * Binds to the `Trip_Store` through the owner-scoped trips API at `/api/trips`,
- * which wraps `lib/dynamo-store` (`listNewest` → newest-five retention, Req 13 /
- * Property 32) over the pure `lib/trip-retention` core. Nothing here invents a
- * persistence layer: loads are `GET /api/trips?owner=…`, edits are the same
- * idempotent `POST /api/trips` the Planner uses (keyed on `clientDraftId`,
- * Property 31), and deletes call the owner-scoped trips API.
+ * Binds to the account trips API at `/api/trips`. The server derives the owner
+ * from the verified session cookie, so this client never sends `owner` or
+ * `userId`. Loads are `GET /api/trips`, edits are the same idempotent
+ * `POST /api/trips` the Planner uses (keyed on `clientDraftId`, mode "save"),
+ * and deletes are `DELETE /api/trips` with `{ tripId }`. A 401 calls
+ * `handleUnauthorized()`. The account keeps the newest 20 trips; the device-only
+ * guest store keeps the newest 5.
  *
- * Session source (signed-in vs anonymous). There is NO live Cognito session
- * wired into the Booking_Site yet (the root layout documents this: its chrome
- * session starts `null`). So the signed-in state is driven from a single,
- * clearly-commented browser-local session source — `readSession()` below —
- * rather than invented credentials. When a real hosted-UI session is wired, that
- * one function is the only thing that changes; everything downstream already
- * keys off the resolved stable `userId` (Req 13).
+ * Session source (signed-in vs anonymous): the SERVER session, read with
+ * `fetchSession()` and kept current with `subscribeSession()` (account-sync
+ * Req 4.1, 4.7). The browser-local `tripgenie.session` value is a display cache
+ * only and is not used to decide signed-in state. After sign-in is detected the
+ * page runs `runMigrationV2()` and `runGuestMerge()` once each per page load.
  *
  * Behaviour:
  *   • Anonymous → a sign-in prompt reusing the Req 1 Identity_Provider entry and
  *     NO other traveler's trips (Req 27.1).
- *   • Signed-in → the traveler's five newest saved trips scoped to the stable
- *     user id (Req 27.2); an empty state inviting a search or the Planner when
- *     there are none (Req 27.3).
+ *   • Signed-in → the traveler's account trips (Req 27.2), with a loading
+ *     skeleton, an error state with retry that keeps local data visible, and an
+ *     empty state with a plan-a-trip link (account-sync Req 4.2–4.4, 27.3).
  *   • View a saved trip (Req 27.4); edit it (Req 27.5) and delete it (Req 27.6)
  *     — owner-scoped against the Trip_Store.
  *   • Resume an unfinished trip → navigate to `/plan` with the trip's
@@ -50,37 +49,36 @@ import AuthLanding from "@/components/auth-landing";
 import { illustration } from "@/lib/illustrations";
 import type { IdentityProviderPolicy, IdentitySession } from "@/lib/identity";
 import type { StoredTrip } from "@/lib/trip-retention";
+import { readLocalHistory } from "@/lib/history/local-store";
+import {
+  fetchSession,
+  handleUnauthorized,
+  runMigrationV2,
+  subscribeSession,
+  type SessionState,
+} from "@/lib/client/account-session";
+import { runGuestMerge } from "@/lib/client/run-guest-merge";
+import {
+  setSyncFailed,
+  setSyncSaved,
+  setSyncSaving,
+  setSyncUnavailable,
+} from "@/lib/client/use-sync-status";
+
+/** Migration and guest merge each run at most once per page load, after sign-in. */
+let postSignInStarted = false;
 
 /** A single restrained header accent reused across the page states (Req 13.1). */
 const HEADER_ILLUSTRATION = illustration("suitcase");
 
-/**
- * The one browser-local key the stubbed session source reads. A real hosted-UI
- * integration (Req 1) would populate this — or replace `readSession()` entirely
- * — with the Cognito-resolved identity. Until then it is the single documented
- * seam between "anonymous" and "signed-in", so no credentials are fabricated.
- */
-const SESSION_KEY = "tripgenie.session";
-
-/** Resolve the current session from the browser-local stub source (see above). */
-function readSession(): IdentitySession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<IdentitySession>;
-    // A session is only usable when it carries a stable user id (Req 13).
-    if (parsed && typeof parsed.userId === "string" && parsed.userId.trim()) {
-      return {
-        userId: parsed.userId.trim(),
-        firstName: typeof parsed.firstName === "string" ? parsed.firstName : undefined,
-        email: typeof parsed.email === "string" ? parsed.email : undefined,
-      };
-    }
-  } catch {
-    // A corrupt stub is treated as anonymous, never as another traveler.
-  }
-  return null;
+/** Map the server session to the page's identity (display fields only). */
+function identityFromState(state: SessionState): IdentitySession | null {
+  if (!state.signedIn || !state.user) return null;
+  return {
+    userId: state.user.email,
+    firstName: state.user.name?.trim().split(/\s+/)[0] || undefined,
+    email: state.user.email,
+  };
 }
 
 /** A trip whose stored status marks it a confirmed booking (Req 27.8). */
@@ -144,37 +142,60 @@ export interface MyTripsClientProps {
   providerPolicy: IdentityProviderPolicy;
   /**
    * Optional session override, injected by tests so signed-in vs anonymous can
-   * be asserted without touching browser-local storage. Defaults to the
-   * browser-local stub source via `readSession()`.
+   * be asserted without a server session check. Defaults to the server session
+   * via `fetchSession()` / `subscribeSession()`.
    */
   session?: IdentitySession | null;
 }
 
 export default function MyTripsClient({ providerPolicy, session }: MyTripsClientProps) {
-  // Resolve the session once on mount from the stub source, unless a test
-  // injected one. `undefined` means "not resolved yet" (server render / first
-  // paint); `null` means "resolved and anonymous".
+  // Resolve the session from the server on mount, unless a test injected one.
+  // `undefined` means "not resolved yet" (server render / first paint); `null`
+  // means "resolved and anonymous".
   const [resolved, setResolved] = useState<IdentitySession | null | undefined>(
     session,
   );
   useEffect(() => {
-    if (session === undefined) setResolved(readSession());
+    if (session !== undefined) {
+      setResolved(session);
+      return;
+    }
+    let cancelled = false;
+    const unsubscribe = subscribeSession((state) => {
+      if (cancelled || state.error) return;
+      setResolved(identityFromState(state));
+      if (!state.signedIn) postSignInStarted = false;
+    });
+    void fetchSession().then((state) => {
+      // A network error leaves the page usable as a guest (local data only).
+      if (!cancelled && state.error) setResolved(null);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [session]);
 
-  const owner = resolved?.userId ?? null;
+  const signedIn = Boolean(resolved);
   const [load, setLoad] = useState<LoadState>({ phase: "loading" });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const loadTrips = useCallback(async (ownerId: string) => {
+  const loadTrips = useCallback(async () => {
     setLoad({ phase: "loading" });
     try {
-      // The API scopes to this owner and returns only the newest five
-      // (`listNewest`), so no other traveler's trips can appear (Req 27.1/27.2).
-      const res = await fetch(`/api/trips?owner=${encodeURIComponent(ownerId)}`, {
+      // The server scopes to the session owner, so no other traveler's trips can
+      // appear (Req 27.1/27.2). The account keeps the newest 20 trips.
+      const res = await fetch("/api/trips", {
+        method: "GET",
+        credentials: "same-origin",
         headers: { accept: "application/json" },
         cache: "no-store",
       });
+      if (res.status === 401) {
+        handleUnauthorized();
+        throw new Error("Signed out.");
+      }
       if (!res.ok) throw new Error(`Request failed (${res.status}).`);
       const body = (await res.json()) as { trips?: StoredTrip[] };
       setLoad({ phase: "ready", trips: Array.isArray(body.trips) ? body.trips : [] });
@@ -185,15 +206,31 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
 
   useEffect(() => {
     if (resolved === undefined) return; // still resolving the session
-    if (!owner) {
+    if (!signedIn) {
       // Anonymous: never fetch another traveler's data (Req 27.1).
       setLoad({ phase: "ready", trips: [] });
       return;
     }
-    void loadTrips(owner);
-  }, [resolved, owner, loadTrips]);
+    void loadTrips();
+  }, [resolved, signedIn, loadTrips]);
 
-  const trips = load.phase === "ready" ? load.trips : [];
+  // After sign-in is detected: one-time migration, then the guest merge, each
+  // once per page load. Reload the account trips if the merge uploaded any.
+  useEffect(() => {
+    if (!signedIn || postSignInStarted) return;
+    postSignInStarted = true;
+    runMigrationV2();
+    void runGuestMerge().then((summary) => {
+      if (summary.uploaded > 0) void loadTrips();
+    });
+  }, [signedIn, loadTrips]);
+
+  // On a load error the page keeps this device's local trips visible (Req 4.3).
+  const localTrips = useMemo(
+    () => (load.phase === "error" ? readLocalHistory() : []),
+    [load.phase],
+  );
+  const trips = load.phase === "ready" ? load.trips : localTrips;
   const { bookings, itineraries } = useMemo(() => {
     const bookings: StoredTrip[] = [];
     const itineraries: StoredTrip[] = [];
@@ -218,64 +255,97 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
    */
   const edit = useCallback(
     async (trip: StoredTrip) => {
-      if (!owner) return;
+      if (!signedIn) return;
       const next = typeof window !== "undefined"
         ? window.prompt("Rename this trip", trip.name)
         : null;
       const name = next?.trim();
       if (!name || name === trip.name) return;
       setBusyId(trip.tripId);
+      setSyncSaving();
       try {
         const res = await fetch("/api/trips", {
           method: "POST",
+          credentials: "same-origin",
           headers: { "content-type": "application/json" },
+          cache: "no-store",
           body: JSON.stringify({
-            owner,
             clientDraftId: trip.clientDraftId,
             name,
             status: trip.status,
             payload: trip.payload,
-            ttl: trip.ttl,
+            mode: "save",
           }),
         });
+        if (res.status === 401) {
+          handleUnauthorized();
+          setSyncFailed();
+          throw new Error("Signed out.");
+        }
+        if (res.status === 503) {
+          setSyncUnavailable();
+          throw new Error("Storage unavailable.");
+        }
         if (!res.ok) throw new Error(`Save failed (${res.status}).`);
-        await loadTrips(owner);
+        const body = (await res.json().catch(() => null)) as { persisted?: boolean } | null;
+        if (body?.persisted !== true) {
+          setSyncFailed(() => void edit(trip));
+          throw new Error("Not persisted.");
+        }
+        setSyncSaved();
+        await loadTrips();
       } catch {
         setLoad({ phase: "error", message: "We could not update that trip. Please try again." });
       } finally {
         setBusyId(null);
       }
     },
-    [owner, loadTrips],
+    [signedIn, loadTrips],
   );
 
   /**
-   * Delete: remove the owner's own trip via the owner-scoped trips API. We send
-   * the owner + tripId so the store can only ever touch this traveler's data
-   * (Req 27.6). After a successful delete we reload the newest five.
+   * Delete: remove the signed-in traveler's own trip via the trips API. We send
+   * only the tripId; the server scopes the delete to the session owner
+   * (Req 27.6). After a successful delete we reload the account trips.
    */
   const remove = useCallback(
     async (trip: StoredTrip) => {
-      if (!owner) return;
+      if (!signedIn) return;
       if (typeof window !== "undefined" && !window.confirm(`Delete "${trip.name}"?`)) {
         return;
       }
       setBusyId(trip.tripId);
+      setSyncSaving();
       try {
         const res = await fetch("/api/trips", {
           method: "DELETE",
+          credentials: "same-origin",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ owner, tripId: trip.tripId }),
+          cache: "no-store",
+          body: JSON.stringify({ tripId: trip.tripId }),
         });
-        if (!res.ok) throw new Error(`Delete failed (${res.status}).`);
-        await loadTrips(owner);
+        if (res.status === 401) {
+          handleUnauthorized();
+          setSyncFailed();
+          throw new Error("Signed out.");
+        }
+        if (res.status === 503) {
+          setSyncUnavailable();
+          throw new Error("Storage unavailable.");
+        }
+        if (!res.ok) {
+          setSyncFailed(() => void remove(trip));
+          throw new Error(`Delete failed (${res.status}).`);
+        }
+        setSyncSaved();
+        await loadTrips();
       } catch {
         setLoad({ phase: "error", message: "We could not delete that trip. Please try again." });
       } finally {
         setBusyId(null);
       }
     },
-    [owner, loadTrips],
+    [signedIn, loadTrips],
   );
 
   // Resume target: /plan with the trip's Trip_Context restored (Req 27.7). We
@@ -300,7 +370,7 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
   // Anonymous: present the sign-in prompt (Req 1 entry) and no other traveler's
   // trips (Req 27.1). `AuthLanding` is the same Identity_Provider entry used on
   // the account landing page.
-  if (!owner) {
+  if (!signedIn) {
     return (
       <main className="shell my-trips">
         <p className="eyebrow">Your trips</p>
@@ -339,7 +409,14 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
       </header>
 
       {load.phase === "loading" && (
-        <p className="lead" aria-live="polite">Loading your trips…</p>
+        <div className="skeleton" role="status" aria-live="polite" aria-busy="true">
+          <span className="sr-only">Loading your trips…</span>
+          <div className="skeleton__block skeleton__block--title" />
+          <div className="skeleton__grid">
+            <div className="skeleton__card" />
+            <div className="skeleton__card" />
+          </div>
+        </div>
       )}
 
       {load.phase === "error" && (
@@ -348,7 +425,7 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
           <button
             type="button"
             className="cta"
-            onClick={() => owner && void loadTrips(owner)}
+            onClick={() => void loadTrips()}
           >
             Try again
           </button>
@@ -361,15 +438,15 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
           <h2 id="empty-heading" className="my-trips__empty-title">No trips yet</h2>
           <p>Start exploring stays or let the AI Travel Assistant plan something for you.</p>
           <div className="my-trips__empty-actions">
-            {/* Primary_Action (orange) — discovery route (Req 13.4). */}
-            <Link href="/stays" className="cta">Start a search</Link>
-            {/* Secondary neutral action — planning route (Req 13.4). */}
-            <Link href="/plan" className="btn">Open the Planner</Link>
+            {/* Primary_Action (orange) — plan a trip (account-sync Req 4.4). */}
+            <Link href="/plan" className="cta">Plan a trip</Link>
+            {/* Secondary neutral action — discovery route (Req 13.4). */}
+            <Link href="/stays" className="btn">Start a search</Link>
           </div>
         </section>
       )}
 
-      {load.phase === "ready" && trips.length > 0 && (
+      {load.phase !== "loading" && trips.length > 0 && (
         <>
           {/* Self-created itineraries — distinct from confirmed bookings (Req 27.8). */}
           <section className="my-trips__group" aria-labelledby="itineraries-heading">

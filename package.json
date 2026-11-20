@@ -17,6 +17,9 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1152.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1155.0",
+    "@aws-sdk/client-dynamodb": "^3.1173.0",
+    "@aws-sdk/lib-dynamodb": "^3.1173.0",
+    "aws-jwt-verify": "^5.2.1",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"

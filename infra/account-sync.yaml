@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: TripGenie account sync - DynamoDB tables and least-privilege access for the Amplify compute role.
+
+Parameters:
+  TripsTableName:
+    Type: String
+    Default: tripgenie-account-trips
+  ProfilesTableName:
+    Type: String
+    Default: tripgenie-account-profiles
+  ComputeRoleName:
+    Type: String
+    Default: TripGenieAmplifyComputeRole
+    Description: Existing IAM role used by Amplify SSR compute. It is not created here.
+  OwnerTag:
+    Type: String
+    Description: Owner tag value (required, no default). Supply at deploy time, for example --parameter-overrides OwnerTag=<value>.
+    AllowedPattern: '^[A-Za-z0-9 _.:/=+@-]{1,256}$'
+    ConstraintDescription: 1-256 characters from letters, digits, spaces and _ . : / = + @ -
+  ActivityTag:
+    Type: String
+    Default: tripgenie
+
+Resources:
+  TripsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref TripsTableName
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions:
+        - { AttributeName: owner, AttributeType: S }
+        - { AttributeName: tripId, AttributeType: S }
+        - { AttributeName: updatedAt, AttributeType: S }
+      KeySchema:
+        - { AttributeName: owner, KeyType: HASH }
+        - { AttributeName: tripId, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: owner-updated
+          KeySchema:
+            - { AttributeName: owner, KeyType: HASH }
+            - { AttributeName: updatedAt, KeyType: RANGE }
+          Projection: { ProjectionType: KEYS_ONLY }
+      TimeToLiveSpecification: { AttributeName: ttl, Enabled: true }
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      Tags:
+        - { Key: owner, Value: !Ref OwnerTag }
+        - { Key: activity, Value: !Ref ActivityTag }
+        - { Key: Name, Value: Seshathri Y }
+        - { Key: Purpose, Value: 'TripGenie - AI-powered travel planning concierge' }
+
+  ProfilesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref ProfilesTableName
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions:
+        - { AttributeName: userId, AttributeType: S }
+        - { AttributeName: recordType, AttributeType: S }
+      KeySchema:
+        - { AttributeName: userId, KeyType: HASH }
+        - { AttributeName: recordType, KeyType: RANGE }
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      Tags:
+        - { Key: owner, Value: !Ref OwnerTag }
+        - { Key: activity, Value: !Ref ActivityTag }
+        - { Key: Name, Value: Seshathri Y }
+        - { Key: Purpose, Value: 'TripGenie - AI-powered travel planning concierge' }
+
+  AccountSyncAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Lets the Amplify compute role use the TripGenie account sync tables only.
+      Roles: [!Ref ComputeRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: TripsTable
+            Effect: Allow
+            Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:BatchWriteItem, dynamodb:Query]
+            Resource:
+              - !GetAtt TripsTable.Arn
+              - !Sub '${TripsTable.Arn}/index/*'
+          - Sid: ProfilesTable
+            Effect: Allow
+            Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:BatchWriteItem, dynamodb:Query]
+            Resource: !GetAtt ProfilesTable.Arn
+
+Outputs:
+  TripsTableName:
+    Value: !Ref TripsTable
+  TripsTableArn:
+    Value: !GetAtt TripsTable.Arn
+  ProfilesTableName:
+    Value: !Ref ProfilesTable
+  ProfilesTableArn:
+    Value: !GetAtt ProfilesTable.Arn
+  AccessPolicyArn:
+    Value: !Ref AccountSyncAccessPolicy

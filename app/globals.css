@@ -9153,3 +9153,88 @@ main.shell:has(.planner-itinerary) .planner-results__aside {
 @media (prefers-reduced-motion: reduce) {
   .trip-assistant__pending-bar { animation: none; }
 }
+
+/* ===========================================================================
+   account-sync (task 6.10) - sync status pill, My Trips states, retry
+   controls, settings/profile/account notes. Append-only; token-based.
+   =========================================================================== */
+
+/* Unobtrusive status pill, bottom-left. Below the trip assistant launcher
+   (z-index 65, bottom-right) and the toast region (z-index 70, centered).
+   Hidden while the live region is empty (idle). */
+.sync-status {
+  position: fixed;
+  left: var(--space-md);
+  bottom: var(--space-md);
+  z-index: 60;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: min(360px, calc(100vw - 2 * var(--space-md)));
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  font-size: var(--type-helper-size);
+  line-height: 1.4;
+}
+.sync-status:empty { display: none; }
+.sync-status__text { margin: 0; color: var(--color-primary-text); }
+.sync-status__retry {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--space-md);
+  background: var(--color-pale-mint);
+  color: var(--color-deep-emerald);
+  border: 1px solid var(--color-primary-green);
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--motion-fast, 150ms) var(--ease-standard);
+}
+.sync-status__retry:hover { background: var(--color-soft-green); }
+.sync-status__retry:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+
+/* Keep the pill clear of the centered toast on narrow screens. */
+@media (max-width: 640px) {
+  .sync-status {
+    bottom: calc(var(--space-md) + 64px);
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* My Trips: error state with a 44px retry, empty-state actions, loading skeleton. */
+.my-trips__error p { margin: 0; color: var(--color-primary-text); }
+.my-trips__error .cta,
+.my-trips__empty-actions .cta,
+.my-trips__empty-actions .btn { min-height: 44px; min-width: 44px; }
+.my-trips .skeleton { margin-top: var(--space-md); }
+.my-trips__error .cta:focus-visible,
+.my-trips__empty-actions .cta:focus-visible,
+.my-trips__empty-actions .btn:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring-color); outline-offset: var(--focus-offset); }
+
+/* Settings: sync note and retry. */
+.settings__actions { flex-wrap: wrap; }
+.settings__saved { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); color: var(--color-secondary-text); }
+.settings__saved[role="alert"] { color: var(--color-primary-text); }
+.settings__saved .btn { min-height: 44px; min-width: 44px; }
+
+/* Profile panel: save-to-account button state and result notes. */
+.card .lead .btn { min-height: 44px; min-width: 44px; }
+.card .lead .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.card .lead .btn[aria-busy="true"] { cursor: progress; }
+.card .lead [role="status"],
+.card .lead [role="alert"] { color: var(--color-secondary-text); font-size: var(--type-helper-size); }
+
+/* Auth error notice (sign-in redirect failures) and account page notes. */
+.notice.notice--error { overflow-wrap: anywhere; }
+.account-card__note { margin: var(--space-md) 0 0; color: var(--color-secondary-text); font-size: var(--type-helper-size); line-height: 1.5; }
+.account-card__note .inline-link { min-height: 44px; display: inline-flex; align-items: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-status__retry { transition: none; }
+}

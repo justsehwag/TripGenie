@@ -5,13 +5,13 @@ import type { IdentityProviderPolicy } from "@/lib/identity";
  * My Trips route (Req 27) — design section "Booking Site … → My_Trips_Page
  * (Req 27)".
  *
- * This is a thin server shell. The page binds to the `Trip_Store`
- * (`lib/trip-retention` pure core behind the owner-scoped trips API at
- * `/api/trips`, which wraps `lib/dynamo-store`'s `listNewest`/`saveTrip`). All
- * interactivity — resolving the signed-in vs anonymous session, loading the
- * owner's newest-five trips, and the view/edit/delete/resume actions — lives in
- * the client component `MyTripsClient`, because those actions call the
- * owner-scoped Trip_Store endpoints from the browser.
+ * This is a thin server shell. The page binds to the account trips API at
+ * `/api/trips`, which derives the owner from the server session cookie. All
+ * interactivity — resolving the signed-in vs anonymous session from the server,
+ * loading the account's trips (the account keeps the newest 20; the device-only
+ * guest store keeps the newest 5), and the view/edit/delete/resume actions —
+ * lives in the client component `MyTripsClient`, because those actions call the
+ * trips endpoints from the browser.
  *
  * The Global_Navigation and Site_Footer are rendered once by `app/layout.tsx`,
  * so they appear here too (Req 27.9) — this page deliberately adds no footer.

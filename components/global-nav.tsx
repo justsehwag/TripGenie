@@ -36,6 +36,12 @@ import {
 } from "@/lib/identity";
 import { NAV_LINKS, ACCOUNT_HREF } from "@/lib/nav-links";
 import HistoryDrawer from "@/components/history-drawer";
+import {
+  fetchSession,
+  signOut as signOutAccount,
+  subscribeSession,
+  type SessionState,
+} from "@/lib/client/account-session";
 
 export interface GlobalNavProps {
   /** Enabled-provider policy, reused from Req 1; drives whether an account control shows (Req 29.5). */
@@ -85,51 +91,33 @@ export default function GlobalNav({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Browser-local session bridge: the in-app sign-in form writes
-  // "tripgenie.session" to localStorage. The server layout cannot read that, so
-  // the client nav hydrates from it on mount and whenever storage changes (e.g.
-  // sign-in/sign-out in another tab), overriding the (null) prop session. This
-  // is what flips the control from "Sign in" to the profile menu once signed in.
+  // Server-verified session (lib/client/account-session). The cookie is the
+  // only credential; localStorage holds a display-only cache. Hydrate on mount
+  // and follow sign-in/sign-out in this tab via subscribeSession.
   const [localSession, setLocalSession] = useState<IdentitySession | null>(null);
   useEffect(() => {
-    function read(): IdentitySession | null {
-      if (typeof window === "undefined") return null;
-      try {
-        const raw = window.localStorage.getItem("tripgenie.session");
-        if (!raw) return null;
-        const parsed = JSON.parse(raw) as Partial<IdentitySession>;
-        if (parsed && typeof parsed.userId === "string" && parsed.userId.trim()) {
-          return {
-            userId: parsed.userId.trim(),
-            firstName: typeof parsed.firstName === "string" ? parsed.firstName : undefined,
-            email: typeof parsed.email === "string" ? parsed.email : undefined,
-          };
-        }
-      } catch {
-        // Corrupt stub -> treat as anonymous.
-      }
-      return null;
+    function toSession(s: SessionState): IdentitySession | null {
+      if (!s.signedIn || !s.user?.email) return null;
+      // userId is display-only here (never sent to the server as an owner).
+      return { userId: s.user.email, email: s.user.email, firstName: s.user.name };
     }
-    setLocalSession(read());
-    function onStorage(e: StorageEvent) {
-      if (e.key === "tripgenie.session" || e.key === null) setLocalSession(read());
-    }
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    let alive = true;
+    void fetchSession().then((s) => {
+      if (alive && !s.error) setLocalSession(toSession(s));
+    });
+    const unsub = subscribeSession((s) => setLocalSession(toSession(s)));
+    return () => {
+      alive = false;
+      unsub();
+    };
   }, []);
 
   // Profile dropdown open/closed state.
   const [profileOpen, setProfileOpen] = useState(false);
 
-  // Clear the browser-local session and return to the anonymous state.
+  // Sign out on the server and clear this device's account state.
   function signOut() {
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem("tripgenie.session");
-      } catch {
-        // ignore
-      }
-    }
+    void signOutAccount();
     setLocalSession(null);
     setProfileOpen(false);
   }

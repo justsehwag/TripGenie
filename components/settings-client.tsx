@@ -6,7 +6,7 @@
  * text. Loads from and saves to browser-local storage via lib/preferences.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   COUNTRIES,
   HOME_CITIES,
@@ -22,6 +22,9 @@ import {
   type Option,
   type TravelPreferences,
 } from "@/lib/preferences";
+import { fetchSession, subscribeSession } from "@/lib/client/account-session";
+import { pullPreferences, saveAndSyncPreferences } from "@/lib/client/preferences-sync";
+import { useSyncStatus } from "@/lib/client/use-sync-status";
 
 function SelectField({ id, label, value, options, onChange }: {
   id: string; label: string; value: string; options: readonly Option[]; onChange: (v: string) => void;
@@ -43,17 +46,51 @@ export default function SettingsClient() {
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [signedIn, setSignedIn] = useState(false);
+  const dirty = useRef(false);
+  const signedInRef = useRef(false);
+  const sync = useSyncStatus();
+
   useEffect(() => {
+    let cancelled = false;
     setPrefs(loadPreferences());
     setLoaded(true);
+
+    // Signed-in: server values replace local ones (or local are uploaded once).
+    async function startSync() {
+      const pulled = await pullPreferences();
+      if (cancelled) return;
+      // Do not overwrite edits the user started while the request was in flight.
+      if (pulled.kind === "applied" && !dirty.current) setPrefs(pulled.preferences);
+    }
+    void fetchSession().then((s) => {
+      if (cancelled || s.error) return;
+      const was = signedInRef.current; // fetchSession also notifies subscribers
+      signedInRef.current = s.signedIn;
+      setSignedIn(s.signedIn);
+      if (s.signedIn && !was) void startSync();
+    });
+    const unsubscribe = subscribeSession((s) => {
+      if (cancelled) return;
+      const was = signedInRef.current;
+      signedInRef.current = s.signedIn;
+      setSignedIn(s.signedIn);
+      if (s.signedIn && !was) void startSync();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   function set<K extends keyof TravelPreferences>(key: K, value: TravelPreferences[K]) {
+    dirty.current = true;
     setPrefs((p) => ({ ...p, [key]: value }));
     setSaved(false);
   }
 
   function toggleInterest(v: string) {
+    dirty.current = true;
     setPrefs((p) => {
       const has = p.interests.includes(v);
       const interests = has ? p.interests.filter((x) => x !== v) : [...p.interests, v];
@@ -64,8 +101,11 @@ export default function SettingsClient() {
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Local first, so the values survive a failed sync.
     const ok = savePreferences(prefs);
     setSaved(ok);
+    dirty.current = false;
+    if (signedIn) void saveAndSyncPreferences(prefs);
   }
 
   return (
@@ -119,7 +159,14 @@ export default function SettingsClient() {
 
         <div className="settings__actions">
           <button type="submit" className="cta" disabled={!loaded}>Save preferences</button>
-          {saved && <span className="settings__saved" role="status">Saved on this device.</span>}
+          {saved && <span className="settings__saved" role="status">{signedIn && sync.state === "saved" ? "Saved and synced to your account." : "Saved on this device."}</span>}
+          {signedIn && sync.state === "saving" && <span className="settings__saved" role="status">Syncing...</span>}
+          {signedIn && sync.state === "failed" && (
+            <span className="settings__saved" role="alert">
+              {sync.note ?? "Could not sync."}{" "}
+              {sync.retry && <button type="button" className="btn" onClick={sync.retry}>Retry sync</button>}
+            </span>
+          )}
         </div>
       </form>
     </main>

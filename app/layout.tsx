@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import GlobalNav from "@/components/global-nav";
 import SiteFooter from "@/components/site-footer";
+import SyncStatus from "@/components/sync-status";
 import { TripContextProvider } from "@/components/trip-context";
 import type { IdentityProviderPolicy, IdentitySession } from "@/lib/identity";
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             useTripContext() without throwing. */}
         <TripContextProvider>
           <GlobalNav providerPolicy={PROVIDER_POLICY} session={SESSION} />
+          <SyncStatus />
           {children}
           <SiteFooter providerPolicy={PROVIDER_POLICY} session={SESSION} />
         </TripContextProvider>

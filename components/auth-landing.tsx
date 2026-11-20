@@ -7,13 +7,16 @@
  *
  * Behavior is UNCHANGED: "Continue with email" toggles the in-app email/password
  * form that POSTs { action: "signin" } to /api/auth (Amazon Cognito, server-side);
- * social providers redirect to the hosted UI when configured; "continue without
- * signing in" proceeds as a guest; a successful sign-in writes the browser-local
- * session and routes to /plan.
+ * Google navigates to /api/auth/login (shown only when the server reports
+ * googleSignIn); "continue without signing in" proceeds as a guest; a
+ * successful sign-in relies on the server cookie, refreshes the session via
+ * fetchSession and routes to /plan.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchSession, notifySession } from "@/lib/client/account-session";
+import { useAuthErrorMessage } from "@/components/auth-error-notice";
 import {
   landingControls,
   greeting,
@@ -64,39 +67,21 @@ export interface AuthLandingProps {
   onSignIn?: (provider: Provider) => void;
 }
 
-function hostedUiUrl(provider: Provider): string {
-  const domain = process.env.NEXT_PUBLIC_TRIPGENIE_COGNITO_DOMAIN?.trim();
-  const clientId = process.env.NEXT_PUBLIC_TRIPGENIE_COGNITO_CLIENT_ID?.trim();
-  const redirectUri = process.env.NEXT_PUBLIC_TRIPGENIE_COGNITO_REDIRECT_URI?.trim();
-  const idpHint: Record<Provider, string | null> = {
-    email: null,
-    google: "Google",
-    facebook: "Facebook",
-    github: "GitHub",
-  };
-  if (!domain || !clientId || !redirectUri) {
-    const hint = idpHint[provider];
-    return `#cognito-hosted-ui-not-configured${hint ? `:${hint}` : ":email"}`;
-  }
-  const params = new URLSearchParams({
-    client_id: clientId,
-    response_type: "code",
-    scope: "openid email profile",
-    redirect_uri: redirectUri,
-  });
-  const hint = idpHint[provider];
-  if (hint) params.set("identity_provider", hint);
-  return `${domain.replace(/\/$/, "")}/oauth2/authorize?${params.toString()}`;
-}
-
 async function postSignin(email: string, password: string) {
   const res = await fetch("/api/auth", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "signin", email, password }),
   });
-  return (await res.json()) as { ok: boolean; code: string; message: string };
+  return (await res.json()) as {
+    ok: boolean;
+    code: string;
+    message: string;
+    user?: { email?: string; name?: string };
+  };
 }
+
+const GOOGLE_LOGIN_URL = "/api/auth/login?provider=Google&returnTo=/plan";
 
 export default function AuthLanding({
   policy,
@@ -106,8 +91,31 @@ export default function AuthLanding({
   onSignIn,
 }: AuthLandingProps) {
   const router = useRouter();
-  const controls: SignInControl[] = useMemo(() => landingControls(policy), [policy]);
+  const [googleSignIn, setGoogleSignIn] = useState(false);
+  const queryAuthError = useAuthErrorMessage();
+  const controls: SignInControl[] = useMemo(
+    () =>
+      landingControls(policy).filter(
+        (c) => c.provider === "email" || (c.provider === "google" && googleSignIn),
+      ),
+    [policy, googleSignIn],
+  );
   const heading = greeting(session);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth", { method: "GET", credentials: "same-origin", cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { googleSignIn?: boolean } | null) => {
+        if (!cancelled) setGoogleSignIn(Boolean(d && d.googleSignIn === true));
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleSignIn(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [showEmail, setShowEmail] = useState(false);
   const [email, setEmail] = useState("");
@@ -127,8 +135,8 @@ export default function AuthLanding({
       setNotice("");
       return;
     }
-    if (typeof window !== "undefined") {
-      window.location.assign(hostedUiUrl(provider));
+    if (provider === "google" && typeof window !== "undefined") {
+      window.location.assign(GOOGLE_LOGIN_URL);
     }
   }
 
@@ -141,16 +149,13 @@ export default function AuthLanding({
     try {
       const r = await postSignin(email, password);
       if (r.ok && r.code === "SUCCESS") {
-        if (typeof window !== "undefined") {
-          try {
-            window.localStorage.setItem(
-              "tripgenie.session",
-              JSON.stringify({ userId: email.trim().toLowerCase(), email: email.trim() }),
-            );
-          } catch {
-            // Storage unavailable is non-fatal; the redirect still proceeds.
-          }
+        // The server set the httpOnly cookie; ask it who we are (this also
+        // refreshes the display-only cache and notifies subscribers).
+        const state = await fetchSession();
+        if (!state.signedIn && r.user && typeof r.user.email === "string") {
+          notifySession({ signedIn: true, user: { email: r.user.email, name: r.user.name } });
         }
+        setPassword("");
         setNotice("Signed in. Taking you to the planner...");
         window.setTimeout(() => router.push("/plan"), 700);
       } else if (r.code === "CONFIRM_REQUIRED") {
@@ -190,7 +195,7 @@ export default function AuthLanding({
           <ul className="auth-split__features">
             <li><span className="auth-split__dot" />Live hotel &amp; flight prices</li>
             <li><span className="auth-split__dot" />AI day-by-day itineraries</li>
-            <li><span className="auth-split__dot" />Your plans, synced everywhere</li>
+            <li><span className="auth-split__dot" />Sign in to save your trips to your account and see them on any device</li>
           </ul>
         </div>
       </aside>
@@ -202,8 +207,8 @@ export default function AuthLanding({
           <h2 id="auth-signin-heading" className="auth-panel__title">Welcome back</h2>
           <p className="auth-panel__sub">Sign in to continue planning your next trip.</p>
 
-          {authError && (
-            <p role="alert" className="notice notice--error auth-panel__error">{authError}</p>
+          {(authError || queryAuthError) && (
+            <p role="alert" className="notice notice--error auth-panel__error">{authError || queryAuthError}</p>
           )}
           {error && (
             <p role="alert" className="notice notice--error auth-panel__error">{error}</p>

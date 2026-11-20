@@ -7,7 +7,7 @@
  */
 import type { TravelerProfile } from "./types";
 import { applyProfileUpdate } from "./profile";
-import { applySave, retainNewest, type SaveInput, type StoredTrip } from "./trip-retention";
+import { applySave, GUEST_MAX_TRIPS, retainNewest, type SaveInput, type StoredTrip } from "./trip-retention";
 
 /** A minimal key-value port modelling the DynamoDB operations we need. */
 export interface KvStore {
@@ -29,19 +29,24 @@ export async function saveTrip(
   input: SaveInput,
   newId: string,
   now = new Date(),
+  limit = GUEST_MAX_TRIPS,
 ): Promise<SaveResult> {
   const existing = await store.listTrips(input.owner);
   const { trips, savedId } = applySave(existing, input, newId, now);
   const record = trips.find((t) => t.tripId === savedId)!;
   await store.putTrip(record);
-  const { deleted } = retainNewest(input.owner, trips);
+  const { deleted } = retainNewest(input.owner, trips, limit);
   if (deleted.length) await store.deleteTrips(input.owner, deleted);
   return { id: savedId, saved: true, updatedAt: record.updatedAt };
 }
 
 /** Return the newest five trips for an owner (Req 13.5). */
-export async function listNewest(store: KvStore, owner: string): Promise<StoredTrip[]> {
-  const { kept } = retainNewest(owner, await store.listTrips(owner));
+export async function listNewest(
+  store: KvStore,
+  owner: string,
+  limit = GUEST_MAX_TRIPS,
+): Promise<StoredTrip[]> {
+  const { kept } = retainNewest(owner, await store.listTrips(owner), limit);
   return kept;
 }
 

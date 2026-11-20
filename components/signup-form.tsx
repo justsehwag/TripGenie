@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchSession } from "@/lib/client/account-session";
 
 /**
  * Real Cognito sign-up (components/signup-form.tsx). A two-step flow backed by
@@ -14,7 +15,7 @@ import { useRouter } from "next/navigation";
 type Step = "form" | "confirm" | "done";
 
 async function post(body: Record<string, unknown>) {
-  const res = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), credentials: "same-origin" });
   return (await res.json()) as { ok: boolean; code: string; message: string };
 }
 
@@ -49,9 +50,19 @@ export default function SignupForm() {
       const r = await post({ action: "confirm", email, code });
       if (r.ok) {
         // Auto sign-in after confirmation, then land on the account page.
-        const s = await post({ action: "signin", email, password });
+        // The server sets the session cookie on success; the password stays in
+        // React state only and is cleared right after this call.
+        let signedIn = false;
+        try {
+          const s = await post({ action: "signin", email, password });
+          signedIn = s.ok === true && s.code === "SUCCESS";
+          if (signedIn) await fetchSession();
+        } catch {
+          signedIn = false;
+        }
+        setPassword("");
         setStep("done");
-        setNotice(s.ok ? "You're signed in. Redirecting..." : "Email confirmed. Please sign in.");
+        setNotice(signedIn ? "You're signed in. Redirecting..." : "Email confirmed. Please sign in.");
         window.setTimeout(() => router.push("/account"), 1200);
       } else setError(r.message);
     } catch { setError("Network error. Please try again."); }

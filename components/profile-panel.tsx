@@ -35,6 +35,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useTripContext } from "@/components/trip-context";
+import { handleUnauthorized } from "@/lib/client/account-session";
+import { setSyncFailed, setSyncSaved, setSyncSaving } from "@/lib/client/use-sync-status";
 import type { TravelerProfile } from "@/lib/types";
 
 /** Async lifecycle for the optional stored-profile read (Req 10.1–10.4). */
@@ -48,21 +50,60 @@ const BUDGET_OPTIONS = [
   { value: "luxury", label: "Luxury" },
 ] as const;
 
-/** Read a stored profile via the EXISTING GET /api/profile contract. */
-async function readProfile(userId: string): Promise<TravelerProfile | null> {
-  const response = await fetch(
-    `/api/profile?userId=${encodeURIComponent(userId)}`,
-    { method: "GET", headers: { Accept: "application/json" } },
-  );
+/**
+ * Read the signed-in user's profile. The owner comes from the session cookie,
+ * so no userId is sent. Returns the profile (or null) and its version.
+ */
+async function readProfile(): Promise<{ profile: TravelerProfile | null; version: number }> {
+  const response = await fetch("/api/profile", {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  if (response.status === 401) {
+    handleUnauthorized();
+    return { profile: null, version: 0 };
+  }
   if (response.status === 404) {
     // No stored profile yet — an honest Empty_State, not an error.
-    return null;
+    return { profile: null, version: 0 };
   }
   if (!response.ok) {
     throw new Error(`Could not load your profile (${response.status}).`);
   }
-  const body = (await response.json()) as { profile?: TravelerProfile };
-  return body.profile ?? null;
+  const body = (await response.json()) as { profile?: TravelerProfile | null; version?: number };
+  const profile = body.profile ?? null;
+  return { profile, version: profile ? (typeof body.version === "number" ? body.version : profile.version ?? 0) : 0 };
+}
+
+/** Save profile changes with the tracked version; retry once on 409. */
+async function writeProfile(
+  changes: Record<string, unknown>,
+  expectedVersion: number,
+): Promise<{ profile: TravelerProfile; version: number }> {
+  let version = expectedVersion;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await fetch("/api/profile", {
+      method: "PUT",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedVersion: version, changes }),
+    });
+    if (response.status === 409 && attempt === 0) {
+      const conflict = (await response.json().catch(() => ({}))) as { currentVersion?: number };
+      if (typeof conflict.currentVersion === "number") {
+        version = conflict.currentVersion;
+        continue;
+      }
+    }
+    if (response.status === 401) handleUnauthorized();
+    if (!response.ok) throw new Error(`Could not save your profile (${response.status}).`);
+    const body = (await response.json()) as { profile: TravelerProfile; version: number };
+    return body;
+  }
+  throw new Error("Could not save your profile (409).");
 }
 
 export interface ProfilePanelProps {
@@ -82,13 +123,17 @@ export default function ProfilePanel({ userId = null }: ProfilePanelProps) {
   const [profile, setProfile] = useState<TravelerProfile | null>(null);
   const [profileError, setProfileError] = useState<string>("");
 
-  const loadProfile = useCallback(async (id: string) => {
+  const [version, setVersion] = useState(0);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+
+  const loadProfile = useCallback(async () => {
     setPhase("loading");
     setProfileError("");
     try {
-      const result = await readProfile(id);
-      if (result) {
-        setProfile(result);
+      const result = await readProfile();
+      if (result.profile) {
+        setProfile(result.profile);
+        setVersion(result.version);
         setPhase("ready");
       } else {
         setPhase("empty");
@@ -105,12 +150,32 @@ export default function ProfilePanel({ userId = null }: ProfilePanelProps) {
 
   useEffect(() => {
     if (userId) {
-      void loadProfile(userId);
+      void loadProfile();
     } else {
       setPhase("idle");
       setProfile(null);
     }
   }, [userId, loadProfile]);
+
+  // Save the shown home city and style to the stored profile. Edits stay in
+  // the Trip_Context on failure; the retry button repeats the save.
+  const saveProfile = useCallback(async () => {
+    setSaveState("saving");
+    setSyncSaving();
+    try {
+      const changes: Record<string, unknown> = {};
+      if (context.origin) changes.homeCity = context.origin;
+      if (context.pace) changes.travelStyle = context.pace;
+      const saved = await writeProfile(changes, version);
+      setProfile(saved.profile);
+      setVersion(saved.version);
+      setSaveState("saved");
+      setSyncSaved();
+    } catch {
+      setSaveState("failed");
+      setSyncFailed(() => void saveProfile(), "Could not sync your profile. Your edits are kept on this device.");
+    }
+  }, [context.origin, context.pace, version]);
 
   // ── Preference edits write to the shared Trip_Context (Req 4.7) ───────────
   const homeCity = context.origin ?? "";
@@ -229,6 +294,22 @@ export default function ProfilePanel({ userId = null }: ProfilePanelProps) {
             Saved profile: {profile.displayName || "Traveler"} · home{" "}
             {profile.homeCity || "unset"} · {profile.travelStyle || "any"} style
             · party {profile.party.adults + profile.party.children}.
+          </p>
+        )}
+        {phase === "ready" && profile && (
+          <p className="lead">
+            <button
+              type="button"
+              className="btn"
+              disabled={saveState === "saving" || (!homeCity && !travelStyle)}
+              onClick={() => void saveProfile()}
+            >
+              {saveState === "failed" ? "Retry saving to account" : "Save to my account"}
+            </button>{" "}
+            {saveState === "saved" && <span role="status">Saved to your account.</span>}
+            {saveState === "failed" && (
+              <span role="alert">Could not save. Your edits are kept here.</span>
+            )}
           </p>
         )}
       </div>
