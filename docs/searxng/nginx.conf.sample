@@ -1,0 +1,32 @@
+# Alternative reverse proxy sample (nginx). Placeholders only.
+# Rejects a missing or wrong secret header before the request reaches the container.
+
+server {
+    listen 80;
+    server_name search.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name search.example.com;
+
+    ssl_certificate     /etc/ssl/certs/search.example.com.fullchain.pem;   # placeholder path
+    ssl_certificate_key /etc/ssl/private/search.example.com.key;           # placeholder path
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    location / {
+        # Header name must match SEARXNG_SECRET_HEADER_NAME (nginx lowercases and
+        # replaces "-" with "_" in the variable name).
+        if ($http_x_tripgenie_search_key != "CHANGE_ME_PROXY_SHARED_SECRET") {
+            return 403;
+        }
+
+        # The searxng container port is not published; reach it over the internal network.
+        proxy_pass http://searxng:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        # Do not forward the secret to the container.
+        proxy_set_header X-TripGenie-Search-Key "";
+    }
+}

@@ -23,6 +23,8 @@
 
 import type { TripContext, Itinerary } from "@/lib/types";
 import type { DateHints } from "@/lib/trip-context-map";
+import { sanitizeStoredItinerary } from "@/lib/web-price-sources";
+import { settlePending } from "@/lib/itinerary/completeness";
 
 /**
  * The resume payload reconstructed from (or serialized into) a StoredTrip.
@@ -55,7 +57,8 @@ export function fromSharedContext(plan: CapturedPlan): Record<string, unknown> {
   return {
     context: plan.context,
     dates: plan.dates,
-    itinerary: plan.itinerary ?? null,
+    // A history record never carries pendingDays (Requirement 12).
+    itinerary: plan.itinerary ? settlePending(plan.itinerary) : null,
   };
 }
 
@@ -76,7 +79,9 @@ export function toSharedContext(payload: unknown): CapturedPlan {
   const dates: DateHints =
     isPlainObject(payload.dates) ? (payload.dates as unknown as DateHints) : {};
   const itinerary: Itinerary | null =
-    isPlainObject(payload.itinerary) ? (payload.itinerary as unknown as Itinerary) : null;
+    isPlainObject(payload.itinerary)
+      ? sanitizeStoredItinerary(payload.itinerary as unknown as Itinerary)
+      : null;
 
   return { context, dates, itinerary };
 }

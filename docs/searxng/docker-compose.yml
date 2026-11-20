@@ -1,0 +1,55 @@
+# Sample SearXNG deployment (placeholders only).
+# Runs on EC2, ECS or a VPS OUTSIDE AWS Amplify.
+#
+# The searxng container publishes NO host port. It is reachable only on the
+# internal "searxng-internal" network, and only the reverse proxy (Caddy or nginx)
+# is exposed to the internet. See Caddyfile / nginx.conf in this folder.
+
+services:
+  searxng:
+    image: searxng/searxng:latest   # pin a specific version/digest in production
+    restart: unless-stopped
+    # No "ports:" section on purpose (Req 13.7).
+    expose:
+      - "8080"                      # visible to other containers on the network only
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      # Public URL of the proxy. Placeholder hostname.
+      - SEARXNG_BASE_URL=https://search.example.com/
+    networks:
+      - searxng-internal
+    cap_drop:
+      - ALL
+    cap_add:                        # needed by the SearXNG entrypoint
+      - CHOWN
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - searxng
+    ports:
+      - "443:443"
+      - "80:80"                     # needed for ACME HTTP challenge / redirect to https
+    environment:
+      # Must equal the value stored in SEARXNG_SECRET_HEADER_VALUE on the app side.
+      - SEARXNG_SECRET_HEADER_VALUE=CHANGE_ME_PROXY_SHARED_SECRET
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - searxng-internal
+
+networks:
+  searxng-internal:
+    driver: bridge
+
+volumes:
+  caddy-data:
+  caddy-config:

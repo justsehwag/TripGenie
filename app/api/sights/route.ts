@@ -12,7 +12,7 @@ import { resolveSights, type Sight } from "@/lib/sights";
 
 export const dynamic = "force-dynamic";
 
-const USER_AGENT = "TripGenie/1.0 (sights discovery)";
+const USER_AGENT = "TripsaathiAI/1.0 (sights discovery)";
 
 async function wikiSummary(name: string): Promise<{ description?: string; sourceUrl?: string | null } | null> {
   try {

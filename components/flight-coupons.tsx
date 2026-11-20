@@ -15,7 +15,7 @@ const TITLE: Record<Promotion["kind"], string> = {
   coupon: "Welcome coupon",
   loyalty: "Frequent traveller",
   bounty: "Price-drop bounty",
-  delight: "TripGenie Delight",
+  delight: "Tripsaathi AI Delight",
 };
 
 function describe(p: Promotion): string {

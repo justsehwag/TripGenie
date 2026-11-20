@@ -24,7 +24,7 @@ import type { IdentityProviderPolicy } from "@/lib/identity";
  * Requirements: 27.1, 27.2, 27.3, 27.4, 27.5, 27.6, 27.7, 27.8, 27.9.
  */
 
-export const metadata = { title: "My Trips — TripGenie" };
+export const metadata = { title: "My Trips — Tripsaathi AI" };
 
 // Trips are user-scoped and must never be shared or cached across callers; the
 // data itself is fetched client-side from the private, no-store trips API.

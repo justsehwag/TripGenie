@@ -285,21 +285,15 @@ describe("Feature: realtime-ai-integration, bedrock-model", () => {
     }
   });
 
-  it("generateItineraryAsync returns a valid buildItinerary fallback on model failure", async () => {
+  it("generateItineraryAsync returns null (unavailable) on model failure", async () => {
     const context: TripContext = { destination: "Bali", durationDays: 6, interests: ["beach", "food"] };
-    const it: Itinerary = await generateItineraryAsync(depsThrowing(), context);
-    expect(it.days.length).toBe(6);
-    for (const d of it.days) {
-      expect(d.activities.length).toBeGreaterThanOrEqual(1);
-      const sum = d.activities.reduce((s, a) => s + a.cost, 0);
-      expect(d.total).toBe(sum);
-    }
-    expect(it.totalCost).toBe(it.days.reduce((s, d) => s + d.total, 0));
+    const it: Itinerary | null = await generateItineraryAsync(depsThrowing(), context);
+    expect(it).toBeNull();
   });
 
-  it("generateItineraryAsync falls back when the context has no duration (defaults to 4 days)", async () => {
+  it("generateItineraryAsync returns null (unavailable) when the context has no duration", async () => {
     const it = await generateItineraryAsync(depsThrowing(), { destination: "Rome" });
-    expect(it.days.length).toBe(4);
+    expect(it).toBeNull();
   });
 
   it("fallbackExtract never throws on arbitrary input", () => {

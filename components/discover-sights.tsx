@@ -71,18 +71,20 @@ interface PlaceDetails {
 }
 
 /** Resolve one real image for a place from /api/image; null until loaded. */
-function usePlaceImage(query: string, slot: number): string | null {
+function usePlaceImage(query: string, slot: number, size: "thumb" | "card" | "hero" = "card"): { url: string | null; onError: () => void } & { srcSet?: string } {
   const [url, setUrl] = useState<string | null>(null);
+  const [srcSet, setSrcSet] = useState<string | undefined>(undefined);
   useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams({ kind: "destination", query, slot: String(slot) });
+    const params = new URLSearchParams({ kind: "destination", query, slot: String(slot), size }); setUrl(null); setSrcSet(undefined);
     fetch(`/api/image?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error())))
-      .then((d: { url?: string }) => { if (!cancelled && d?.url) setUrl(d.url); })
+      .then((d: { url?: string | null; srcset?: string | null }) => { if (!cancelled) setSrcSet(typeof d?.srcset === "string" && d.srcset !== "" ? d.srcset : undefined); if (!cancelled) setUrl(typeof d?.url === "string" && d.url !== "" ? d.url : null); })
       .catch(() => { if (!cancelled) setUrl(null); });
     return () => { cancelled = true; };
-  }, [query, slot]);
-  return url;
+  }, [query, slot, size]);
+  if (!srcSet) return { url, onError: () => setUrl(null) };
+  return { url, srcSet, onError: () => setUrl(null) };
 }
 
 /* ------------------------------- icons ----------------------------------- */
@@ -174,13 +176,13 @@ function LiveChips({ place }: { place: WorldPlace }) {
 /* ------------------------------ place card ------------------------------- */
 
 function PlaceCard({ place, slot, onOpen }: { place: WorldPlace; slot: number; onOpen: (p: WorldPlace) => void }) {
-  const img = usePlaceImage(`${place.name} ${place.country}`, slot);
+  const { url: img, srcSet, onError: onImgError } = usePlaceImage(`${place.name} ${place.country}`, slot, "card");
   return (
     <button type="button" className="disc-card" onClick={() => onOpen(place)} aria-label={`View ${place.name}, ${place.country}`}>
       <span className="disc-card__media img-layer" aria-hidden={!img}>
         {img ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="img-layer__img" src={img} alt={place.name} loading="lazy" />
+          <img className="img-layer__img" srcSet={srcSet} src={img} alt={place.name} loading="lazy" onError={onImgError} />
         ) : null}
         <span className="disc-card__scrim" aria-hidden="true" />
       </span>
@@ -222,7 +224,7 @@ function MosaicTile({
   variant: "feature" | "medium";
   onOpen: (p: WorldPlace) => void;
 }) {
-  const img = usePlaceImage(`${place.name} ${place.country}`, slot);
+  const { url: img, srcSet, onError: onImgError } = usePlaceImage(`${place.name} ${place.country}`, slot, "card");
   const category = place.tags && place.tags.length > 0 ? place.tags[0] : place.region;
   return (
     <button
@@ -234,7 +236,7 @@ function MosaicTile({
       <span className="disc-tile__frame image-frame" aria-hidden={!img}>
         {img ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={img} alt={place.name} loading="lazy" />
+          <img srcSet={srcSet} src={img} alt={place.name} loading="lazy" onError={onImgError} />
         ) : (
           // Fallback rung: no resolved photo yet -> token-coloured placeholder,
           // never a broken image or the old empty checkerboard.
@@ -262,8 +264,8 @@ function PlaceDetail({ place, onClose }: { place: WorldPlace; onClose: () => voi
   // Wikipedia-sourced images are a LOW-RES fallback only; the high-res Google
   // Place Photos (requested at a large width) are preferred for the gallery so
   // the detail view is sharp rather than pixelated.
-  const heroFallback = usePlaceImage(`${place.name} ${place.country}`, 0);
-  const altFallback = usePlaceImage(`${place.name} landmark`, 1);
+  const { url: heroFallback, onError: heroErr } = usePlaceImage(`${place.name} ${place.country}`, 0, "hero");
+  const { url: altFallback, onError: altErr } = usePlaceImage(`${place.name} landmark`, 1, "hero");
 
   useEffect(() => {
     let cancelled = false;
@@ -291,10 +293,13 @@ function PlaceDetail({ place, onClose }: { place: WorldPlace; onClose: () => voi
     src: p.src.includes("?") ? `${p.src}&w=1280` : `${p.src}?w=1280`,
     attribution: p.attribution,
   }));
-  const gallery: Array<{ src: string; attribution?: string }> =
+  const [badSrc, setBadSrc] = useState<string[]>([]);
+  const galleryAll: Array<{ src: string; attribution?: string }> =
     googlePhotos.length > 0
       ? googlePhotos
       : [heroFallback, altFallback].filter((u): u is string => Boolean(u)).map((u) => ({ src: u }));
+  // Drop any photo whose <img> failed to load (Req 11.10); the empty frame shows if none are left.
+  const gallery = galleryAll.filter((g) => !badSrc.includes(g.src));
 
   const hasLiveSummary = Boolean(summary) && summary !== `Details for ${place.name} are temporarily unavailable.`;
 
@@ -316,7 +321,7 @@ function PlaceDetail({ place, onClose }: { place: WorldPlace; onClose: () => voi
           {gallery.length > 0 ? (
             gallery.slice(0, 4).map((g, idx) => (
               // eslint-disable-next-line @next/next/no-img-element
-              <img key={`${g.src}-${idx}`} className="disc-detail__img" src={g.src} alt={`${place.name} ${idx + 1}`} loading="lazy" />
+              <img key={`${g.src}-${idx}`} className="disc-detail__img" src={g.src} alt={`${place.name} ${idx + 1}`} loading="lazy" onError={() => { setBadSrc((p) => [...p, g.src]); if (g.src === heroFallback) heroErr(); if (g.src === altFallback) altErr(); }} />
             ))
           ) : (
             <span className="disc-detail__img disc-detail__img--empty" aria-hidden="true" />
@@ -386,7 +391,7 @@ function PlaceDetail({ place, onClose }: { place: WorldPlace; onClose: () => voi
 /* ------------------------- search result (map-style) --------------------- */
 
 function SearchResultCard({ place, slot, onOpen }: { place: WorldPlace; slot: number; onOpen: (p: WorldPlace) => void }) {
-  const img = usePlaceImage(`${place.name} ${place.country}`, slot);
+  const { url: img, srcSet, onError: onImgError } = usePlaceImage(`${place.name} ${place.country}`, slot, "thumb");
   // Static OpenStreetMap-style thumbnail is not available without a key; we use
   // a labelled map-placeholder panel plus the real photo so the row reads like
   // a maps result without calling an unconfigured maps provider.
@@ -396,7 +401,7 @@ function SearchResultCard({ place, slot, onOpen }: { place: WorldPlace; slot: nu
         <span className="disc-result__photo img-layer" aria-hidden={!img}>
           {img ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img className="img-layer__img" src={img} alt={place.name} loading="lazy" />
+            <img className="img-layer__img" srcSet={srcSet} src={img} alt={place.name} loading="lazy" onError={onImgError} />
           ) : null}
         </span>
         <span className="disc-result__text">

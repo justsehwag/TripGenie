@@ -7,7 +7,7 @@ import type { CarOffer } from "@/lib/types";
 import ProvenanceLabel from "@/components/provenance-label";
 import CarsPrefill from "@/components/cars-prefill";
 
-export const metadata = { title: "Cars - TripGenie" };
+export const metadata = { title: "Cars - Tripsaathi AI" };
 
 /**
  * Cars Results_Page (server component) — design "Booking Site ▸ Results_Page",

@@ -1,0 +1,22 @@
+# Sample reverse proxy (Caddy 2). Placeholders only.
+# Caddy obtains and renews a valid TLS certificate for the hostname automatically.
+#
+# Requests without the correct X-TripGenie-Search-Key header are rejected with
+# 403 BEFORE they reach the SearXNG container, and no results are returned.
+# The header name must match SEARXNG_SECRET_HEADER_NAME; the value comes from the
+# SEARXNG_SECRET_HEADER_VALUE environment variable of this proxy container.
+
+search.example.com {
+	encode zstd gzip
+
+	@authorized header X-TripGenie-Search-Key {$SEARXNG_SECRET_HEADER_VALUE}
+
+	handle @authorized {
+		reverse_proxy searxng:8080
+	}
+
+	# Missing or wrong header: reject, nothing is forwarded.
+	handle {
+		respond "Forbidden" 403
+	}
+}

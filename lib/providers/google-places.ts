@@ -17,6 +17,8 @@ import type { ProviderReview } from "@/lib/reviews";
 // unit-testable as a pure read with no network (mirrors lib/live-data.ts).
 import type { FetchLike } from "@/lib/live-data";
 import { googlePlacesApiKey } from "@/lib/config";
+import { LOOKUP_TIMEOUT_MS } from "@/lib/itinerary/constants";
+import { isValidPhotoRef } from "@/lib/itinerary/maps-link";
 // Shared, bounded, server-only Enrichment_Cache (task 4.1). It stores ONLY the
 // non-review Place Details fields and resolved place_ids with lazy <=30-day
 // expiry; review content is never written to it (Req 8.1). See design
@@ -102,7 +104,7 @@ const MAX_TIMEOUT_MS = 5000;
  * locally WITHOUT modifying live-data.ts. Any `FetchLike` is assignable to this
  * type, so tests can keep injecting the same mock fetch they use elsewhere.
  */
-type PostFetchLike = (
+export type PostFetchLike = (
   url: string,
   init?: {
     method?: string;
@@ -845,4 +847,363 @@ export async function searchHotels(
     }
   }
   return results;
+}
+
+/** One Text Search candidate used to verify an itinerary stop. */
+export interface VerificationCandidate {
+  placeId: string;
+  displayName: string;
+  formattedAddress: string;
+  location: LatLng | null;
+}
+
+/** Result of a verification lookup; `failed` covers no key, non-ok, throw, abort, timeout. */
+export type VerificationLookup =
+  | { kind: "ok"; candidates: VerificationCandidate[] }
+  | { kind: "failed" };
+
+/**
+ * Text Search for itinerary verification. Server-only; the key is sent only in
+ * `X-Goog-Api-Key` and never returned. Never throws.
+ */
+export async function searchPlaceForVerification(
+  query: string,
+  fetchImpl: PostFetchLike = defaultFetch(),
+  opts?: { timeoutMs?: number; signal?: AbortSignal; maxResults?: number },
+): Promise<VerificationLookup> {
+  const failed: VerificationLookup = { kind: "failed" };
+  const text = typeof query === "string" ? query.trim() : "";
+  if (text.length === 0) return failed;
+
+  const key = googlePlacesApiKey();
+  if (key.length === 0) return failed;
+
+  const requested = opts?.timeoutMs ?? LOOKUP_TIMEOUT_MS;
+  const timeoutMs = Math.min(typeof requested === "number" && requested > 0 ? requested : LOOKUP_TIMEOUT_MS, MAX_TIMEOUT_MS);
+  const rawMax = opts?.maxResults;
+  const maxResultCount = Math.min(Math.max(typeof rawMax === "number" && Number.isFinite(rawMax) ? Math.floor(rawMax) : 3, 1), 20);
+
+  const controller = new AbortController();
+  const callerSignal = opts?.signal;
+  const onCallerAbort = () => controller.abort();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    if (callerSignal) {
+      if (callerSignal.aborted) return failed;
+      callerSignal.addEventListener("abort", onCallerAbort, { once: true });
+    }
+    const response = await fetchImpl(GOOGLE_PLACES.textSearch, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location",
+      },
+      body: JSON.stringify({ textQuery: text, maxResultCount }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return failed;
+    const data = (await response.json()) as {
+      places?: Array<{
+        id?: unknown;
+        displayName?: { text?: unknown };
+        formattedAddress?: unknown;
+        location?: { latitude?: unknown; longitude?: unknown };
+      }>;
+    };
+    const candidates: VerificationCandidate[] = [];
+    for (const p of Array.isArray(data?.places) ? data.places : []) {
+      const placeId = typeof p?.id === "string" ? p.id : "";
+      const displayName = typeof p?.displayName?.text === "string" ? p.displayName.text : "";
+      if (placeId.length === 0 || displayName.trim().length === 0) continue;
+      const loc = p.location;
+      const location: LatLng | null =
+        loc && typeof loc.latitude === "number" && typeof loc.longitude === "number" &&
+        Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
+          ? { lat: loc.latitude, lng: loc.longitude }
+          : null;
+      candidates.push({
+        placeId,
+        displayName,
+        formattedAddress: typeof p.formattedAddress === "string" ? p.formattedAddress : "",
+        location,
+      });
+      if (candidates.length >= maxResultCount) break;
+    }
+    return { kind: "ok", candidates };
+  } catch {
+    return failed;
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener("abort", onCallerAbort);
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+ * Places-first candidate types (places-first-itinerary, task 6.1).
+ * Type declarations only; the search functions are added in a later task.
+ * ------------------------------------------------------------------------- */
+
+/** Google day numbering: 0 = Sunday. */
+export interface OpeningPoint {
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+/** No `close` means open 24 hours. */
+export interface OpeningPeriod {
+  open: OpeningPoint;
+  close?: OpeningPoint;
+}
+
+export interface PlaceHours {
+  periods: OpeningPeriod[];
+  /** Google's 7 strings, Monday first, verbatim ("Monday: 9:00 AM - 5:00 PM"). May be empty. */
+  weekdayDescriptions: string[];
+}
+
+export interface PlaceCandidate {
+  placeId: string;
+  /** displayName.text */
+  name: string;
+  /** formattedAddress */
+  address: string;
+  location: LatLng;
+  rating: number | null;
+  userRatingCount: number | null;
+  /** null = Google returned no regularOpeningHours. */
+  hours: PlaceHours | null;
+  utcOffsetMinutes: number | null;
+  types: string[];
+  primaryType: string | null;
+  businessStatus: string | null;
+  googleMapsUri: string | null;
+  /** Photo resource names, Places order, at most 3. */
+  photos: string[];
+}
+
+/** Exactly the 13 fields of Requirement 1.6, comma separated, no wildcard. */
+export const CANDIDATE_FIELD_MASK: string = [
+  "places.id",
+  "places.displayName",
+  "places.formattedAddress",
+  "places.location",
+  "places.rating",
+  "places.userRatingCount",
+  "places.regularOpeningHours",
+  "places.utcOffsetMinutes",
+  "places.types",
+  "places.primaryType",
+  "places.businessStatus",
+  "places.googleMapsUri",
+  "places.photos",
+].join(",");
+
+export type CandidateLookup =
+  | { kind: "ok"; candidates: PlaceCandidate[] }
+  | { kind: "failed"; cause: "rate-limited" | "error" };
+
+export interface CandidateSearchOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  maxResults?: number;
+}
+
+/** Places maximum per page for Text Search and Nearby Search. */
+const CANDIDATE_MAX_RESULT_COUNT = 20;
+const NEARBY_MIN_RADIUS_M = 1;
+const NEARBY_MAX_RADIUS_M = 50000;
+const MAX_CANDIDATE_PHOTOS = 3;
+
+function finiteNumber(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function parseOpeningPoint(v: unknown): OpeningPoint | null {
+  if (!v || typeof v !== "object") return null;
+  const p = v as { day?: unknown; hour?: unknown; minute?: unknown };
+  const day = finiteNumber(p.day);
+  const hour = finiteNumber(p.hour);
+  // Google omits `minute` when it is 0 in some shapes; treat absent as 0.
+  const minute = p.minute === undefined ? 0 : finiteNumber(p.minute);
+  if (day === null || hour === null || minute === null) return null;
+  if (!Number.isInteger(day) || day < 0 || day > 6) return null;
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+  return { day, hour, minute };
+}
+
+function parseHours(v: unknown): PlaceHours | null {
+  if (!v || typeof v !== "object") return null;
+  const raw = v as { periods?: unknown; weekdayDescriptions?: unknown };
+  const periods: OpeningPeriod[] = [];
+  for (const item of Array.isArray(raw.periods) ? raw.periods : []) {
+    if (!item || typeof item !== "object") continue;
+    const open = parseOpeningPoint((item as { open?: unknown }).open);
+    if (open === null) continue;
+    const closeRaw = (item as { close?: unknown }).close;
+    const close = closeRaw === undefined || closeRaw === null ? null : parseOpeningPoint(closeRaw);
+    periods.push(close ? { open, close } : { open });
+  }
+  const weekdayDescriptions = (Array.isArray(raw.weekdayDescriptions) ? raw.weekdayDescriptions : []).filter(
+    (s): s is string => typeof s === "string",
+  );
+  return { periods, weekdayDescriptions };
+}
+
+/**
+ * Pure parser for a `places:searchText` / `places:searchNearby` body. Returns
+ * null when the body is not an object or `places` is not an array. A missing
+ * `places` key (Google omits it for zero results) is a valid empty answer.
+ * Entries with no id, no displayName.text or no finite location are dropped.
+ */
+export function parseCandidates(body: unknown): PlaceCandidate[] | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const places = (body as { places?: unknown }).places;
+  if (places === undefined) return [];
+  if (!Array.isArray(places)) return null;
+  const out: PlaceCandidate[] = [];
+  for (const entry of places) {
+    if (!entry || typeof entry !== "object") continue;
+    const p = entry as Record<string, unknown>;
+    const placeId = typeof p.id === "string" ? p.id : "";
+    const dn = p.displayName as { text?: unknown } | undefined;
+    const name = dn && typeof dn.text === "string" ? dn.text : "";
+    const loc = p.location as { latitude?: unknown; longitude?: unknown } | undefined;
+    const lat = finiteNumber(loc?.latitude);
+    const lng = finiteNumber(loc?.longitude);
+    if (placeId.length === 0 || name.length === 0 || lat === null || lng === null) continue;
+    const photos: string[] = [];
+    for (const ph of Array.isArray(p.photos) ? p.photos : []) {
+      const ref = ph && typeof ph === "object" ? (ph as { name?: unknown }).name : undefined;
+      if (isValidPhotoRef(ref)) photos.push(ref);
+      if (photos.length >= MAX_CANDIDATE_PHOTOS) break;
+    }
+    out.push({
+      placeId,
+      name,
+      address: typeof p.formattedAddress === "string" ? p.formattedAddress : "",
+      location: { lat, lng },
+      rating: finiteNumber(p.rating),
+      userRatingCount: finiteNumber(p.userRatingCount),
+      hours: parseHours(p.regularOpeningHours),
+      utcOffsetMinutes: finiteNumber(p.utcOffsetMinutes),
+      types: (Array.isArray(p.types) ? p.types : []).filter((t): t is string => typeof t === "string"),
+      primaryType: typeof p.primaryType === "string" ? p.primaryType : null,
+      businessStatus: typeof p.businessStatus === "string" ? p.businessStatus : null,
+      googleMapsUri: typeof p.googleMapsUri === "string" ? p.googleMapsUri : null,
+      photos,
+    });
+  }
+  return out;
+}
+
+/**
+ * Shared single-request runner. Counts-only failure: the result carries only
+ * `cause`, never the key, URL, request body or response text. Never throws.
+ */
+async function runCandidateRequest(
+  url: string,
+  body: Record<string, unknown>,
+  fetchImpl: PostFetchLike | undefined,
+  opts: CandidateSearchOptions | undefined,
+): Promise<CandidateLookup> {
+  const failed: CandidateLookup = { kind: "failed", cause: "error" };
+  const rateLimited: CandidateLookup = { kind: "failed", cause: "rate-limited" };
+  const controller = new AbortController();
+  const callerSignal = opts?.signal;
+  const onCallerAbort = () => controller.abort();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const key = googlePlacesApiKey();
+    if (key.length === 0) return failed;
+    const f = fetchImpl ?? defaultFetch();
+    const requested = opts?.timeoutMs;
+    const timeoutMs = Math.min(
+      typeof requested === "number" && requested > 0 ? requested : LOOKUP_TIMEOUT_MS,
+      MAX_TIMEOUT_MS,
+    );
+    if (callerSignal) {
+      if (callerSignal.aborted) return failed;
+      callerSignal.addEventListener("abort", onCallerAbort, { once: true });
+    }
+    timer = setTimeout(() => controller.abort(), timeoutMs);
+    const response = await f(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": CANDIDATE_FIELD_MASK,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      if (response.status === 429) return rateLimited;
+      try {
+        const err = (await response.json()) as { error?: { status?: unknown } } | null;
+        if (err?.error?.status === "RESOURCE_EXHAUSTED") return rateLimited;
+      } catch {
+        // unreadable error body: plain failure
+      }
+      return failed;
+    }
+    const parsed = parseCandidates(await response.json());
+    return parsed === null ? failed : { kind: "ok", candidates: parsed };
+  } catch {
+    return failed;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    callerSignal?.removeEventListener("abort", onCallerAbort);
+  }
+}
+
+function candidateMaxResults(opts: CandidateSearchOptions | undefined): number {
+  const raw = opts?.maxResults;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return CANDIDATE_MAX_RESULT_COUNT;
+  return Math.min(Math.max(Math.floor(raw), 1), CANDIDATE_MAX_RESULT_COUNT);
+}
+
+/** One Text Search request. Never throws. Key only in X-Goog-Api-Key. */
+export async function searchCandidatesText(
+  query: string,
+  fetchImpl?: PostFetchLike,
+  opts?: CandidateSearchOptions,
+): Promise<CandidateLookup> {
+  const text = typeof query === "string" ? query.trim() : "";
+  if (text.length === 0) return { kind: "failed", cause: "error" };
+  return runCandidateRequest(
+    GOOGLE_PLACES.textSearch,
+    { textQuery: text, maxResultCount: candidateMaxResults(opts) },
+    fetchImpl,
+    opts,
+  );
+}
+
+/** One Nearby Search request (includedTypes, circle locationRestriction). Never throws. */
+export async function searchCandidatesNearby(
+  centre: LatLng,
+  radiusMeters: number,
+  includedTypes: readonly string[],
+  fetchImpl?: PostFetchLike,
+  opts?: CandidateSearchOptions,
+): Promise<CandidateLookup> {
+  const lat = finiteNumber(centre?.lat);
+  const lng = finiteNumber(centre?.lng);
+  if (lat === null || lng === null) return { kind: "failed", cause: "error" };
+  const radius = Math.min(
+    Math.max(typeof radiusMeters !== "number" || Number.isNaN(radiusMeters) ? NEARBY_MIN_RADIUS_M : radiusMeters, NEARBY_MIN_RADIUS_M),
+    NEARBY_MAX_RADIUS_M,
+  );
+  const types = (Array.isArray(includedTypes) ? includedTypes : []).filter(
+    (t): t is string => typeof t === "string" && t.length > 0,
+  );
+  const body: Record<string, unknown> = {
+    maxResultCount: candidateMaxResults(opts),
+    locationRestriction: { circle: { center: { latitude: lat, longitude: lng }, radius } },
+  };
+  if (types.length > 0) body.includedTypes = types;
+  return runCandidateRequest("https://places.googleapis.com/v1/places:searchNearby", body, fetchImpl, opts);
 }

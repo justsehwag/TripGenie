@@ -83,6 +83,7 @@ const DEFAULT_MCP_TOOL_ALLOWLIST = [
 
 const DEFAULT_IMAGE_HOST_ALLOWLIST = [
   "upload.wikimedia.org",
+  "thumb.wikimedia.org",
   "commons.wikimedia.org",
   "picsum.photos",
   "fastly.picsum.photos",
@@ -179,4 +180,75 @@ export function serpApiKey(): string {
  */
 export function serpApiMonthlySoftLimit(): number {
   return parseSoftLimit(process.env.SERPAPI_MONTHLY_SOFT_LIMIT);
+}
+
+/**
+ * Server-only accessor for the SearXNG instance base URL.
+ *
+ * Reads `SEARXNG_BASE_URL` (not `NEXT_PUBLIC_`). Returns "" unless the value
+ * parses as an `https:` URL with no username or password. The result is
+ * `origin + pathname` with trailing slashes removed (query and hash dropped).
+ * Kept off `AwsConfig`; never log or serialize it.
+ */
+export function searxngBaseUrl(): string {
+  const raw = env("SEARXNG_BASE_URL", "");
+  if (raw === "") return "";
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return "";
+  }
+  if (url.protocol !== "https:") return "";
+  if (url.username !== "" || url.password !== "") return "";
+  return (url.origin + url.pathname).replace(/\/+$/, "");
+}
+
+/**
+ * Server-only accessor for the SearXNG secret header.
+ *
+ * Returns `null` unless `SEARXNG_SECRET_HEADER_NAME` (a valid HTTP token) and
+ * `SEARXNG_SECRET_HEADER_VALUE` (no CR or LF) are both non-empty after
+ * trimming. Never log or serialize the value.
+ */
+export function searxngSecretHeader(): { name: string; value: string } | null {
+  const name = env("SEARXNG_SECRET_HEADER_NAME", "");
+  const value = env("SEARXNG_SECRET_HEADER_VALUE", "");
+  if (name === "" || value === "") return null;
+  if (!/^[A-Za-z0-9-]+$/.test(name)) return null;
+  if (/[\r\n]/.test(value)) return null;
+  return { name, value };
+}
+
+/**
+ * Whether SearXNG itinerary grounding is switched on. Read on every call from
+ * `TRIPGENIE_SEARXNG_ENABLED`; on only for `true` or `1` (trimmed,
+ * case-insensitive), off for anything else.
+ */
+export function searxngEnabled(): boolean {
+  const v = (process.env.TRIPGENIE_SEARXNG_ENABLED ?? "").trim().toLowerCase();
+  return v === "true" || v === "1";
+}
+
+/**
+ * Whether web-grounded activity pricing is switched on. Read on every call from
+ * `TRIPGENIE_WEB_PRICING_ENABLED`; on only for `true` or `1` (trimmed,
+ * case-insensitive), off for anything else. Independent of `searxngEnabled()`.
+ */
+export function webPricingEnabled(): boolean {
+  const v = (process.env.TRIPGENIE_WEB_PRICING_ENABLED ?? "").trim().toLowerCase();
+  return v === "true" || v === "1";
+}
+
+/** Default contact placed in the Wikimedia User-Agent (Req 11.4). */
+const DEFAULT_WIKIMEDIA_CONTACT = "https://github.com/justsehwag/TripGenie";
+
+/**
+ * Contact string for the Wikimedia `User-Agent`. Read on every call from
+ * `TRIPGENIE_WIKIMEDIA_CONTACT` (trimmed); an unset or blank value falls back to
+ * the project repository URL. Not secret.
+ */
+export function wikimediaContact(): string {
+  const v = (process.env.TRIPGENIE_WIKIMEDIA_CONTACT ?? "").trim();
+  return v === "" ? DEFAULT_WIKIMEDIA_CONTACT : v;
 }

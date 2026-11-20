@@ -5,33 +5,44 @@ import { useEffect, useRef, useState } from "react";
 /**
  * LocationCarousel - a small auto-advancing image carousel for a plan location.
  * Fetches up to four real photos for the query from the existing /api/image
- * route (Wikipedia thumbnail + Picsum fallback), cross-fades every 5s, pauses
+ * route (Wikipedia thumbnails only; a null url or failed image shows the placeholder frame), cross-fades every 5s, pauses
  * on hover/focus, and honors prefers-reduced-motion. Reuses existing card/image
  * classes; adds no new design token.
  */
 export default function LocationCarousel({ query, seed = 0 }: { query: string; seed?: number }) {
   const [urls, setUrls] = useState<string[]>([]);
+  const [srcSets, setSrcSets] = useState<Record<string, string>>({});
   const [i, setI] = useState(0);
+  // Resolved = the fetch finished; with no usable URL the Image_Fallback frame shows (Req 11.10).
+  const [resolved, setResolved] = useState(false);
   const pausedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     const q = query.trim();
+    setResolved(false);
     if (!q) { setUrls([]); return; }
     const base = Math.max(0, Math.trunc(seed)) * 4;
     const slots = [base, base + 1, base + 2, base + 3];
     Promise.all(
       slots.map((s) =>
-        fetch("/api/image?" + new URLSearchParams({ kind: "destination", query: q, slot: String(s) }).toString())
+        fetch("/api/image?" + new URLSearchParams({ kind: "destination", query: q, slot: String(s), size: "card" }).toString())
           .then((r) => (r.ok ? r.json() : null))
-          .then((d: { url?: string } | null) => (d && typeof d.url === "string" ? d.url : null))
+          .then((d: { url?: string; srcset?: string } | null) =>
+            d && typeof d.url === "string" && d.url.trim() !== ""
+              ? { url: d.url, srcset: typeof d.srcset === "string" && d.srcset.trim() !== "" ? d.srcset : undefined }
+              : null)
           .catch(() => null),
       ),
     ).then((res) => {
       if (cancelled) return;
-      const uniq = Array.from(new Set(res.filter((u): u is string => Boolean(u))));
+      const sets: Record<string, string> = {};
+      for (const r of res) if (r && r.srcset && !(r.url in sets)) sets[r.url] = r.srcset;
+      const uniq = Array.from(new Set(res.filter((r): r is { url: string; srcset: string | undefined } => Boolean(r)).map((r) => r.url)));
+      setSrcSets(sets);
       setUrls(uniq);
       setI(0);
+      setResolved(true);
     });
     return () => { cancelled = true; };
   }, [query, seed]);
@@ -49,7 +60,15 @@ export default function LocationCarousel({ query, seed = 0 }: { query: string; s
     return () => window.clearInterval(id);
   }, [urls]);
 
-  if (urls.length === 0) return null;
+  if (urls.length === 0) {
+    if (!resolved) return null;
+    // Image_Fallback: the existing token-coloured stage with no <img> inside.
+    return (
+      <div className="loc-carousel" aria-hidden="true">
+        <div className="loc-carousel__stage" />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -68,8 +87,10 @@ export default function LocationCarousel({ query, seed = 0 }: { query: string; s
             key={u}
             className={"loc-carousel__img" + (idx === i ? " is-active" : "")}
             src={u}
+            srcSet={srcSets[u]}
             alt={idx === i ? ("View of " + query) : ""}
             loading="lazy"
+            onError={() => { setUrls((prev) => prev.filter((x) => x !== u)); setI(0); }}
             aria-hidden={idx !== i}
           />
         ))}

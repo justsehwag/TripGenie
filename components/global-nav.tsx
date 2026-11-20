@@ -196,12 +196,12 @@ export default function GlobalNav({
             />
           </svg>
         </button>
-        <Link href="/" className="site-nav__logo" aria-label="TripGenie home">
+        <Link href="/" className="site-nav__logo" aria-label="Tripsaathi AI home">
           {/*
             Logo treatment (Req 4.1 / 17.6): a small inline SVG mark — a globe
             circle in the primary green with a journey arc / paper-plane accent
             in deep emerald and a single orange action spark — paired with the
-            "TripGenie" wordmark. The mark is decorative (aria-hidden); the
+            "Tripsaathi AI" wordmark. The mark is decorative (aria-hidden); the
             wordmark + the link's aria-label convey the name. Colors reference
             the Design_System token custom properties directly (no CSS added
             here), so a token change propagates to the mark.
@@ -233,7 +233,7 @@ export default function GlobalNav({
             {/* Orange action spark accent */}
             <circle cx="17.6" cy="6.6" r="2" fill="var(--color-action-orange)" />
           </svg>
-          <span className="site-nav__wordmark">TripGenie</span>
+          <span className="site-nav__wordmark">Tripsaathi AI</span>
         </Link>
 
         {/* Compact menu toggle, shown only below 768px via CSS (Req 21.6). */}

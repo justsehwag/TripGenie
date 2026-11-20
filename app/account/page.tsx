@@ -1,7 +1,7 @@
 import AccountClient from "@/components/account-client";
 import type { IdentityProviderPolicy } from "@/lib/identity";
 
-export const metadata = { title: "Account - TripGenie" };
+export const metadata = { title: "Account - Tripsaathi AI" };
 
 /**
  * Account / sign-in route. AccountClient switches on the browser-local session:

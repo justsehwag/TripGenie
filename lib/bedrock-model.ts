@@ -27,10 +27,14 @@
 import type { Itinerary, TripContext } from "./types";
 import type { ExtractionModel, RequiredField } from "./preference-controller";
 import { SYSTEM_PROMPT_PREFIX } from "./planning-turn";
-import { buildItinerary } from "./itinerary-engine";
 import { parseRoute, emptyRouteState } from "./route-intake";
 import { durationFromText } from "./date-intake";
+import { validateDiet } from "./extraction-grounding";
 import { awsConfig } from "./config";
+import type { GroundingBundle } from "./grounding/types";
+import { buildBatchPrompt } from "./itinerary/prompt";
+import { maxDayTrips } from "./itinerary/pace";
+import { BATCH_DAYS, GEN_RACE_GRACE_MS } from "./itinerary/constants";
 
 /* ===========================================================================
  * 2.1 — Contract, deps, and strict JSON extraction schema
@@ -206,59 +210,28 @@ export function buildPhrasePrompt(field: RequiredField, context: TripContext): M
   };
 }
 
-/** The exact JSON shape required back from the itinerary model call. */
-const ITINERARY_JSON_SHAPE = [
-  "Return ONLY a single JSON object (no prose, no code fences) in EXACTLY this shape:",
-  "{",
-  '  "title": string,',
-  '  "totalCost": number,',
-  '  "days": [',
-  "    {",
-  '      "day": 1,',
-  '      "date": "YYYY-MM-DD",',
-  '      "title": string,',
-  '      "theme": string,',
-  '      "activities": [ { "time": "09:00", "title": string, "description": string, "cost": number } ],',
-  '      "total": number',
-  "    }",
-  "  ]",
-  "}",
-  "Each day must have EXACTLY 5 time-ordered activities. totalCost = sum of every day.total. Each day.total = sum of that day's activity costs. All costs are INR estimates.",
-].join("\n");
-
 /**
- * System prompt for itinerary generation. Demands SPECIFIC, REAL, named places
- * for the exact destination (actual landmarks, neighbourhoods, dining areas),
- * never vague filler like "local lunch" or "signature experience", and a
- * geographically sensible plan. Costs are INR estimates; nothing is marked
- * confirmed/available. Starts with SYSTEM_PROMPT_PREFIX (byte-identical reuse).
+ * Build the first-batch itinerary prompt: a thin wrapper over `buildBatchPrompt`
+ * for days 1..min(duration, BATCH_DAYS) with no used places. `system` starts
+ * with SYSTEM_PROMPT_PREFIX.
  */
-function buildItinerarySystem(context: TripContext): string {
-  const dest = context.destination ?? "the destination";
-  return [
-    SYSTEM_PROMPT_PREFIX,
-    "",
-    `You are an expert local travel planner. Build a specific, logical, day-by-day itinerary for ${dest} using the full trip context.`,
-    "",
-    "Hard rules:",
-    `- Name REAL, specific places in ${dest}: actual landmarks, museums, neighbourhoods, viewpoints, markets, parks and well-known dining areas. Never write vague placeholders like "local lunch", "signature experience", "afternoon activity" or "evening experience".`,
-    "- Each day has EXACTLY 5 time-ordered activities and is geographically sensible (group nearby places; do not zig-zag across the city).",
-    "- Respect the traveller's duration, party, budget level, diet and interests. Relaxed pace means fewer stops and more rest; packed means more.",
-    "- Every cost is an INR ESTIMATE. Never mark any flight, stay, or car as confirmed or available.",
-    "- Keep each activity description to one concrete sentence that references the real place.",
-    "",
-    ITINERARY_JSON_SHAPE,
-  ].join("\n");
-}
-
-/** Build the itinerary prompt; `system` starts with SYSTEM_PROMPT_PREFIX. */
-export function buildItineraryPrompt(context: TripContext): ModelPrompt {
-  return {
-    system: buildItinerarySystem(context),
-    user: `Trip context: ${JSON.stringify(context)}`,
-    maxTokens: 4000,
-    timeoutMs: 40000,
-  };
+export function buildItineraryPrompt(
+  context: TripContext,
+  grounding?: GroundingBundle,
+): ModelPrompt {
+  const raw = context?.durationDays;
+  const totalDays =
+    typeof raw === "number" && Number.isFinite(raw) ? Math.max(1, Math.trunc(raw)) : 4;
+  return buildBatchPrompt({
+    context,
+    fromDay: 1,
+    dayCount: Math.min(totalDays, BATCH_DAYS),
+    totalDays,
+    usedPlaces: [],
+    dayTripsAllowed: maxDayTrips(totalDays),
+    grounding,
+    spareStop: false,
+  });
 }
 
 /* ===========================================================================
@@ -513,29 +486,65 @@ function parseItinerary(text: string): Itinerary | null {
 }
 
 /**
- * Async itinerary generation for a complete context. On ANY error/timeout/
- * malformed output, falls back to the deterministic `buildItinerary` so the
- * planner never breaks (Req 2.8, 10.3). The generated itinerary presents costs
- * as estimates and never marks any flight/stay/car confirmed or available
- * (Req 2.9).
+ * Async itinerary generation for a complete context. Returns the parsed model
+ * itinerary, or `null` when the model is unavailable, times out or returns
+ * malformed output. There is NO template fallback: callers must surface the
+ * unavailable outcome rather than invent an itinerary.
  */
 export async function generateItineraryAsync(
   deps: BedrockModelDeps,
   context: TripContext,
-): Promise<Itinerary> {
-  const now = deps.now ?? (() => Date.now());
-  const fallback = (): Itinerary =>
-    buildItinerary({
-      destination: context.destination ?? "your destination",
-      startDate: new Date(now()).toISOString().slice(0, 10),
-      days: context.durationDays ?? 4,
-      vibes: context.interests,
-    });
+): Promise<Itinerary | null> {
+  return (await generateItineraryDetailed(deps, context)).itinerary;
+}
+
+export interface GenerateItineraryOptions {
+  grounding?: GroundingBundle;
+}
+
+/** Same as `generateItineraryAsync` but also reports the outcome source. */
+export async function generateItineraryDetailed(
+  deps: BedrockModelDeps,
+  context: TripContext,
+  options?: GenerateItineraryOptions,
+): Promise<{ itinerary: Itinerary | null; source: "model" | "unavailable" }> {
   try {
-    const text = await invokeWithTimeout(deps, buildItineraryPrompt(context));
-    return parseItinerary(text) ?? fallback();
+    const text = await invokeWithTimeout(
+      deps,
+      buildItineraryPrompt(context, options?.grounding),
+    );
+    const parsed = parseItinerary(text);
+    return parsed
+      ? { itinerary: parsed, source: "model" }
+      : { itinerary: null, source: "unavailable" };
   } catch {
-    return fallback();
+    return { itinerary: null, source: "unavailable" };
+  }
+}
+
+/**
+ * One bounded batch generation. Outer guard of `timeoutMs + GEN_RACE_GRACE_MS`;
+ * never throws. `ok` is true only when non-empty text was returned.
+ */
+export async function generateBatch(
+  deps: BedrockModelDeps,
+  prompt: ModelPrompt,
+): Promise<{ text: string; ok: boolean }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const guard = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("batch generation timed out")),
+        prompt.timeoutMs + GEN_RACE_GRACE_MS,
+      );
+    });
+    const text = await Promise.race<string>([deps.invokeModel(prompt), guard]);
+    const out = typeof text === "string" ? text : "";
+    return { text: out, ok: out.trim().length > 0 };
+  } catch {
+    return { text: "", ok: false };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -574,29 +583,53 @@ export function syncModelFrom(
  * no secret is read here (Req 3.2, 3.3). Tests inject a mock instead of calling
  * this.
  */
-export function createBedrockInvoke(): BedrockModelDeps["invokeModel"] {
+export function createBedrockInvoke(options?: {
+  partialOnTimeout?: boolean;
+}): BedrockModelDeps["invokeModel"] {
   const { modelId, region } = awsConfig.bedrock;
+  const partialOnTimeout = options?.partialOnTimeout === true;
   return async (prompt: ModelPrompt): Promise<string> => {
     // Dynamic import: no static top-level dependency on the AWS SDK.
-    const { BedrockRuntimeClient, ConverseCommand } = await import(
+    const { BedrockRuntimeClient, ConverseCommand, ConverseStreamCommand } = await import(
       "@aws-sdk/client-bedrock-runtime"
     );
     const client = new BedrockRuntimeClient({ region });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), prompt.timeoutMs);
+    const input = {
+      modelId,
+      system: [{ text: prompt.system }],
+      messages: [{ role: "user" as const, content: [{ text: prompt.user }] }],
+      inferenceConfig: { maxTokens: prompt.maxTokens },
+    };
     try {
-      const command = new ConverseCommand({
-        modelId,
-        system: [{ text: prompt.system }],
-        messages: [{ role: "user", content: [{ text: prompt.user }] }],
-        inferenceConfig: { maxTokens: prompt.maxTokens },
-      });
-      const response = await client.send(command, { abortSignal: controller.signal });
-      const blocks = response.output?.message?.content ?? [];
-      const textParts = blocks
-        .map((block) => (typeof block.text === "string" ? block.text : ""))
-        .filter((t) => t.length > 0);
-      return textParts.join("\n");
+      if (!partialOnTimeout) {
+        const response = await client.send(new ConverseCommand(input), {
+          abortSignal: controller.signal,
+        });
+        const blocks = response.output?.message?.content ?? [];
+        const textParts = blocks
+          .map((block) => (typeof block.text === "string" ? block.text : ""))
+          .filter((t) => t.length > 0);
+        return textParts.join("\n");
+      }
+      let text = "";
+      try {
+        const response = await client.send(new ConverseStreamCommand(input), {
+          abortSignal: controller.signal,
+        });
+        if (response.stream) {
+          for await (const event of response.stream) {
+            const delta = event.contentBlockDelta?.delta?.text;
+            if (typeof delta === "string") text += delta;
+          }
+        }
+      } catch (err) {
+        // On abort, keep whatever text already arrived; otherwise surface the error.
+        if (!(controller.signal.aborted && text.length > 0)) throw err;
+      }
+      if (text.length === 0) throw new Error("model returned no text");
+      return text;
     } finally {
       clearTimeout(timer);
     }
@@ -668,8 +701,8 @@ export function fallbackExtractForField(
       break;
     }
     case "diet": {
-      if (/^(no|none|any|no preference|anything)/.test(lower)) base.diet = "no preference";
-      else base.diet = text.slice(0, 60);
+      const diet = validateDiet(text);
+      if (diet !== null) base.diet = diet;
       break;
     }
     case "interests": {

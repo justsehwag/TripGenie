@@ -35,6 +35,7 @@ import {
 } from "react";
 
 import type { TripContext, Itinerary } from "@/lib/types";
+import { sanitizeStoredItinerary } from "@/lib/web-price-sources";
 import type { DateHints } from "@/lib/trip-context-map";
 import type { RequiredField } from "@/lib/preference-controller";
 
@@ -122,7 +123,7 @@ function readStorage(): SharedTripContextState {
         : {};
     const itinerary =
       candidate.itinerary && typeof candidate.itinerary === "object"
-        ? (candidate.itinerary as Itinerary)
+        ? sanitizeStoredItinerary(candidate.itinerary as Itinerary)
         : null;
     const userInitiated =
       typeof candidate.userInitiated === "boolean"

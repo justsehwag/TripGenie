@@ -1,17 +1,21 @@
 "use client";
 
 /**
- * Account surface switch. When the browser-local session (the key the sign-in
- * form writes) is present, show a signed-in PROFILE view - greeting, the
- * circular explorer avatar, quick links and sign-out - instead of sending an
- * already-signed-in traveller back to the sign-in form. When anonymous, render
- * the existing AuthLanding sign-in. This fixes "clicking My account shows the
- * login page again even though I'm signed in".
+ * Account surface switch over a cinematic full-screen travel backdrop.
+ *
+ * Signed-in: a floating glass PROFILE card (greeting, explorer avatar, quick-
+ * link tiles, sign-out) over the immersive AccountHero backdrop. Anonymous:
+ * the redesigned AuthLanding sign-in (same backdrop).
+ *
+ * Behavior is unchanged: readSession/the session switch, signOut, the
+ * "use a different account" flow, the My trips / Plan / Discover hrefs, and the
+ * SSR-safe "undefined|null -> AuthLanding" fallback are all preserved.
  */
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthLanding from "@/components/auth-landing";
+import { AccountHero } from "@/components/account-hero";
 import type { IdentityProviderPolicy, IdentitySession } from "@/lib/identity";
 
 function readSession(): IdentitySession | null {
@@ -45,6 +49,21 @@ function ExplorerAvatar() {
   );
 }
 
+function TileIcon({ kind }: { kind: "trips" | "plan" | "discover" }) {
+  const d =
+    kind === "trips"
+      ? "M4 7h16M4 12h16M4 17h10"
+      : kind === "plan"
+        ? "M12 5v14M5 12h14"
+        : "M12 21s7-6.5 7-11a7 7 0 10-14 0c0 4.5 7 11 7 11z";
+  return (
+    <svg className="account-tile__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+      <path d={d} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      {kind === "discover" && <circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.8" />}
+    </svg>
+  );
+}
+
 export default function AccountClient({ policy }: { policy: IdentityProviderPolicy }) {
   const router = useRouter();
   const [session, setSession] = useState<IdentitySession | null | undefined>(undefined);
@@ -74,35 +93,64 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
   const name = session.firstName?.trim() || session.email?.split("@")[0] || "Explorer";
 
   return (
-    <main className="shell auth auth-glass-page">
-      <div className="auth-glass-page__glow" aria-hidden="true" />
-      <section className="motion-rise auth__intro">
-        <p className="eyebrow">Your account</p>
-        <h1 className="display">Welcome back, {name}</h1>
-      </section>
+    <main className="account-stage">
+      <AccountHero
+        eyebrow="Your account"
+        title="Your next journey awaits"
+        subtitle="Every trip you plan stays synced and ready wherever you go."
+        points={["Live hotel & flight prices", "AI day-by-day itineraries", "Synced across your devices"]}
+      />
 
-      <div className="auth-glass-grid auth-glass-grid--single">
-        <section className="auth-glass motion-rise account-profile">
-          <div className="account-profile__head">
-            <span className="account-profile__avatar"><ExplorerAvatar /></span>
-            <div>
-              <p className="account-profile__name">{name}</p>
-              {session.email && <p className="account-profile__email">{session.email}</p>}
+      <div className="account-stage__panel">
+        <section className="account-card account-card--rise" aria-label="Your account">
+          <p className="account-card__eyebrow">Welcome back</p>
+          <div className="account-card__head">
+            <span className="account-card__avatar"><ExplorerAvatar /></span>
+            <div className="account-card__id">
+              <p className="account-card__name">{name}</p>
+              {session.email && <p className="account-card__email">{session.email}</p>}
             </div>
           </div>
 
-          <ul className="account-profile__links">
-            <li><a className="btn account-profile__link" href="/trips">My trips</a></li>
-            <li><a className="btn account-profile__link" href="/plan">Plan a new trip</a></li>
-            <li><a className="btn account-profile__link" href="/discover">Discover places</a></li>
+          <ul className="account-tiles">
+            <li>
+              <a className="account-tile" href="/trips">
+                <span className="account-tile__badge"><TileIcon kind="trips" /></span>
+                <span className="account-tile__text">
+                  <span className="account-tile__title">My trips</span>
+                  <span className="account-tile__sub">Saved plans &amp; bookings</span>
+                </span>
+                <span className="account-tile__chevron" aria-hidden="true">{"\u2192"}</span>
+              </a>
+            </li>
+            <li>
+              <a className="account-tile" href="/plan">
+                <span className="account-tile__badge"><TileIcon kind="plan" /></span>
+                <span className="account-tile__text">
+                  <span className="account-tile__title">Plan a new trip</span>
+                  <span className="account-tile__sub">Let the AI assistant draft it</span>
+                </span>
+                <span className="account-tile__chevron" aria-hidden="true">{"\u2192"}</span>
+              </a>
+            </li>
+            <li>
+              <a className="account-tile" href="/discover">
+                <span className="account-tile__badge"><TileIcon kind="discover" /></span>
+                <span className="account-tile__text">
+                  <span className="account-tile__title">Discover places</span>
+                  <span className="account-tile__sub">Find your next destination</span>
+                </span>
+                <span className="account-tile__chevron" aria-hidden="true">{"\u2192"}</span>
+              </a>
+            </li>
           </ul>
 
-          <button type="button" className="btn account-profile__signout" onClick={signOut}>
+          <button type="button" className="cta account-card__signout" onClick={signOut}>
             Sign out
           </button>
-          <p className="auth__note">
+          <p className="account-card__note">
             Signed in, so your saved trips sync to your account.{" "}
-            <button type="button" className="inline-link account-profile__switch" onClick={() => { signOut(); router.push("/account"); }}>
+            <button type="button" className="inline-link" onClick={() => { signOut(); router.push("/account"); }}>
               Use a different account
             </button>
           </p>

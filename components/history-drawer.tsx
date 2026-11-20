@@ -432,21 +432,47 @@ function HistoryItem({
         <button
           type="button"
           className="btn"
+          data-action="view"
           onClick={onView}
           aria-expanded={open}
           aria-controls={detailId}
         >
-          {open ? "Hide details" : "View"}
+          {/* Both labels share one grid cell so the button width never changes;
+              the inactive one is hidden from assistive tech. */}
+          <span
+            className="history-drawer__label"
+            data-active={!open}
+            aria-hidden={open ? true : undefined}
+          >
+            View
+          </span>
+          <span
+            className="history-drawer__label"
+            data-active={open}
+            aria-hidden={open ? undefined : true}
+          >
+            Hide details
+          </span>
         </button>
         {resumable && (
-          <button type="button" className="cta" onClick={onResume}>
+          <button
+            type="button"
+            className="cta"
+            data-action="continue"
+            onClick={onResume}
+          >
             Continue
           </button>
         )}
-        <button type="button" className="btn" onClick={onEdit}>
+        <button type="button" className="btn" data-action="edit" onClick={onEdit}>
           Edit
         </button>
-        <button type="button" className="btn" onClick={onDelete}>
+        <button
+          type="button"
+          className="btn"
+          data-action="delete"
+          onClick={onDelete}
+        >
           Delete
         </button>
       </div>
@@ -460,24 +486,94 @@ function HistoryItem({
   );
 }
 
-/** Render the stored payload summary (sensitive fields are already stripped). */
+/**
+ * Render a human-readable summary of the stored plan instead of raw JSON.
+ * Reads the known payload shape (context / dates / itinerary) defensively and
+ * shows route, dates, travellers, budget, and the itinerary headline.
+ */
 function HistoryPayload({ payload }: { payload: Record<string, unknown> }) {
-  const entries = Object.entries(payload ?? {});
-  if (entries.length === 0) {
+  const obj = (v: unknown): Record<string, unknown> =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? (v as Record<string, unknown>)
+      : {};
+  const str = (v: unknown): string =>
+    typeof v === "string" || typeof v === "number" ? String(v) : "";
+
+  const context = obj(payload?.context);
+  const dates = obj(payload?.dates);
+  const itinerary = obj(payload?.itinerary);
+  const travellers = obj(context.travellers);
+
+  const origin = str(context.origin);
+  const destination = str(context.destination);
+  const route =
+    origin && destination
+      ? `${origin} to ${destination}`
+      : destination || origin;
+
+  const adults = Number(travellers.adults) || 0;
+  const children = Number(travellers.children) || 0;
+  const partyBits: string[] = [];
+  if (adults) partyBits.push(`${adults} adult${adults === 1 ? "" : "s"}`);
+  if (children) partyBits.push(`${children} child${children === 1 ? "" : "ren"}`);
+  const party = partyBits.join(", ");
+
+  const duration = str(context.durationDays);
+  const budget = str(context.budgetLevel);
+  const pace = str(context.pace);
+  const diet = str(context.diet);
+
+  const checkIn = str(dates.checkIn);
+  const checkOut = str(dates.checkOut);
+  const stay = checkIn && checkOut ? `${checkIn} to ${checkOut}` : checkIn || checkOut;
+
+  const title = str(itinerary.title);
+  const days = Array.isArray(itinerary.days) ? itinerary.days.length : 0;
+  const total = Number(itinerary.totalCost) || 0;
+  const currency = str(itinerary.currency) || "INR";
+
+  const rows: Array<[string, string]> = [];
+  if (route) rows.push(["Route", route]);
+  if (duration) rows.push(["Duration", `${duration} days`]);
+  if (stay) rows.push(["Dates", stay]);
+  if (party) rows.push(["Travellers", party]);
+  if (budget) rows.push(["Budget", budget]);
+  if (pace) rows.push(["Pace", pace]);
+  if (diet && diet.toLowerCase() !== "no preference") rows.push(["Diet", diet]);
+
+  const hasItinerary = title || days > 0;
+
+  if (rows.length === 0 && !hasItinerary) {
     return (
       <p className="history-drawer__payload-empty">
         No saved details for this plan yet.
       </p>
     );
   }
+
   return (
-    <dl className="history-drawer__detail-list">
-      {entries.map(([key, value]) => (
-        <div className="row" key={key}>
-          <dt>{key}</dt>
-          <dd>{renderValue(value)}</dd>
+    <div className="history-summary">
+      {rows.length > 0 && (
+        <dl className="history-summary__facts">
+          {rows.map(([label, value]) => (
+            <div className="history-summary__fact" key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {hasItinerary && (
+        <div className="history-summary__itinerary">
+          {title && <p className="history-summary__itinerary-title">{title}</p>}
+          <p className="history-summary__itinerary-meta">
+            {days > 0 ? `${days}-day plan` : "Itinerary"}
+            {total > 0
+              ? ` - approx ${currency} ${Math.round(total).toLocaleString("en-IN")}`
+              : ""}
+          </p>
         </div>
-      ))}
-    </dl>
+      )}
+    </div>
   );
 }

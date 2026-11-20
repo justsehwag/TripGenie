@@ -32,7 +32,7 @@ import type { CarOffer, FlightOffer, OfferMeta, StayOffer } from "@/lib/types";
  * footer appears here too (Req 26.8) — this page must NOT render its own footer.
  */
 
-export const metadata = { title: "TripGenie - Deals and inspiration" };
+export const metadata = { title: "Tripsaathi AI - Deals and inspiration" };
 
 // Deterministic "now" is irrelevant to correctness here; the adapter only uses
 // it for retrievedAt/expiresAt timestamps rendered in the provenance label.

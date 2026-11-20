@@ -14,7 +14,7 @@ import {
   formatDuration,
 } from "@/components/flight-offer-card";
 
-export const metadata: Metadata = { title: "Flight detail - TripGenie" };
+export const metadata: Metadata = { title: "Flight detail - Tripsaathi AI" };
 
 /**
  * Flight Detail_Page (server component) — design "Booking Site ▸ Detail_Page".

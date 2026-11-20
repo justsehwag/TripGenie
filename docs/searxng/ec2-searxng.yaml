@@ -1,0 +1,319 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  TripGenie itinerary grounding - single SearXNG instance on EC2 (Graviton,
+  Amazon Linux 2023) behind Caddy. Caddy terminates HTTPS with a Let's Encrypt
+  certificate for an sslip.io hostname derived from the instance public IP, and
+  rejects any request without the shared secret header. SearXNG publishes no
+  host port. Access is through Session Manager only (no SSH port). No Elastic
+  IP: the public IP (and hostname) changes only if the instance is stopped and
+  started; setup re-runs on every boot and picks up the new hostname.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for the instance.
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: PUBLIC subnet that auto-assigns public IPv4 addresses, inside VpcId.
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    AllowedValues: [t4g.small, t4g.medium]
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+  SecretParameterName:
+    Type: String
+    Default: /tripgenie/searxng/header-secret
+    AllowedPattern: ^/[A-Za-z0-9/_.-]+$
+    Description: SSM SecureString holding the shared secret header value (create it before deploying).
+  SecretHeaderName:
+    Type: String
+    Default: X-TripGenie-Search-Key
+    AllowedPattern: ^[A-Za-z0-9-]+$
+    Description: Must equal SEARXNG_SECRET_HEADER_NAME in the app.
+  SearxngImage:
+    Type: String
+    Default: docker.io/searxng/searxng:latest
+    Description: Pin a dated tag or digest for repeatable deploys.
+  CaddyImage:
+    Type: String
+    Default: docker.io/library/caddy:2
+  OwnerTag:
+    Type: String
+    Default: seshathri.y@ingrammicro.com
+  ActivityTag:
+    Type: String
+    Default: tripgenie
+  AutoscheduleTag:
+    Type: String
+    Default: 'false'
+    Description: FinOps autoschedule tag. 'false' keeps the instance always on so the hostname stays stable.
+  AutoscheduleTag:
+    Type: String
+    Default: 'false'
+    Description: FinOps autoschedule tag. 'false' keeps the instance always on so the hostname stays stable.
+  NameTag:
+    Type: String
+    Default: Seshathri Y
+  PurposeTag:
+    Type: String
+    Default: TripGenie - SearXNG itinerary grounding
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SearXNG via Caddy - HTTPS 443 and HTTP 80 (ACME challenge and redirect) only. No SSH.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS (secret header checked by Caddy)
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: ACME HTTP-01 challenge and redirect to HTTPS
+      Tags:
+        - { Key: owner, Value: !Ref OwnerTag }
+        - { Key: activity, Value: !Ref ActivityTag }
+        - { Key: autoschedule, Value: !Ref AutoscheduleTag }
+        - { Key: autoschedule, Value: !Ref AutoscheduleTag }
+        - { Key: Name, Value: !Ref NameTag }
+        - { Key: Purpose, Value: !Ref PurposeTag }
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: read-searxng-header-secret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SecretParameterName}
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+      Tags:
+        - { Key: owner, Value: !Ref OwnerTag }
+        - { Key: activity, Value: !Ref ActivityTag }
+        - { Key: autoschedule, Value: !Ref AutoscheduleTag }
+        - { Key: autoschedule, Value: !Ref AutoscheduleTag }
+        - { Key: Name, Value: !Ref NameTag }
+        - { Key: Purpose, Value: !Ref PurposeTag }
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - { Key: owner, Value: !Ref OwnerTag }
+            - { Key: activity, Value: !Ref ActivityTag }
+            - { Key: autoschedule, Value: !Ref AutoscheduleTag }
+            - { Key: autoschedule, Value: !Ref AutoscheduleTag }
+            - { Key: Name, Value: !Ref NameTag }
+            - { Key: Purpose, Value: !Ref PurposeTag }
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile: { Arn: !GetAtt InstanceProfile.Arn }
+        SecurityGroupIds: [!Ref SecurityGroup]
+        CreditSpecification: { CpuCredits: standard }
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+          # 1 = containers cannot reach instance metadata (they do not need it).
+          HttpPutResponseHopLimit: 1
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeType: gp3
+              VolumeSize: 16
+              Encrypted: true
+              DeleteOnTermination: true
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            mkdir -p /opt/searxng
+            chmod 700 /opt/searxng
+
+            # Setup script. Re-runs on every boot (systemd unit below), so a new
+            # public IP after stop/start gets a new sslip.io hostname and certificate.
+            cat > /opt/searxng/setup.sh <<'SCRIPT'
+            #!/bin/bash
+            set -euo pipefail
+            exec >> /var/log/searxng-setup.log 2>&1
+            echo "=== setup $(date -u)"
+
+            HEADER_NAME="${SecretHeaderName}"
+            PARAM="${SecretParameterName}"
+            REGION="${AWS::Region}"
+
+            if ! command -v docker >/dev/null; then
+              dnf install -y docker dnf-automatic
+              sed -i 's/^upgrade_type.*/upgrade_type = security/; s/^apply_updates.*/apply_updates = yes/' /etc/dnf/automatic.conf
+              systemctl enable --now dnf-automatic.timer
+            fi
+            systemctl enable --now docker
+
+            IP=""
+            for i in $(seq 1 60); do
+              TOKEN=$(curl -sS -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300" || true)
+              IP=$(curl -sSf -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || true)
+              if [ -n "$IP" ]; then break; fi
+              sleep 5
+            done
+            if [ -z "$IP" ]; then echo "no public IPv4 address"; exit 1; fi
+            HOST="$(echo "$IP" | tr . -).sslip.io"
+            echo "$HOST" > /opt/searxng/hostname
+
+            SECRET=$(aws ssm get-parameter --region "$REGION" --name "$PARAM" --with-decryption --query Parameter.Value --output text)
+            KEY=$(openssl rand -hex 32)
+
+            mkdir -p /opt/searxng/searxng /opt/searxng/caddy
+
+            cat > /opt/searxng/searxng/settings.yml <<EOF
+            use_default_settings: true
+            general:
+              instance_name: "tripgenie-search"
+              debug: false
+            server:
+              secret_key: "$KEY"
+              limiter: false
+              image_proxy: false
+              method: "GET"
+            search:
+              safe_search: 1
+              formats:
+                - html
+                - json
+              default_lang: "en"
+            engines:
+              - name: duckduckgo
+                engine: duckduckgo
+                disabled: false
+              - name: brave
+                engine: brave
+                disabled: false
+              # Off: Bing returns off-topic results and plain Google blocks AWS IPs.
+              # Google results still come through the default 'google cse' engine.
+              - name: bing
+                engine: bing
+                disabled: true
+              - name: google
+                engine: google
+                disabled: true
+              - name: wikipedia
+                engine: wikipedia
+                disabled: false
+            EOF
+
+            cat > /opt/searxng/caddy/Caddyfile <<EOF
+            $HOST {
+              encode zstd gzip
+              @authorized header $HEADER_NAME {\$SEARXNG_SECRET_HEADER_VALUE}
+              handle @authorized {
+                reverse_proxy searxng:8080
+              }
+              handle {
+                respond "Forbidden" 403
+              }
+            }
+            EOF
+
+            docker network create searxng-internal 2>/dev/null || true
+            docker rm -f searxng caddy 2>/dev/null || true
+
+            # SearXNG: no host port; only reachable from Caddy on the internal network.
+            docker run -d --name searxng --restart unless-stopped \
+              --network searxng-internal \
+              -v /opt/searxng/searxng:/etc/searxng \
+              -e SEARXNG_BASE_URL="https://$HOST/" \
+              --cap-drop ALL --cap-add CHOWN --cap-add SETGID --cap-add SETUID \
+              --security-opt no-new-privileges:true \
+              ${SearxngImage}
+
+            docker run -d --name caddy --restart unless-stopped \
+              --network searxng-internal \
+              -p 80:80 -p 443:443 \
+              -e SEARXNG_SECRET_HEADER_VALUE="$SECRET" \
+              -v /opt/searxng/caddy/Caddyfile:/etc/caddy/Caddyfile:ro \
+              -v caddy-data:/data -v caddy-config:/config \
+              ${CaddyImage}
+
+            echo "setup complete for https://$HOST"
+            SCRIPT
+            chmod 700 /opt/searxng/setup.sh
+
+            cat > /etc/systemd/system/searxng-setup.service <<'UNIT'
+            [Unit]
+            Description=TripGenie SearXNG setup (re-applies hostname after IP changes)
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=oneshot
+            ExecStart=/opt/searxng/setup.sh
+            RemainAfterExit=yes
+
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+
+            systemctl daemon-reload
+            systemctl enable searxng-setup.service
+            systemctl start searxng-setup.service
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref SubnetId
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      # Tags go on the RunInstances request itself (the FinOps policy checks
+      # aws:RequestTag for owner, activity and autoschedule on instance and volume).
+      PropagateTagsToVolumeOnCreation: true
+      Tags:
+        - { Key: owner, Value: !Ref OwnerTag }
+        - { Key: activity, Value: !Ref ActivityTag }
+        - { Key: autoschedule, Value: !Ref AutoscheduleTag }
+        - { Key: autoschedule, Value: !Ref AutoscheduleTag }
+        - { Key: Name, Value: !Ref NameTag }
+        - { Key: Purpose, Value: !Ref PurposeTag }
+
+Outputs:
+  SearxngBaseUrl:
+    Description: Value for SEARXNG_BASE_URL in the app. Changes if the instance is stopped and started.
+    Value: !Join ['', ['https://', !Join ['-', !Split ['.', !GetAtt Instance.PublicIp]], '.sslip.io']]
+  SecretHeaderName:
+    Description: Value for SEARXNG_SECRET_HEADER_NAME in the app.
+    Value: !Ref SecretHeaderName
+  InstanceId:
+    Description: Use with Session Manager - aws ssm start-session --target <id>
+    Value: !Ref Instance
+  PublicIp:
+    Value: !GetAtt Instance.PublicIp

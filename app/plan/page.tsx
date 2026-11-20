@@ -1,4 +1,4 @@
-import ConciergeHome from "@/components/concierge-home";
+import PlannerEntry from "@/components/planner-entry";
 
 /**
  * AI Travel Assistant route (Req 21). `/plan` is now served by the SAME
@@ -13,7 +13,7 @@ import ConciergeHome from "@/components/concierge-home";
  * `?dest=` (Discover hand-off) and `?trip=<tripId>` (resume a stored draft /
  * record via the account-history-and-drafts resume path, design §10).
  */
-export const metadata = { title: "AI Travel Assistant - TripGenie" };
+export const metadata = { title: "AI Travel Assistant - Tripsaathi AI" };
 
 /** Next 16 passes searchParams as a Promise of a string→string|string[] map. */
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -34,8 +34,7 @@ export default async function PlanPage({
   const dest = one(raw, "dest") ?? "";
   const trip = one(raw, "trip") ?? "";
   return (
-    <ConciergeHome
-      variant="assistant"
+    <PlannerEntry
       initialQuery={q}
       initialDestination={dest}
       initialTrip={trip}

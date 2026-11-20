@@ -5,6 +5,7 @@ import type { TripContext } from "./types";
 import type { ExtractionModel, RequiredField } from "./preference-controller";
 import { parseRoute, emptyRouteState } from "./route-intake";
 import { durationFromText } from "./date-intake";
+import { validateDiet } from "./extraction-grounding";
 
 const MIN_DURATION = 1;
 const MAX_DURATION = 30;
@@ -85,7 +86,7 @@ export function fallbackExtractForField(
     case "travellers": { const t = parseTravellers(text); if (t) out.travellers = t; break; }
     case "budgetLevel": { if (/budget|cheap|economical/.test(lower)) out.budgetLevel = "budget"; else if (/lux/.test(lower)) out.budgetLevel = "luxury"; else if (/mid|moderate|standard/.test(lower)) out.budgetLevel = "mid"; break; }
     case "pace": { if (/relax|slow|chill|easy/.test(lower)) out.pace = "relaxed"; else if (/pack|fast|busy|intense/.test(lower)) out.pace = "packed"; else if (/balanc|moderate/.test(lower)) out.pace = "balanced"; break; }
-    case "diet": { if (/^(no|none|any|anything)\b/.test(lower)) out.diet = "no preference"; else out.diet = text.slice(0, 60); break; }
+    case "diet": { const diet = validateDiet(text); if (diet !== null) out.diet = diet; break; }
     case "interests": { const parts = text.split(new RegExp("[,&/]|\\band\\b")).map((p) => p.trim()).filter((p) => p.length > 0); if (parts.length > 0) out.interests = parts.slice(0, 6); break; }
   }
   return out;

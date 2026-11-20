@@ -18,13 +18,13 @@ import {
   type GatewayOutcome,
   type ToolHandler,
 } from "./mcp-gateway";
+import { SYSTEM_PROMPT_PREFIX } from "./system-prompt";
 
 /** Max external tool lookups per planning turn (Req 19.2). */
 export const MAX_LOOKUPS_PER_TURN = 4;
 
 /** Stable system-prompt prefix reused byte-identically across requests (Req 19.4). */
-export const SYSTEM_PROMPT_PREFIX =
-  "You are TripGenie, a bounded travel-planning concierge. Extract only structured trip context from the latest input delta. Ask one question at a time, never fabricate availability, and keep answers under 160 characters.";
+export { SYSTEM_PROMPT_PREFIX };
 
 /** A bounded LRU reply cache for tool results within a planning turn (Req 19.3). */
 export class ReplyCache {

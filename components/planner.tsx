@@ -1,18 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseRoute, emptyRouteState, routeConfirmed as _rc } from "@/lib/route-intake";
-import { durationFromText } from "@/lib/date-intake";
-import { recomputeWorkspace, flightOfferFare, type WorkspaceState } from "@/lib/workspace";
-import { calculateTripPricing } from "@/lib/pricing";
+import { resolveTripLength } from "@/lib/itinerary/trip-length";
+import { flightOfferFare, type WorkspaceState } from "@/lib/workspace";
 import { buildItineraryPdf } from "@/lib/pdf";
-import { refineItinerary } from "@/lib/itinerary-engine";
+import { computeSummary, priceSourceCounts, formatSourceCounts, unpricedStopCount, hasWebDetails, itineraryHasWebDetails } from "@/lib/trip-summary";
+import { classifyFlightAvailability, isNoFlightRoute, GROUND_TRANSPORT_NOTE, type FlightAvailability } from "@/lib/flight-availability";
+import {
+  resolveUsdInr, normalizeItineraryToInr, restampItineraryDates, toPricerRequest,
+  applyPriceResults, applyRouteFare, withEstimatedActivity, priceLabel, formatInr,
+} from "@/lib/itinerary-inr";
+import { USD_INR_FALLBACK, MAX_ACTIVITIES } from "@/lib/activity-pricer";
+import { removeActivityAt, appendActivity } from "@/lib/itinerary/day-edit";
+import { ESTIMATED_BASIS } from "@/lib/price-validator";
+import { webAmountText } from "@/lib/web-price-format";
+import { SourceLink as PriceSourceLink, CheckedAt, RouteFareLine } from "@/components/web-price-bits";
+import { resolveBudgetLevel, resolveCityTier } from "@/lib/cost-caps";
+import type { PriceResult } from "@/lib/activity-pricer";
 import { illustration } from "@/lib/illustrations";
 import { useTripContext } from "@/components/trip-context";
 import { plannerDecision, type PlanSignal } from "@/lib/history/draft-gating";
+import { saveLocal } from "@/lib/history/local-store";
 import { useDestinationImage } from "@/components/destination-image";
-import GooglePlaceMedia from "@/components/google-place-media";
 import EditDayPanel from "@/components/edit-day-panel";
 import DayDetailModal from "@/components/day-detail-modal";
 import GamificationPanel from "@/components/gamification-panel";
@@ -25,10 +36,39 @@ import { checkedLabel as fmtCheckedLabel } from "@/lib/ist-time";
 import type { FlightBookingCriteria } from "@/components/flight-booking-panel";
 import BrandLoader from "@/components/brand-loader";
 import TravelFacts from "@/components/travel-facts";
+import SourcesList from "@/components/sources-list";
+import { batchReducer, initBatchState, nextSlot, buildRequest, tripKeyOf } from "@/lib/itinerary/planner-batches";
+import { beginGeneration, endGeneration, isGenerationActive } from "@/lib/itinerary/generation-session";
+import { postBatch } from "@/lib/itinerary/batch-client";
+import { classifyExit, scheduleUnmountAbort } from "@/lib/itinerary/generation-lifecycle";
+import { unavailable } from "@/lib/itinerary/batch-wire";
+import { mergeBatch, settlePending, buildTimeline, hasVerificationData, isComplete } from "@/lib/itinerary/completeness";
+import { DayCarousel } from "@/components/day-carousel";
+import { Toast } from "@/components/toast";
+import { toastForSave, saveFingerprint, shouldSkipSave, type SaveOutcome, type ToastModel } from "@/lib/save-feedback";
+import { StopDetails } from "@/components/stop-details";
+import { stopKey, isStopOpen, toggleStop, type StopOpenMap } from "@/lib/itinerary/stop-expand";
+import { useMiscEstimates, miscKeyForDay } from "@/components/use-misc-estimate";
+import { MiscLine } from "@/components/misc-line";
+import { buildCostBreakdown } from "@/lib/cost-breakdown";
+import { CostBreakdown } from "@/components/cost-breakdown";
+import { ItinerarySearch } from "@/components/itinerary-search";
+import { Highlight } from "@/components/highlight";
+import { filterItinerary } from "@/lib/itinerary/search";
+import { selectSlides, chooseDayMedia, formatTimeRange } from "@/lib/itinerary/carousel";
+import { LIMIT_NOTE, dateSpanNotice, TOTAL_NOTE, activitiesLabel, progressText, verifiedLabel, stopsLabel, unpricedLabel, priceBadgeText, ACTIVITIES_WEB_ONLY_LABEL } from "@/lib/itinerary/labels";
+import { ItineraryFailure, ItineraryBanner, DayHero, StopMeta, PriceCellNote, PlaceholderCard } from "@/components/itinerary-parts";
+import type { SourceLink } from "@/lib/types";
+import TripAssistant from "@/components/trip-assistant";
+import type { AppliedEdit } from "@/lib/assistant/types";
+
+/** Attach grounding sources; returns the same object when there are none. */
+function withSources(it: Itinerary, links: SourceLink[]): Itinerary {
+  return links.length === 0 ? it : { ...it, sources: links };
+}
 
 const INR = (n: number) => `INR ${n.toLocaleString("en-IN")}`;
 const INR_FMT = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
-
 /** Live stays + flights fetched for the generated trip (see /api/trip-live). */
 type TripLiveStatus = "idle" | "loading" | "ready" | "error";
 interface TripLive {
@@ -73,12 +113,6 @@ function dayPlaceQuery(day: { title: string; activities: { title: string }[] }, 
 
 /** Marker illustration reused for every day node (Req 12.2, 17.5). */
 const LOCATION_PIN = illustration("location-pin");
-
-/** Default cost applied to a newly added activity (keeps totals coherent). */
-const NEW_ACTIVITY_COST = 1500;
-
-/** Per-click budget delta for the day-level refine control (Req 8.3). */
-const DAY_BUDGET_STEP = 1000;
 
 /** Deterministic, SSR-safe short-date formatter for a stored ISO `yyyy-mm-dd`.
  *  Parses only the stored string (NO Date.now()/new Date() of "now"), so server
@@ -131,13 +165,13 @@ function TripCover({
   travellers: number;
 }) {
   const query = destination.trim() || title.trim() || "travel destination";
-  const { url, alt } = useDestinationImage(query, 0);
+  const { url, srcSet, alt, onError } = useDestinationImage(query, 0, "cover");
   return (
     <header className="trip-cover reveal" aria-label="Trip overview">
       <div className="trip-cover__frame image-frame">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="trip-cover__img" src={url} alt={alt} />
+          <img className="trip-cover__img" srcSet={srcSet} src={url} alt={alt} onError={onError} />
         ) : (
           // Illustration/token fallback — never a broken image (Req 6.1 / 10.4).
           <div className="trip-cover__fallback" aria-hidden="true" />
@@ -179,16 +213,11 @@ function TripCover({
 /** Assistant conversation states (Req 11.3): idle -> generating -> done | error. */
 type AssistantStatus = "idle" | "generating" | "done" | "error";
 
-/** Selectable example prompts that seed the request input (Req 11.2). */
-const SUGGESTED_PROMPTS: ReadonlyArray<{ label: string; request: string; duration: string; vibe: string }> = [
-  { label: "A relaxed 4-day Goa trip for two", request: "Goa from Delhi", duration: "4 days", vibe: "Relaxed & beachside" },
-  { label: "5 days in Tokyo, food & culture", request: "Tokyo from Mumbai", duration: "5 days", vibe: "Culture & food" },
-  { label: "Budget week in Bali", request: "Bali from Delhi", duration: "7 days", vibe: "Budget adventure" },
-];
+/** Activity pricing request state (non-blocking indicator). */
+type PricingStatus = "idle" | "loading" | "done" | "failed";
 
 /** Base flight/stay fares used to seed and re-price the workspace. */
 const BASE_FLIGHT = 30000;
-const BASE_STAY = 20000;
 
 /** A day under edit: which day number and the draft title/theme fields. */
 type DayEdit = { day: number; title: string; theme: string };
@@ -200,6 +229,42 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   const [travellers, setTravellers] = useState(2);
   const [vibe, setVibe] = useState("Culture & food");
   const [state, setState] = useState<WorkspaceState | null>(null);
+  // Live fare inputs for the Pricing Engine. Seeded with the base fallback and
+  // replaced by the cheapest live SerpApi flight/stay once /api/trip-live
+  // returns, so the trip summary reflects real, current prices.
+  const [liveFare, setLiveFare] = useState({ perPerson: BASE_FLIGHT, stay: 0, stayRate: null as number | null, flightLive: false, stayLive: false, noFlight: false });
+  const liveFareRef = useRef(liveFare);
+  // Flight availability for the current route (Req 9, 10). "none" = no-airport or
+  // no live flights for the dates: no fares, flight line is 0, no BASE_FLIGHT.
+  const [flightMode, setFlightMode] = useState<"unknown" | "available" | "none">("unknown");
+  const [flightAvail, setFlightAvail] = useState<FlightAvailability | null>(null);
+  const noFlight = flightMode === "none";
+  // USD->INR rate, resolved ONCE (3s guard). "fallback" mode or a bad rate is
+  // ignored by resolveUsdInr and replaced by USD_INR_FALLBACK (C10).
+  const usdInrRef = useRef(USD_INR_FALLBACK);
+  const ratePromiseRef = useRef<Promise<number> | null>(null);
+  function getRate(): Promise<number> {
+    if (!ratePromiseRef.current) {
+      const fetched = fetch("/api/currency?from=USD&to=INR", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => resolveUsdInr(d).usdInr)
+        .catch(() => USD_INR_FALLBACK);
+      const guard = new Promise<number>((resolve) => { setTimeout(() => resolve(USD_INR_FALLBACK), 3000); });
+      ratePromiseRef.current = Promise.race([fetched, guard]).then((rate) => { usdInrRef.current = rate; return rate; });
+    }
+    return ratePromiseRef.current;
+  }
+  useEffect(() => { void getRate(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Activity pricing (one batched Bedrock request per generation).
+  const [pricing, setPricing] = useState<PricingStatus>("idle");
+  // Per-batch pricing: keys already requested, keys in flight, and how many succeeded.
+  const pricedKeysRef = useRef<Set<string>>(new Set());
+  const inFlightRef = useRef<Set<string>>(new Set());
+  const pricedOkRef = useRef(0);
+  const stateRef = useRef<WorkspaceState | null>(null);
+  const [openBasis, setOpenBasis] = useState<Record<string, boolean>>({});
+  const [openStops, setOpenStops] = useState<StopOpenMap>({});
   const [error, setError] = useState("");
   const [route, setRoute] = useState(emptyRouteState());
   const [status, setStatus] = useState<AssistantStatus>("idle");
@@ -212,36 +277,68 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   // Which day (number) currently has the Edit Day panel open, and which has the Know More modal open.
   const [editDayOpen, setEditDayOpen] = useState<number | null>(null);
   const [knowMoreDay, setKnowMoreDay] = useState<number | null>(null);
+  // Progressive, batch-wise generation state (trustworthy-itinerary). Task 7.3 adds the
+  // driver effect that requests the later batches; 7.5 renders `expanded`; 7.3 uses
+  // `retryBusy` and `focusDayRef` for the per-day Retry handlers.
+  const [batchState, dispatch] = useReducer(batchReducer, undefined, initBatchState);
+  const abortRef = useRef<AbortController | null>(null);
+  // Mount tracking. Declared with its effect right here, BEFORE the on-mount
+  // decision effect below, so mountedRef is already true when generate() starts.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      scheduleUnmountAbort(() => mountedRef.current, () => {
+        abortRef.current?.abort();
+        abortRef.current = null;
+        launchedRef.current = "";
+      });
+    };
+  }, []);
+  const [progressMsg, setProgressMsg] = useState("");
+  const [retryBusy, setRetryBusy] = useState<Record<string, boolean>>({});
+  const focusDayRef = useRef<number | null>(null);
+  const [limitNote, setLimitNote] = useState(false);
+  const [dateNote, setDateNote] = useState("");
   /** Add a real named place (from Edit Day suggestions) as a new activity on a day. */
   /** Remove an activity (place) from a day by index, then re-price. */
   function removeDayActivity(dayNum: number, index: number) {
     if (!state) return;
-    const days = state.itinerary.days.map((d) => {
-      if (d.day !== dayNum) return d;
-      const activities = d.activities.filter((_, i) => i !== index);
-      const total = activities.reduce((s, a) => s + a.cost, 0);
-      return { ...d, activities, total };
-    });
-    const itinerary: Itinerary = { ...state.itinerary, days, revised: true };
+    const itinerary: Itinerary = removeActivityAt(state.itinerary, dayNum, index);
     setState(reprice(itinerary));
-    carryEditToContext(itinerary);
+  }
+
+  /** Trip Assistant: apply a validated itinerary through the same state path as Edit Day. */
+  function applyAssistantProposal(next: Itinerary, _inverse: AppliedEdit) {
+    setState(reprice(next));
+  }
+
+  /** Trip Assistant undo: restore the previous itinerary. */
+  function restoreAssistantItinerary(prev: Itinerary) {
+    setState(reprice(prev));
   }
 
   function addNamedPlace(dayNum: number, placeName: string) {
     if (!state) return;
-    const days = state.itinerary.days.map((d) => {
-      if (d.day !== dayNum) return d;
-      const activity: Activity = { time: "Flexible", title: placeName, description: "Added from Edit Day suggestions.", cost: NEW_ACTIVITY_COST };
-      const activities = [...d.activities, activity];
-      const total = activities.reduce((s, a) => s + a.cost, 0);
-      return { ...d, activities, total };
-    });
-    const itinerary: Itinerary = { ...state.itinerary, days, revised: true };
+    const dest = route.destination || sharedContext.context.destination || "";
+    const base: Activity = { time: "Flexible", title: placeName, description: "Added from Edit Day suggestions.", cost: 0 };
+    const itinerary: Itinerary = appendActivity(
+      state.itinerary,
+      dayNum,
+      withEstimatedActivity(base, dest, usdInrRef.current, costOpts()),
+    );
     setState(reprice(itinerary));
-    carryEditToContext(itinerary);
   }
-  // The single Shared_Trip_Context carried across pages (realtime-ai task 11.1).
+
+    // The single Shared_Trip_Context carried across pages (realtime-ai task 11.1).
   const sharedContext = useTripContext();
+  // Travellers and rooms used for every price, criteria, and request (Req 5).
+  const ctxTravellers = sharedContext.context.travellers;
+  const travellersCount = Math.max(1, Math.trunc(Number(ctxTravellers ? ctxTravellers.adults + ctxTravellers.children : travellers)) || 1);
+  const ctxRooms = Number((sharedContext.context as { rooms?: unknown }).rooms);
+  const roomsDerived = !(Number.isInteger(ctxRooms) && ctxRooms >= 1);
+  const roomsCount = roomsDerived ? Math.max(1, Math.ceil(travellersCount / 2)) : ctxRooms;
   // Deterministic, idempotent gamification state for this planning session.
   const [xp, setXp] = useState<XpState>(emptyXp);
   function earn(event: XpEvent) {
@@ -257,7 +354,16 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
         ? crypto.randomUUID()
         : `draft-${Date.now()}`;
   }
-  const [saveMsg, setSaveMsg] = useState("");
+  const [toast, setToast] = useState<ToastModel | null>(null);
+  // Bumped per generate(): resets the Trip Assistant transcript and undo history.
+  const assistantGenRef = useRef(0);
+  const toastIdRef = useRef(0);
+  const lastSavedFpRef = useRef<string | null>(null);
+  function notify(outcome: SaveOutcome) {
+    const next = toastForSave(toastIdRef.current, outcome);
+    toastIdRef.current = next.id;
+    setToast(next);
+  }
   const [saving, setSaving] = useState(false);
   // Live stays + flights for the generated trip (auto-fetched once ready).
   const [live, setLive] = useState<TripLive>(EMPTY_LIVE);
@@ -282,15 +388,45 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
    * refuses to persist without an owner.
    */
   async function saveTrip() {
+    // Partial trips save as drafts; pending days are settled so none are persisted as pending.
+    const savedItinerary = state ? settlePending(state.itinerary) : null;
+    const savedStatus = state && isComplete(state.itinerary) ? "ready" : "draft";
     if (!state || saving) return;
+    const fp = saveFingerprint({ name: state.itinerary.title, status: savedStatus, itinerary: savedItinerary ?? state.itinerary });
+    if (shouldSkipSave(lastSavedFpRef.current, fp)) {
+      notify({ kind: "unchanged" });
+      return;
+    }
     const owner = currentOwner();
     if (!owner) {
-      setSaveMsg("Sign in to save this trip to your account.");
-      window.setTimeout(() => router.push("/account"), 1200);
+      // Guests (no signed-in owner) save to the device-local store so Save always works.
+      setSaving(true);
+      try {
+        saveLocal({
+          owner: "@local",
+          clientDraftId: draftIdRef.current,
+          name: state.itinerary.title,
+          status: savedStatus,
+          payload: {
+            destination: route.destination || sharedContext.context.destination || "",
+            origin: route.origin || sharedContext.context.origin || "",
+            days: state.itinerary.days.length,
+            totalCost: state.itinerary.totalCost,
+            pricing: state.pricing,
+            itinerary: savedItinerary ?? state.itinerary,
+          },
+        });
+        earn("trip_confirmed");
+        lastSavedFpRef.current = fp;
+        notify({ kind: "saved", scope: "device" });
+      } catch {
+        notify({ kind: "failed" });
+      } finally {
+        setSaving(false);
+      }
       return;
     }
     setSaving(true);
-    setSaveMsg("");
     try {
       const res = await fetch("/api/trips", {
         method: "POST",
@@ -299,26 +435,27 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
           owner,
           clientDraftId: draftIdRef.current,
           name: state.itinerary.title,
-          status: "ready",
+          status: savedStatus,
           payload: {
             destination: route.destination || sharedContext.context.destination || "",
             origin: route.origin || sharedContext.context.origin || "",
             days: state.itinerary.days.length,
             totalCost: state.itinerary.totalCost,
             pricing: state.pricing,
-            itinerary: state.itinerary,
+            itinerary: savedItinerary ?? state.itinerary,
           },
         }),
       });
       const data = (await res.json()) as { persisted?: boolean; error?: string };
       if (res.ok && data.persisted) {
         earn("trip_confirmed");
-        setSaveMsg("Saved to your account. Find it under My trips.");
+        lastSavedFpRef.current = fp;
+        notify({ kind: "saved", scope: "account" });
       } else {
-        setSaveMsg(data.error || "Sign in to save this trip to your account.");
+        notify({ kind: "failed", reason: data.error || "Sign in to save this trip to your account." });
       }
     } catch {
-      setSaveMsg("Could not save right now. Please try again.");
+      notify({ kind: "failed" });
     } finally {
       setSaving(false);
     }
@@ -381,8 +518,37 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       // call the LLM again here.
       if (stored && Array.isArray(stored.days) && stored.days.length > 0) {
         setShowEmptyStart(false);
-        setState(reprice(stored));
-        setStatus("done");
+        // Pending days: continue this session's generation (driver effect), or
+        // settle them as withheld (with Retry) when no generation is active.
+        let shown: Itinerary = stored;
+        const pendingDays = stored.completeness?.pendingDays;
+        if (Array.isArray(pendingDays) && pendingDays.length > 0) {
+          const resumeKey = tripKeyOf({
+            ...sharedContext.context,
+            durationDays: stored.completeness?.requestedDays,
+            interests: sharedContext.context.interests ?? [vibe],
+          });
+          if (isGenerationActive(resumeKey)) {
+            dispatch({ type: "resume", tripKey: resumeKey, itinerary: stored });
+          } else {
+            shown = settlePending(stored);
+            sharedContext.setItinerary(shown);
+          }
+        }
+        if (shown.costUnit === "inr") {
+          // Already normalised (and possibly AI-priced): show exactly as stored.
+          setState(reprice(shown));
+          setStatus("done");
+        } else {
+          // Legacy itinerary: convert to INR exactly once, then price it.
+          void (async () => {
+            const it = await prepareItinerary(shown);
+            setState(reprice(it));
+            sharedContext.setItinerary(it);
+            setStatus("done");
+            startPricing(it, sharedContext.context.destination ?? "");
+          })();
+        }
         if (sharedContext.context.destination || sharedContext.context.origin) {
           setRoute((prev) => ({
             ...prev,
@@ -415,22 +581,6 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   ]);
 
   /**
-   * Deterministic OFFLINE fallback — the original synchronous local build via
-   * `recomputeWorkspace`. Kept verbatim so the planner never breaks when the
-   * shared context is empty or `/api/ai` (Bedrock) is unreachable (Req 10.3).
-   */
-  function buildLocal(destination: string, days: number): WorkspaceState {
-    return recomputeWorkspace({
-      destination,
-      startDate: new Date().toISOString().slice(0, 10),
-      resolvedDays: days,
-      vibes: [vibe],
-      flight: BASE_FLIGHT,
-      stay: BASE_STAY,
-    });
-  }
-
-  /**
    * Generate the day-by-day itinerary. When the Shared_Trip_Context carries a
    * destination, ask `POST /api/ai` (action "itinerary") to generate it spanning
    * the captured duration (Req 8.1, 8.2); the server already degrades to the
@@ -461,10 +611,77 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     }
   }
 
+  /** Restamp to the chosen dates (C1), then convert to INR exactly once. */
+  async function prepareItinerary(it: Itinerary): Promise<Itinerary> {
+    if (it.costUnit === "inr") return it;
+    const rate = await getRate();
+    const start = sharedContext.dates.departDate;
+    // Batch itineraries (they carry `completeness`) are already stamped by the server.
+    const stamped = typeof start === "string" && !it.completeness ? restampItineraryDates(it, start) : it;
+    return normalizeItineraryToInr(stamped, rate, costOpts());
+  }
+
+  /** Trip context for classification and caps: origin, destination and budget level. */
+  function costOpts() {
+    return {
+      origin: (route.origin || sharedContext.context.origin || "").trim(),
+      destination: (route.destination || sharedContext.context.destination || "").trim(),
+      budgetLevel: resolveBudgetLevel(sharedContext.context.budgetLevel),
+    };
+  }
+
+  /** Post one batched pricing request per generation; failures keep the estimates silently. */
+  function startPricing(it: Itinerary, destination: string) {
+    const opts = { ...costOpts(), destination: destination.trim() || costOpts().destination };
+    const req = toPricerRequest(destination, it, opts);
+    if (req.activities.length === 0 || !destination.trim()) return;
+    const key = req.activities.map((a) => a.id).join("|");
+    if (pricedKeysRef.current.has(key)) return;
+    pricedKeysRef.current.add(key);
+    inFlightRef.current.add(key);
+    setPricing("loading");
+    // Settle one request: status stays loading until every in-flight request ends.
+    const settle = (ok: boolean) => {
+      if (!inFlightRef.current.delete(key)) return;
+      if (ok) pricedOkRef.current += 1;
+      if (inFlightRef.current.size === 0) setPricing(pricedOkRef.current > 0 ? "done" : "failed");
+    };
+    const noFlightRoute = !!opts.origin && !!opts.destination
+      && isNoFlightRoute(classifyFlightAvailability(opts.origin, opts.destination));
+    const body = {
+      destination: req.destination,
+      activities: req.activities.slice(0, MAX_ACTIVITIES),
+      budgetLevel: opts.budgetLevel,
+      cityTier: resolveCityTier(opts.destination),
+      origin: opts.origin,
+      ...(noFlightRoute ? { routeFare: true } : {}),
+    };
+    fetch("/api/activity-prices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then((r) => { if (!r.ok) throw new Error("pricing " + r.status); return r.json(); })
+      .then((data: { prices?: PriceResult[]; routeFare?: unknown }) => {
+        if (!inFlightRef.current.has(key)) return;
+        const cur = stateRef.current;
+        if (!cur || !Array.isArray(data.prices)) { settle(false); return; }
+        const next = applyRouteFare(applyPriceResults(cur.itinerary, data.prices, opts), data.routeFare);
+        const nextState = reprice(next);
+        setState(nextState);
+        stateRef.current = nextState;
+        sharedContext.setItinerary(next);
+        settle(true);
+      })
+      .catch(() => { settle(false); });
+  }
+
   async function generate() {
+    assistantGenRef.current += 1;
     setStatus("generating");
     setError("");
     setEditing(null);
+    lastSavedFpRef.current = null;
 
     // Prefer the shared context destination; otherwise parse the free-text box.
     const r = parseRoute(request, emptyRouteState());
@@ -483,8 +700,15 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       return;
     }
 
-    const days =
-      sharedContext.context.durationDays ?? durationFromText(duration) ?? 4;
+    const trip = resolveTripLength({
+      field: duration,
+      contextDays: sharedContext.context.durationDays,
+      startDate: sharedContext.dates.departDate,
+      endDate: sharedContext.dates.returnDate,
+    });
+    const days = trip.days;
+    setDateNote(dateSpanNotice(trip.dateSpanDays, days) ?? "");
+    setLimitNote(trip.capped);
 
     // Build the itinerary-request context from the shared context, falling back
     // to the local inputs for any field the shared context does not carry. Never
@@ -496,60 +720,90 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       interests: sharedContext.context.interests ?? [vibe],
     };
 
+    const tripKey = tripKeyOf({ ...context, durationDays: days });
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    pricedKeysRef.current = new Set();
+    inFlightRef.current = new Set();
+    pricedOkRef.current = 0;
+    setPricing("idle");
+    focusDayRef.current = null;
+    setRetryBusy({});
+    setProgressMsg("Verifying places on Google Maps…");
+    const s0 = batchReducer(initBatchState(), { type: "start", tripKey, totalDays: days });
+    dispatch({ type: "start", tripKey, totalDays: days });
+    if (batchState.tripKey && batchState.tripKey !== tripKey) endGeneration();
+    beginGeneration(tripKey);
+    const slot = nextSlot(s0);
+    if (!slot) {
+      setError("We could not start planning this trip. Please try again.");
+      setStatus("error");
+      return;
+    }
+
+    // Nothing verified for batch 1: no plan is shown and nothing is invented.
+    const showFailure = (resp: ReturnType<typeof unavailable>) => {
+      dispatch({ type: "response", slotId: slot.id, tripKey, resp });
+      setState(null);
+      setProgressMsg("");
+      setError("");
+      setShowEmptyStart(false);
+      setStatus("error");
+    };
+
+    // Silent only when superseded by a newer generate() or really unmounted.
+    const exitOf = () => classifyExit({
+      aborted: controller.signal.aborted,
+      generationActive: isGenerationActive(tripKey),
+      superseded: abortRef.current !== controller,
+      unmounted: !mountedRef.current,
+    });
+
     try {
-      const res = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "itinerary", context }),
-      });
-      if (!res.ok) throw new Error(`AI itinerary failed: ${res.status}`);
-      const data = (await res.json()) as { itinerary: Itinerary };
-      // Re-price the AI itinerary through the shared Pricing Engine so the trip
-      // summary stays in lockstep with the rendered timeline.
-      setState(reprice(data.itinerary));
-      sharedContext.setItinerary(data.itinerary);
-      carryTripDatesToContext(data.itinerary);
+      const startDate = sharedContext.dates.departDate;
+      const req = buildRequest(s0, slot, { ...context, durationDays: days }, typeof startDate === "string" ? startDate : undefined);
+      dispatch({ type: "request", slotId: slot.id });
+      const resp = await postBatch(req, controller.signal);
+      const exit1 = exitOf();
+      if (exit1 === "silent") return;
+      if (exit1 === "failure") { showFailure(unavailable(slot, "unavailable")); return; }
+      if (!resp || resp.source !== "model" || resp.days.length === 0) {
+        showFailure(resp && resp.source === "unavailable" ? resp : unavailable(slot, resp ? "unverified" : "unavailable"));
+        return;
+      }
+      // Batch 1 only: convert to INR once (the server already stamped the dates),
+      // then merge so completeness lists the later days as pending.
+      const batchOnly = withSources(
+        await prepareItinerary({
+          title: `Trip to ${destination}`,
+          totalCost: 0,
+          days: resp.days, currency: "INR", costUnit: "inr",
+          completeness: { requestedDays: days, verifiedDays: resp.verifiedDays, withheldDays: resp.withheldDays },
+        }),
+        resp.sources ?? [],
+      );
+      const exit2 = exitOf();
+      if (exit2 === "silent") return;
+      if (exit2 === "failure") { showFailure(unavailable(slot, "unavailable")); return; }
+      const responseEvent = { type: "response", slotId: slot.id, tripKey, resp } as const;
+      const afterBatch1 = batchReducer(batchReducer(batchReducer(s0, { type: "request", slotId: slot.id }), responseEvent), { type: "auto-retry" });
+      const itin = mergeBatch(null, batchOnly, { ...resp, withheldDays: afterBatch1.withheld }, days);
+      dispatch(responseEvent);
+      dispatch({ type: "auto-retry" });
+      setShowEmptyStart(false);
+      setState(reprice(itin));
+      sharedContext.setItinerary(itin);
+      carryTripDatesToContext(itin);
       earn("itinerary_generated");
+      const left = days - itin.days.length;
+      setProgressMsg(left > 0 ? `Verified ${itin.days.length} of ${days} days so far.` : "");
       setStatus("done");
       if (!resultsOnly) { router.push("/itinerary"); return; }
     } catch {
-      // Graceful offline fallback to the existing local synchronous build.
-      try {
-        const local = buildLocal(destination, days);
-        if (
-          !local.itinerary ||
-          !Array.isArray(local.itinerary.days) ||
-          local.itinerary.days.length === 0
-        ) {
-          // The fallback produced nothing usable: show the explicit
-          // Empty_Start_State with an error rather than fabricating content.
-          throw new Error("empty local build");
-        }
-        setShowEmptyStart(false);
-        setState(local);
-        sharedContext.setItinerary(local.itinerary);
-        carryTripDatesToContext(local.itinerary);
-        earn("itinerary_generated");
-        setStatus("done");
-        if (!resultsOnly) { router.push("/itinerary"); return; }
-      } catch {
-        // Even the offline fallback is unavailable: do NOT fabricate an
-        // itinerary. Surface the start prompt with an error indication (R6.8).
-        setState(null);
-        setError(
-          "We couldn't build your plan right now. Try starting again in a moment.",
-        );
-        setStatus("error");
-        setShowEmptyStart(true);
-      }
+      if (exitOf() === "silent") return;
+      showFailure(unavailable(slot, "unavailable"));
     }
-  }
-
-  /** Populate the planner inputs from a suggested prompt, then generate. */
-  function applyPrompt(p: (typeof SUGGESTED_PROMPTS)[number]) {
-    setRequest(p.request);
-    setDuration(p.duration);
-    setVibe(p.vibe);
   }
 
   /**
@@ -560,25 +814,16 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
    * invariant (activities subtotal always equals the rendered itinerary).
    */
   function reprice(itinerary: Itinerary): WorkspaceState {
-    const activities = itinerary.days.reduce((s, d) => s + d.total, 0);
-    const pricing = calculateTripPricing({ flight: BASE_FLIGHT, stay: BASE_STAY, activities });
-    return { itinerary: { ...itinerary, totalCost: activities }, pricing };
+    const f = liveFareRef.current;
+    const pricing = computeSummary({
+      itinerary, stayInr: f.stay, flightPerPerson: f.perPerson, travellers: travellersCount, noFlight: f.noFlight,
+    });
+    return { itinerary, pricing };
   }
 
   /** Begin editing a day's title/theme. */
   function startEdit(day: number, title: string, theme: string) {
     setEditing({ day, title, theme });
-  }
-
-  /**
-   * Carry an itinerary edit back into the single Shared_Trip_Context so any
-   * subsequent page reads the updated values (Req 4.7). We only mirror fields
-   * the edit actually touched — the destination and the resolved duration
-   * (days) — through the provider's shallow-merge `patchContext`; no other
-   * context field is fabricated or disturbed.
-   */
-  function carryEditToContext(itinerary: Itinerary) {
-    sharedContext.patchContext({ durationDays: itinerary.days.length });
   }
 
   /** Commit the draft title/theme to the itinerary and re-render the timeline. */
@@ -589,48 +834,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     );
     const itinerary: Itinerary = { ...state.itinerary, days, revised: true };
     setState(reprice(itinerary));
-    carryEditToContext(itinerary);
     setEditing(null);
-  }
-
-  /**
-   * Adjust a single day's budget via `refineItinerary` from the itinerary
-   * engine. The engine revises ONLY the targeted day's total (clamped >= 0) and
-   * recomputes the trip total, leaving every unedited day byte-identical — i.e.
-   * the edit never regenerates the rest of the itinerary (Req 8.3). We then
-   * re-price through the shared Pricing Engine and mirror the edit back into the
-   * Shared_Trip_Context (Req 4.7).
-   */
-  function refineDay(day: number, budgetDelta: number) {
-    if (!state) return;
-    const itinerary = refineItinerary(state.itinerary, day, budgetDelta);
-    setState(reprice(itinerary));
-    carryEditToContext(itinerary);
-    earn("day_refined");
-  }
-
-  /**
-   * Append a new activity to a day: recompute that day's total (sum of its
-   * activities) and re-price the trip so the summary aside stays consistent
-   * (Req 12.4). This is a real, immutable mutation of the rendered itinerary.
-   */
-  function addActivity(day: number) {
-    if (!state) return;
-    const days = state.itinerary.days.map((d) => {
-      if (d.day !== day) return d;
-      const activity: Activity = {
-        time: "17:00",
-        title: `Free time in ${route.destination || "town"}`,
-        description: "An added activity you can tailor further.",
-        cost: NEW_ACTIVITY_COST,
-      };
-      const activities = [...d.activities, activity];
-      const total = activities.reduce((s, a) => s + a.cost, 0);
-      return { ...d, activities, total };
-    });
-    const itinerary: Itinerary = { ...state.itinerary, days, revised: true };
-    setState(reprice(itinerary));
-    carryEditToContext(itinerary);
   }
 
   /**
@@ -643,7 +847,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     if (!state) return;
     const base = new Date();
     const days = state.itinerary.days.map((d, idx) => {
-      const dt = new Date(base.getTime() + idx * 86400000);
+      const dt = typeof d.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && !Number.isNaN(Date.parse(d.date)) ? new Date(d.date) : new Date(base.getTime() + idx * 86400000);
       return {
         day: d.day,
         date: dt.toISOString().slice(0, 10),
@@ -686,10 +890,10 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     const checkOut = (days[days.length - 1]?.date || "").trim();
     const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
     const staysC = isDate(checkIn) && isDate(checkOut) && checkOut > checkIn && dest
-      ? serializeCriteria({ category: "stays", destination: dest, checkIn, checkOut, guests: travellers, rooms: 1 })
+      ? serializeCriteria({ category: "stays", destination: dest, checkIn, checkOut, guests: travellersCount, rooms: roomsCount })
       : "";
     const flightsC = isDate(checkIn) && isDate(checkOut) && checkOut > checkIn && dest && orig
-      ? serializeCriteria({ category: "flights", tripType: "round-trip", origin: orig, destination: dest, departDate: checkIn, returnDate: checkOut, travellers, cabin: "economy" })
+      ? serializeCriteria({ category: "flights", tripType: "round-trip", origin: orig, destination: dest, departDate: checkIn, returnDate: checkOut, travellers: travellersCount, cabin: "economy" })
       : "";
     const staysHref = staysC ? `/stays?${staysC}` : "/stays";
     const flightsHref = flightsC ? `/flights?${flightsC}` : "/flights";
@@ -698,33 +902,48 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return 1;
       return Math.max(1, Math.round((b - a) / 86_400_000));
     })();
-    const staysCriteria = dest ? { destination: dest, checkIn, checkOut, adults: travellers, rooms: 1 } : null;
+    const staysCriteria = dest ? { destination: dest, checkIn, checkOut, adults: travellersCount, rooms: roomsCount } : null;
     const flightsCriteria: FlightBookingCriteria | null = (dest && orig)
-      ? { origin: orig, destination: dest, tripType: "round-trip", departDate: checkIn, returnDate: checkOut, cabin: "economy", travellers }
+      ? { origin: orig, destination: dest, tripType: "round-trip", departDate: checkIn, returnDate: checkOut, cabin: "economy", travellers: travellersCount }
       : null;
+    // Immediate, network-free classification (C7: only when both texts are non-blank).
+    if (orig && dest) {
+      const pre = classifyFlightAvailability(orig, dest);
+      if (pre === "no-airport") { setFlightMode("none"); setFlightAvail("no-airport"); }
+    } else {
+      setFlightMode("unknown"); setFlightAvail(null);
+    }
     if (!dest || !isDate(checkIn) || !isDate(checkOut)) {
       setLive({ ...EMPTY_LIVE, status: "ready", staysHref, flightsHref,
         note: "Add your travel dates and route in the chat to see live stays and flights for this trip." });
       return;
     }
-    const key = `${orig}|${dest}|${checkIn}|${checkOut}|${travellers}`;
+    const key = `${orig}|${dest}|${checkIn}|${checkOut}|${travellersCount}`;
     if (liveKeyRef.current === key) return;
     liveKeyRef.current = key;
+    // Route changed: forget the previous classification and refetch (Req 10.10).
+    if (orig && dest && classifyFlightAvailability(orig, dest) !== "no-airport") { setFlightMode("unknown"); setFlightAvail(null); }
     let cancelled = false;
     setLive((pv) => ({ ...pv, status: "loading", staysHref, flightsHref, note: null, nights, staysCriteria, flightsCriteria }));
-    const qs = new URLSearchParams({ origin: orig, destination: dest, checkIn, checkOut, travellers: String(travellers), cabin: "economy", tripType: "round-trip" });
+    const qs = new URLSearchParams({ origin: orig, destination: dest, checkIn, checkOut, travellers: String(travellersCount), cabin: "economy", tripType: "round-trip" });
     fetch(`/api/trip-live?${qs.toString()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data: {
         stays?: { status: string; provider?: string; currency?: string; checkedAt?: string; hotels?: LiveHotel[]; error?: string };
-        flights?: { status: string; provider?: string; currency?: string; checkedAt?: string; insights?: PriceInsights | null; flights?: LiveFlight[]; error?: string };
+        flights?: { status: string; provider?: string; currency?: string; checkedAt?: string; insights?: PriceInsights | null; flights?: LiveFlight[]; error?: string } | null;
+        flightAvailability?: FlightAvailability;
       }) => {
         if (cancelled) return;
+        // Server classification is authoritative; flights is null for "no-airport".
+        const av: FlightAvailability = data.flightAvailability === "no-airport" || data.flightAvailability === "no-flights"
+          ? data.flightAvailability : "available";
+        setFlightAvail(av);
+        setFlightMode(isNoFlightRoute(av) ? "none" : "available");
         const hotels = data.stays?.status === "live" ? (data.stays.hotels ?? []) : [];
         const fl = data.flights?.status === "live" ? (data.flights.flights ?? []) : [];
         const notes: string[] = [];
         if (hotels.length === 0) notes.push("live stays");
-        if (fl.length === 0) notes.push("live flights");
+        if (fl.length === 0 && !isNoFlightRoute(av)) notes.push("live flights");
         const checkedAt = data.stays?.checkedAt || data.flights?.checkedAt || new Date().toISOString();
         setLive({
           status: "ready", stays: hotels, flights: fl, staysHref, flightsHref,
@@ -739,7 +958,49 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       })
       .catch(() => { if (!cancelled) setLive((pv) => ({ ...pv, status: "error", staysHref, flightsHref, note: "Live prices are unavailable right now. Open the full search to try again." })); });
     return () => { cancelled = true; };
-  }, [state, route.destination, route.origin, travellers, sharedContext.context.destination, sharedContext.context.origin]);
+  }, [state, route.destination, route.origin, travellersCount, roomsCount, sharedContext.context.destination, sharedContext.context.origin]);
+
+  // Feed the cheapest live flight and stay into the Pricing Engine (real prices),
+  // falling back to the base estimate when a live result is unavailable. Only INR
+  // prices are used so totals never mix currencies. State is updated only when
+  // pricing actually changes, so the live effect cannot loop.
+  useEffect(() => {
+    // Keep noFlight in the fare ref even before live data is ready (immediate
+    // no-airport classification), and restore the base fare when flights resume.
+    if (liveFareRef.current.noFlight !== noFlight) {
+      const synced = noFlight
+        ? { ...liveFareRef.current, perPerson: 0, flightLive: false, noFlight: true }
+        : { ...liveFareRef.current, perPerson: BASE_FLIGHT, flightLive: false, noFlight: false };
+      liveFareRef.current = synced;
+      setLiveFare(synced);
+    }
+    if (live.status === "ready") {
+      const inr = (c: string) => !c || c.toUpperCase() === "INR";
+      const fl = inr(live.flightsCurrency) ? live.flights.map((x) => x.farePerPerson).filter((n) => Number.isFinite(n) && n > 0) : [];
+      const st = inr(live.staysCurrency) ? live.stays.map((x) => x.ratePerNight).filter((n) => Number.isFinite(n) && n > 0) : [];
+      const next = {
+        // BASE_FLIGHT fallback only when the route has flights (Req 10.4, 10.5).
+        perPerson: noFlight ? 0 : fl.length ? Math.round(Math.min(...fl)) : BASE_FLIGHT,
+        stay: st.length ? Math.round(Math.min(...st) * Math.max(1, live.nights) * roomsCount) : 0,
+        stayRate: st.length ? Math.round(Math.min(...st)) : null,
+        flightLive: !noFlight && fl.length > 0,
+        stayLive: st.length > 0,
+        noFlight,
+      };
+      const prev = liveFareRef.current;
+      if (prev.perPerson !== next.perPerson || prev.stay !== next.stay || prev.stayRate !== next.stayRate || prev.flightLive !== next.flightLive || prev.stayLive !== next.stayLive || prev.noFlight !== next.noFlight) {
+        liveFareRef.current = next;
+        setLiveFare(next);
+      }
+    }
+    setState((s) => {
+      if (!s) return s;
+      const n = reprice(s.itinerary);
+      const a = s.pricing, b = n.pricing;
+      return a.flight === b.flight && a.stay === b.stay && a.activities === b.activities && a.finalPayable === b.finalPayable ? s : n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, travellersCount, roomsCount, noFlight]);
 
   const resultsRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -770,8 +1031,195 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     return () => observer.disconnect();
   }, [state]);
 
+  stateRef.current = state;
+  const ctxRef = useRef(sharedContext);
+  ctxRef.current = sharedContext;
+  // Per-day Misc (web prices) line. Empty destination => no days => no request.
+  const miscDestination = (route.destination || sharedContext.context.destination || "").trim();
+  const miscTravellers = Math.min(50, Math.max(1, Math.trunc(Number(travellersCount)) || 1));
+  const miscDays = useMemo(
+    () => (miscDestination ? (state?.itinerary?.days ?? []) : []),
+    [state?.itinerary?.days, miscDestination],
+  );
+  const misc = useMiscEstimates(miscDays, miscDestination, miscTravellers);
+
+  // Cost breakdown (Req 1.5-1.8, 4.x). Built from already-fetched data only.
+  const [includeRouteFare, setIncludeRouteFare] = useState(false);
+  const [costOpen, setCostOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const filter = useMemo(
+    () => filterItinerary(state ? state.itinerary : ({ days: [] } as unknown as Itinerary), searchQuery),
+    [state, searchQuery],
+  );
+  const costBreakdown = useMemo(() => {
+    if (!state) return null;
+    const miscSum = Object.values(misc).reduce(
+      (acc, m) => (m !== "loading" && m.status === "ok" ? acc + m.sumInr : acc),
+      0,
+    );
+    const rf = state.itinerary.routeFare;
+    const stops = state.itinerary.days.flatMap((x) => x.activities);
+    return buildCostBreakdown({
+      travellers: travellersCount,
+      travellersSource: ctxTravellers ? "context" : "state",
+      rooms: roomsCount,
+      roomsDerived,
+      nights: live.nights,
+      hasFlights: !noFlight,
+      flight: noFlight ? null : {
+        amountInr: liveFare.flightLive ? liveFare.perPerson : null,
+        basis: "per-person",
+        source: "Live flight search",
+      },
+      stay: { rateInr: liveFare.stayRate, source: "Live hotel search" },
+      activities: {
+        amountInr: state.pricing.activities,
+        webPricedCount: priceSourceCounts(state.itinerary).web,
+        unpricedStopCount: unpricedStopCount(stops),
+      },
+      routeFare: rf
+        ? { minInr: rf.minInr, maxInr: rf.maxInr, mode: rf.mode, source: rf.sourceHost, selected: includeRouteFare }
+        : null,
+      misc: miscSum > 0 ? { sumInr: miscSum, source: "Web prices" } : null,
+      discount: state.pricing.discount > 0 ? { code: state.pricing.coupon, amountInr: state.pricing.discount } : null,
+    });
+  }, [state, misc, travellersCount, ctxTravellers, roomsCount, roomsDerived, live.nights, noFlight, liveFare, includeRouteFare]);
+  // Key of the last slot attempt the driver launched (guards StrictMode double effects).
+  const launchedRef = useRef("");
+  // The Retry the user asked for: days to restore and the busy-flag key.
+  const retryRef = useRef<{ days: number[]; busyKey: string } | null>(null);
+
+  /** Trip context of the running generation (same shape generate() used for its key). */
+  function batchContext(totalDays: number): TripContext {
+    const c = ctxRef.current.context;
+    return { ...c, durationDays: totalDays, interests: c.interests ?? [vibe] };
+  }
+
+  // Driver (slots 2.. and retries): batch 1 is requested by generate(). One
+  // request at a time; the reducer ignores stale responses. The request is
+  // cancelled by the unmount effect below (and by a new generate()), not on every
+  // state change, because the "request" dispatch itself changes batchState.
+  useEffect(() => {
+    if (!resultsOnly) return; // /trip hands over to /itinerary after batch 1
+    const slot = nextSlot(batchState);
+    if (!slot || !isGenerationActive(batchState.tripKey)) return;
+    const launchKey = `${batchState.tripKey}|${slot.id}|${slot.attempts}`;
+    if (launchedRef.current === launchKey) return;
+    launchedRef.current = launchKey;
+    const tripKey = batchState.tripKey;
+    const total = batchState.totalDays;
+    const lastDay = slot.fromDay + slot.dayCount - 1;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    dispatch({ type: "request", slotId: slot.id });
+    setProgressMsg(progressText("verifying", slot.fromDay, lastDay));
+    void (async () => {
+      const ctx = batchContext(total);
+      const startDate = ctxRef.current.dates.departDate;
+      const req = buildRequest(batchState, slot, ctx, typeof startDate === "string" ? startDate : undefined);
+      let resp: Awaited<ReturnType<typeof postBatch>> = null;
+      try { resp = await postBatch(req, controller.signal); } catch { resp = null; }
+      if (controller.signal.aborted || !isGenerationActive(tripKey)) return;
+      const event = resp
+        ? ({ type: "response", slotId: slot.id, tripKey, resp } as const)
+        : ({ type: "network-error", slotId: slot.id, tripKey } as const);
+      const after = batchReducer(batchReducer(batchReducer(batchState, { type: "request", slotId: slot.id }), event), { type: "auto-retry" });
+      dispatch(event);
+      dispatch({ type: "auto-retry" });
+      const batchDays = resp && resp.source === "model" ? resp.days : [];
+      try {
+        const base = stateRef.current?.itinerary ?? ctxRef.current.itinerary ?? null;
+        const prevWithheld = base?.completeness?.withheldDays ?? [];
+        const withheldChanged = after.withheld.join(",") !== prevWithheld.join(",");
+        if (base && (batchDays.length > 0 || withheldChanged)) {
+          const dest = (ctx.destination ?? "").trim();
+          const batchOnly = await prepareItinerary({
+            title: base.title,
+            totalCost: 0,
+            days: batchDays, currency: "INR", costUnit: "inr",
+            completeness: { requestedDays: total, verifiedDays: batchDays.map((d) => d.day), withheldDays: after.withheld },
+          });
+          if (controller.signal.aborted || !isGenerationActive(tripKey)) return;
+          const itin = mergeBatch(base, batchOnly, { verifiedDays: batchDays.map((d) => d.day), withheldDays: after.withheld }, total);
+          setState(reprice(itin));
+          ctxRef.current.setItinerary(itin);
+        }
+      } catch {
+        // The batch outcome is already recorded in the reducer; keep what is shown.
+      }
+      const upcoming = nextSlot(after);
+      const restoredRange = batchDays.length > 0
+        ? [Math.min(...batchDays.map((d) => d.day)), Math.max(...batchDays.map((d) => d.day))]
+        : null;
+      if (upcoming) setProgressMsg(progressText("verifying", upcoming.fromDay, upcoming.fromDay + upcoming.dayCount - 1));
+      else if (restoredRange) setProgressMsg(progressText("added", restoredRange[0], restoredRange[1]));
+      else if (after.withheld.length > 0) setProgressMsg(progressText("withheld", after.withheld[0], after.withheld[after.withheld.length - 1]));
+      else setProgressMsg("");
+      const pend = retryRef.current;
+      if (pend && !upcoming) {
+        const restored = pend.days.find((d) => after.verified.includes(d));
+        if (restored !== undefined) focusDayRef.current = restored;
+        retryRef.current = null;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchState]);
+
+  // Unmount (or leaving the page): cancel the outstanding request. The session
+  // marker is kept so returning to /itinerary resumes; a new trip ends it in generate().
+  // (The mount-aware abort effect lives next to abortRef; endGeneration is NOT
+  // called on unmount.)
+
+  // Clear the per-run busy flags once nothing is running any more.
+  useEffect(() => {
+    if (batchState.phase !== "running") {
+      retryRef.current = null;
+      setRetryBusy((pv) => (Object.keys(pv).length === 0 ? pv : {}));
+    }
+  }, [batchState.phase]);
+
+  // Move focus to the first restored day's heading after a successful Retry.
+  useEffect(() => {
+    const day = focusDayRef.current;
+    if (day === null || typeof document === "undefined") return;
+    const el = document.getElementById(`day-heading-${day}`);
+    if (el) {
+      focusDayRef.current = null;
+      el.focus();
+    }
+  }, [state, batchState]);
+
+  /**
+   * Retry the withheld days from..to (wired to the placeholder and failure Retry
+   * buttons by task 7.5). Re-enters the batch driver; verified days are untouched.
+   */
+  function retryRange(from: number, to: number) {
+    const it = stateRef.current?.itinerary ?? ctxRef.current.itinerary ?? null;
+    if (!it) return;
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    const total = it.completeness?.requestedDays ?? it.days.length;
+    let key = batchState.tripKey;
+    if (!key || batchState.totalDays === 0) {
+      key = tripKeyOf(batchContext(total));
+      dispatch({ type: "resume", tripKey: key, itinerary: it });
+    }
+    beginGeneration(key);
+    const days: number[] = [];
+    for (let d = lo; d <= hi; d++) days.push(d);
+    const busyKey = `${lo}-${hi}`;
+    retryRef.current = { days, busyKey };
+    setRetryBusy((pv) => ({ ...pv, [busyKey]: true }));
+    dispatch({ type: "retry", fromDay: lo, toDay: hi });
+  }
+  const inFlightDays = new Set<number>();
+  for (const sl of batchState.slots) {
+    if (sl.status !== "loading") continue;
+    for (let n = 0; n < sl.dayCount; n++) inFlightDays.add(sl.fromDay + n);
+  }
+  const timelineSlots = state ? buildTimeline(state.itinerary, inFlightDays) : [];
   const _ok = _rc;
-  const fare = flightOfferFare(BASE_FLIGHT, travellers);
+  const fare = flightOfferFare(liveFare.perPerson, travellersCount);
   const generating = status === "generating";
 
   return (
@@ -859,26 +1307,21 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
         </section>
       )}
 
+      {limitNote && <p className="chat-status" role="status">{LIMIT_NOTE}</p>}
+      {dateNote && <p className="chat-status" role="status">{dateNote}</p>}
+      {progressMsg && <p className="chat-status" role="status" aria-live="polite">{progressMsg}</p>}
+      {batchState.phase === "failed" && !generating && !state && (
+        <ItineraryFailure
+          reason={batchState.reason}
+          busy={retryBusy.all === true}
+          onRetry={() => { void generate(); }}
+        />
+      )}
+
       {!resultsOnly && (
       <section className="planner-chat">
         {!generating && (
         <>
-        <div className="chat-suggestions" role="group" aria-label="Suggested prompts">
-          <span className="chat-suggestions__label">Try one of these</span>
-          <div className="chat-suggestions__chips">
-            {SUGGESTED_PROMPTS.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                className="chat-chip"
-                onClick={() => applyPrompt(p)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="card planner-composer">
           <label className="field">
             <span>Where to?</span>
@@ -953,11 +1396,17 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                 (Req 8.5) — surfaced through the existing `eyebrow` class, no new
                 token or class introduced. */}
             <p className="eyebrow">Estimated costs — no activity is a confirmed booking</p>
+            {pricing === "loading" && (
+              <p className="chat-status ai-pulse" role="status" aria-live="polite">Pricing activities in INR…</p>
+            )}
+            {pricing === "failed" && (
+              <p className="chat-status" role="status" aria-live="polite">Using typical price ranges</p>
+            )}
             {/* AI regenerate — re-invokes the existing async `generate()` path
                 (POST /api/ai action:"itinerary") from the CURRENT shared context
                 and reuses the existing `generating`/`status` loading UI; no new
                 loading state is introduced (Req 8.4). Reuses the `cta` class. */}
-            <div className="timeline__actions">
+            <div className="timeline__actions planner-toolbar">
               <button
                 type="button"
                 className="cta"
@@ -984,8 +1433,8 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                 onClick={saveTrip}
                 disabled={saving}
                 aria-busy={saving}
-                aria-label={saving ? "Saving trip" : "Save this trip"}
-                title={saving ? "Saving..." : "Save this trip"}
+                aria-label={saving ? "Saving trip" : "Save trip"}
+                title="Save trip"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M6 3h10l4 4v12.5a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 19.5v-15A1.5 1.5 0 015.5 3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -993,11 +1442,132 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                 </svg>
               </button>
             </div>
-            {saveMsg && (
-              <p className="chat-status planner-save-msg" role="status">{saveMsg}</p>
-            )}
+            <Toast toast={toast} onDismiss={() => setToast(null)} />
+            <ItineraryBanner
+              verifiedLabel={batchState.slots.length > 1 && state.itinerary.completeness ? verifiedLabel(state.itinerary.completeness) : ""}
+              legacy={!hasVerificationData(state.itinerary)}
+            />
+            <aside className="card planner-summary planner-results__aside reveal">
+              <h3 className="planner-summary__title">Trip summary</h3>
+              <p className="lead planner-summary__route">
+                {route.origin || "-"} to {route.destination}
+                {noFlight && <> · <span className="planner-summary__note" role="note">{GROUND_TRANSPORT_NOTE}</span></>}
+              </p>
+              <div className="summary-grid" hidden>
+              {noFlight ? (
+                <>{state.itinerary.routeFare && <RouteFareLine fare={state.itinerary.routeFare} />}</>
+              ) : (
+                <>
+                  <div className="row"><span>Flight (per person, {liveFare.flightLive ? "live" : "estimated"})</span><span>{INR(fare.perPerson)}</span></div>
+                  <div className="row"><span>Flight x {fare.travellers}</span><span>{INR(fare.party)}</span></div>
+                </>
+              )}
+              <div className="row"><span>Stay ({liveFare.stayLive ? `live, ${live.nights} ${live.nights === 1 ? "night" : "nights"}` : "estimated"})</span><span>{INR(state.pricing.stay)}</span></div>
+              <div className="row"><span>{itineraryHasWebDetails(state.itinerary) ? <>{ACTIVITIES_WEB_ONLY_LABEL}<span className="row__suffix"> · {unpricedLabel(unpricedStopCount(state.itinerary.days.flatMap((x) => x.activities)))}</span></> : activitiesLabel(state.itinerary.completeness)}</span><span>{INR(state.pricing.activities)}</span></div>{formatSourceCounts(priceSourceCounts(state.itinerary)) !== "" && <p className="planner-summary__sources">{formatSourceCounts(priceSourceCounts(state.itinerary))}</p>}{state.itinerary.completeness && !isComplete(state.itinerary) && <p className="planner-summary__sources">{TOTAL_NOTE}</p>}
+              {state.pricing.gross !== state.pricing.finalPayable && (
+                <div className="row"><span>Gross</span><span>{INR(state.pricing.gross)}</span></div>
+              )}
+              <div className="row row--final"><span>Final payable</span><span>{INR(state.pricing.finalPayable)}</span></div>
+              </div>
+              {state.itinerary.routeFare && (
+                <label className="planner-summary__route-fare-label">
+                  <input
+                    type="checkbox"
+                    className="planner-summary__route-fare"
+                    checked={includeRouteFare}
+                    onChange={(e) => setIncludeRouteFare(e.target.checked)}
+                  />{" "}
+                  Add road/rail fare to total
+                </label>
+              )}
+              {costBreakdown && (
+                <>
+                  <div className="planner-summary__cost">
+                    <strong>Final payable</strong>
+                    <span className="planner-summary__cost-amount">{INR(costBreakdown.totalInr)}</span>
+                    <button
+                      type="button"
+                      className="planner-summary__cost-toggle"
+                      aria-expanded={costOpen}
+                      aria-controls="planner-cost-breakdown"
+                      onClick={() => setCostOpen((v) => !v)}
+                    >
+                      Cost breakdown
+                    </button>
+                  </div>
+                  <div id="planner-cost-breakdown">{costOpen && <CostBreakdown breakdown={costBreakdown} />}</div>
+                </>
+              )}
+              {/* AI pick justification. */}
+              {(() => {
+                if (live.status !== "ready") return null;
+                const pctBelow = (value: number, all: number[]): number | null => {
+                  if (all.length < 2) return null;
+                  const sorted = [...all].sort((a, b) => a - b);
+                  const mid = Math.floor(sorted.length / 2);
+                  const med = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+                  if (!(med > 0) || !(value < med)) return null;
+                  const p = Math.floor(((med - value) / med) * 100);
+                  return p >= 1 ? p : null;
+                };
+                const stays = live.stays || [];
+                const flights = noFlight ? [] : (live.flights || []);
+                const bestStay = stays.length ? [...stays].sort((a, b) => a.ratePerNight - b.ratePerNight)[0] : null;
+                const bestFlight = flights.length ? [...flights].sort((a, b) => a.farePerPerson - b.farePerPerson)[0] : null;
+                if (!bestStay && !bestFlight) return null;
+                const stayPct = bestStay ? pctBelow(bestStay.ratePerNight, stays.map((h) => h.ratePerNight)) : null;
+                const flightPct = bestFlight ? pctBelow(bestFlight.farePerPerson, flights.map((f) => f.farePerPerson)) : null;
+                const stayBits: string[] = [];
+                if (bestStay && typeof bestStay.rating === "number") stayBits.push(bestStay.reviews ? `Rated ${bestStay.rating} by ${Math.round(bestStay.reviews).toLocaleString("en-IN")} guests` : `Rated ${bestStay.rating}/5`);
+                if (stayPct !== null) stayBits.push(`${stayPct}% below the median nightly price here`);
+                const flightBits: string[] = [];
+                if (bestFlight && typeof bestFlight.stops === "number") flightBits.push(bestFlight.stops === 0 ? "Non-stop" : `${bestFlight.stops} stop`);
+                if (flightPct !== null) flightBits.push(`${flightPct}% below the median fare`);
+                return (
+                  <details className="planner-summary__picks">
+                    <summary className="eyebrow planner-summary__pick-label">Why these picks</summary>
+                    {bestStay && (
+                      <div className="planner-summary__pick">
+                        <span className="planner-summary__pick-tag">AI pick · Stay</span>
+                        <span className="planner-summary__pick-name">{bestStay.name}</span>
+                        {stayBits.length > 0 && <span className="planner-summary__pick-why">{stayBits.join(" · ")}</span>}
+                      </div>
+                    )}
+                    {bestFlight && (
+                      <div className="planner-summary__pick">
+                        <span className="planner-summary__pick-tag">AI pick · Flight</span>
+                        <span className="planner-summary__pick-name">from {INR_FMT.format(bestFlight.farePerPerson)} / person</span>
+                        {flightBits.length > 0 && <span className="planner-summary__pick-why">{flightBits.join(" · ")}</span>}
+                      </div>
+                    )}
+                    <p className="planner-summary__pick-note">AI picks are chosen from live results by rating, price vs the median, and convenience.</p>
+                  </details>
+                );
+              })()}
+            </aside>
+            <div className="planner-xp-strip">
+              {/* Gamification: deterministic XP/level/badges/quests for this
+                  planning session (TripSaathi parity, FR-06). */}
+              <GamificationPanel state={xp} compact />
+            </div>
+            <ItinerarySearch value={searchQuery} onQueryChange={setSearchQuery} count={filter.count} active={filter.active} />
             <ol className="timeline planner-itinerary">
-              {state.itinerary.days.map((d, di) => {
+              {timelineSlots.map((slot, di) => {
+                if (slot.kind === "placeholder") {
+                  if (filter.active) return null;
+                  return (
+                    <li key={"ph-" + slot.from} className="timeline__day">
+                      <PlaceholderCard
+                        slot={slot}
+                        busy={!!retryBusy[`${slot.from}-${slot.to}`]}
+                        onRetry={() => retryRange(slot.from, slot.to)}
+                      />
+                    </li>
+                  );
+                }
+                const d = slot.day;
+                if (filter.active && !filter.visibleDays.has(String(d.day))) return null;
+                                const dayDate = formatShortDate(d.date);
                 const isEditing = editing?.day === d.day;
                 return (
                   <li
@@ -1016,7 +1586,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                         height={LOCATION_PIN.height}
                       />
                     </span>
-                    <article className="card planner-day timeline__card">
+                    <article className={"card planner-day timeline__card"}>
                       {isEditing ? (
                         <div className="timeline__edit">
                           <label className="field">
@@ -1046,10 +1616,17 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                         <>
                           <div className="timeline__head">
                             <div>
-                              <h3 className="planner-day__title">
-                                Day {d.day} - {d.title}
+                              <h3 className="planner-day__title" id={"day-heading-" + d.day} tabIndex={-1}>
+                                <span className="day-toggle day-toggle--static">
+                                  <span className="day-toggle__main">
+                                    <span className="day-toggle__num">Day {d.day}</span>
+                                    {dayDate && <span className="day-toggle__date">{dayDate}</span>}
+                                    <span className="day-toggle__title"><Highlight text={d.title} query={searchQuery} /></span>
+                                  </span>
+                                  <span className="day-toggle__meta">{stopsLabel(d.activities.length)}{hasWebDetails(d.activities) ? " · " + unpricedLabel(unpricedStopCount(d.activities)) : ""} · {formatInr(d.total)}</span>
+                                </span>
                               </h3>
-                              <p className="planner-day__theme">{d.theme}</p>
+                              <p className="planner-day__theme"><Highlight text={d.theme} query={searchQuery} /></p>
                             </div>
                             <button
                               type="button"
@@ -1059,20 +1636,86 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                               Edit
                             </button>
                           </div>
-                          <GooglePlaceMedia query={dayPlaceQuery(d, route.destination || sharedContext.context.destination || "")} />
-                          {d.activities.map((a, i) => (
-                            <div key={i} className="row planner-day__activity" tabIndex={0}>
-                              <span>
-                                <strong>{a.time}</strong> {a.title}
-                                {a.description ? <span className="planner-day__activity-hint">{a.description}</span> : null}
-                              </span>
-                              <span>{INR(a.cost)}</span>
+                          {chooseDayMedia(d.activities) === "carousel" ? (
+                            <DayCarousel slides={selectSlides(d.activities)} active />
+                          ) : (
+                            <DayHero day={d} fallbackQuery={dayPlaceQuery(d, route.destination || sharedContext.context.destination || "")} />
+                          )}
+                          <div id={"day-body-" + d.day} className="planner-day__body">
+                          {d.activities.length === 0 && <p className="planner-day__activity-hint">Free day - no planned activities.</p>}
+                          {d.activities.map((a, i) => {
+                            const key = stopKey(d.day, i);
+                            if (filter.active && !filter.visibleStops.get(String(d.day))?.has(key)) return null;
+                            const open = isStopOpen(openStops, key) || (filter.active && filter.detailsMatchStopIds.has(key));
+                            const detailsId = "stop-details-" + key;
+                            const noteOnly = (a.webDetails && a.priceSource !== "web") || (a.costNote && (a.costClass === "stay-checkin" || a.costClass === "route-transport" || a.costClass === "shopping"));
+                            return (
+                            <div key={i} className={"row planner-day__activity stop-row" + (open ? " is-open" : "")}>
+                              {(() => {
+                                const tr = formatTimeRange(a, d.activities[i + 1]);
+                                return (
+                                  <span className="stop-row__time">
+                                    <strong>{tr.start}</strong>
+                                    {tr.kind === "range" && tr.end ? <span className="stop-row__end">{"– " + tr.end}</span> : null}
+                                    {tr.kind === "estimate" && tr.end ? <span className="stop-row__end">{"until about " + tr.end}</span> : null}
+                                  </span>
+                                );
+                              })()}
+                            <span className="stop-row__main">
+                              <Highlight text={a.title} query={searchQuery} />
+                            </span>
+                            <span className="price-basis stop-row__price">
+                              {a.webDetails && a.priceSource !== "web" ? (<PriceCellNote a={a} />) : a.costNote && (a.costClass === "stay-checkin" || a.costClass === "route-transport" || a.costClass === "shopping") ? (
+                                <span className="price-cell__note">{a.costNote}</span>
+                              ) : (
+                                <span className="price-group"><span>{a.priceSource === "web" ? webAmountText(a.cost, a.sourceHost ?? "") : formatInr(a.cost)}</span>{" "}
+                                <span className="price-cell__unit">{a.costBasis === "group" ? "per group" : "per person"}</span></span>
+                              )}{" "}
+                            </span>
+                            <button
+                              type="button"
+                              className="stop-row__toggle"
+                              aria-expanded={open}
+                              aria-controls={detailsId}
+                              onClick={() => setOpenStops((m) => toggleStop(m, key))}
+                            >
+                              {open ? "Hide details" : "Details"}
+                            </button>
+                            <StopDetails id={detailsId} open={open}>
+                              {a.description ? <span className="planner-day__activity-hint">{a.description}</span> : null}
+                              <StopMeta a={a} hasNext={i < d.activities.length - 1} />
+                              {noteOnly ? null : (
+                                <span className="price-basis">
+                                  {a.webDetails ? null : <span className={"price-badge price-badge--" + (a.priceSource === "web" ? "web" : a.priceSource === "ai" ? "ai" : "estimated")}>{priceBadgeText(a)}</span>}{" "}
+                                  {!a.webDetails && a.priceSource === "web" && a.sourceHost && a.sourceUrl && (
+                                    <>
+                                      <PriceSourceLink url={a.sourceUrl} host={a.sourceHost} />{" "}
+                                      {a.checkedAt && <CheckedAt iso={a.checkedAt} />}{" "}
+                                    </>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="price-basis__toggle"
+                                    aria-expanded={openBasis[d.day + "-" + i] === true}
+                                    aria-controls={"basis-" + d.day + "-" + i}
+                                    onClick={() => setOpenBasis((pv) => ({ ...pv, [d.day + "-" + i]: !pv[d.day + "-" + i] }))}
+                                  >
+                                    {openBasis[d.day + "-" + i] === true ? "Hide basis" : "Price basis"}
+                                  </button>
+                                  {openBasis[d.day + "-" + i] === true && (
+                                    <span id={"basis-" + d.day + "-" + i} className="price-basis__text">{a.priceBasis || ESTIMATED_BASIS}</span>
+                                  )}
+                                </span>
+                              )}
+                            </StopDetails>
                             </div>
-                          ))}
+                            );
+                            })}
                           <div className="row">
-                            <span>Day total</span>
-                            <span>{INR(d.total)}</span>
+                            <span>Day total{hasWebDetails(d.activities) ? " · " + unpricedLabel(unpricedStopCount(d.activities)) : ""}</span>
+                            <span>{formatInr(d.total)}</span>
                           </div>
+                          <MiscLine key={miscKeyForDay(d, miscDestination, miscTravellers)} day={d} result={misc[miscKeyForDay(d, miscDestination, miscTravellers)]} />
                           <div className="timeline__actions">
                             {/* Day-level budget edit via refineItinerary — revises
                                 only this day's total, leaving unedited days
@@ -1091,6 +1734,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                             >
                               Know more
                             </button>
+                          </div>
                           </div>
                           {editDayOpen === d.day && (
                             <EditDayPanel
@@ -1117,6 +1761,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                 );
               })}
             </ol>
+            <SourcesList sources={state.itinerary.sources} />
 
             {/* Live stays + flights for this trip (Google Hotels / Google
                 Flights via SerpApi). Auto-fetched once the itinerary is ready;
@@ -1144,6 +1789,17 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                       <p className="trip-live__card-meta">Open the full stays search for live prices.</p>
                     )}
                   </a>
+                  {noFlight ? (
+                    <div className="trip-live__card" role="note">
+                      <div className="trip-live__card-head">
+                        <h4 className="trip-live__coltitle">Flights</h4>
+                      </div>
+                      <p className="trip-live__card-meta">{GROUND_TRANSPORT_NOTE}</p>{noFlight && state.itinerary.routeFare && <RouteFareLine fare={state.itinerary.routeFare} />}
+                      {flightAvail === "no-flights" && (
+                        <p className="trip-live__card-meta">No flights were found for your dates. Try different dates.</p>
+                      )}
+                    </div>
+                  ) : (
                   <a className="trip-live__card" href={live.flightsHref}>
                     <div className="trip-live__card-head">
                       <h4 className="trip-live__coltitle">Flights</h4>
@@ -1158,6 +1814,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                       <p className="trip-live__card-meta">Open the full flights search for live fares.</p>
                     )}
                   </a>
+                  )}
                 </div>
               )}
               {live.note && (
@@ -1165,24 +1822,17 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
               )}
             </section>
           </div>
-
-          <aside className="card planner-summary planner-results__aside reveal">
-            <h3 className="planner-summary__title">Trip summary</h3>
-            <p className="lead planner-summary__route">
-              {route.origin || "-"} to {route.destination}
-            </p>
-            <div className="row"><span>Flight (per person)</span><span>{INR(fare.perPerson)}</span></div>
-            <div className="row"><span>Flight x {fare.travellers}</span><span>{INR(fare.party)}</span></div>
-            <div className="row"><span>Stay</span><span>{INR(state.pricing.stay)}</span></div>
-            <div className="row"><span>Activities</span><span>{INR(state.pricing.activities)}</span></div>
-            <div className="row"><span>Gross</span><span>{INR(state.pricing.gross)}</span></div>
-            <div className="row"><span>Final payable</span><span>{INR(state.pricing.finalPayable)}</span></div>
-
-            {/* Gamification: deterministic XP/level/badges/quests for this
-                planning session (TripSaathi parity, FR-06). */}
-            <GamificationPanel state={xp} />
-          </aside>
         </div>
+      )}
+      {state && state.itinerary.days.length > 0 && (
+        <TripAssistant
+          itinerary={state.itinerary}
+          context={sharedContext.context}
+          resetKey={assistantGenRef.current}
+          onApply={applyAssistantProposal}
+          onRestore={restoreAssistantItinerary}
+          estimate={(a) => withEstimatedActivity(a, route.destination || sharedContext.context.destination || "", usdInrRef.current, costOpts())}
+        />
       )}
     </main>
   );

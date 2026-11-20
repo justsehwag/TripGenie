@@ -74,7 +74,7 @@ export type FetchLike = (
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
 const DEFAULT_TIMEOUT_MS = 5000;
-const USER_AGENT = "TripGenie/1.0 (travel-planning-concierge)";
+const USER_AGENT = "TripsaathiAI/1.0 (travel-planning-concierge)";
 
 /**
  * Issue a single read-only (GET) request with a hard timeout. Any non-OK

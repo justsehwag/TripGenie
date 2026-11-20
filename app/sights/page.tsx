@@ -1,6 +1,6 @@
 import DiscoverSights from "@/components/discover-sights";
 
-export const metadata = { title: "Discover sights - TripGenie" };
+export const metadata = { title: "Discover sights - Tripsaathi AI" };
 
 /**
  * Sights / Discover route. Surfaces six destination-restricted standout places

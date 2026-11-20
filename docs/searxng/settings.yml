@@ -1,0 +1,44 @@
+# Sample SearXNG settings for TripGenie itinerary grounding (placeholders only).
+
+use_default_settings: true
+
+general:
+  instance_name: "tripgenie-search"
+  debug: false
+
+server:
+  # Random value of at least 32 characters, unique to this instance.
+  # Generate with: openssl rand -hex 32
+  # NEVER commit the real value.
+  secret_key: "CHANGE_ME_RANDOM_SECRET_KEY_AT_LEAST_32_CHARS_0123456789"
+  limiter: false          # access is gated by the reverse proxy secret header
+  image_proxy: false
+  method: "GET"
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json                # REQUIRED: the app calls /search?format=json
+  default_lang: "en"
+
+# Enable at least three of DuckDuckGo, Brave, Bing, Wikipedia so that one
+# blocked engine does not stop results (Req 13.3, 13.4).
+engines:
+  - name: duckduckgo
+    engine: duckduckgo
+    disabled: false
+  - name: brave
+    engine: brave
+    disabled: false
+  # Off: Bing returns off-topic results and plain Google blocks cloud IPs.
+  # Google results still come through the default 'google cse' engine.
+  - name: bing
+    engine: bing
+    disabled: true
+  - name: google
+    engine: google
+    disabled: true
+  - name: wikipedia
+    engine: wikipedia
+    disabled: false

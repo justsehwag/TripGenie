@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchHotelRates } from "@/lib/providers/serpapi-hotels";
 import { searchFlightFares } from "@/lib/providers/serpapi-flights";
+import { classifyFlightAvailability, type FlightAvailability } from "@/lib/flight-availability";
 
 /**
  * Combined live stays + flights for a generated trip (Google Hotels and Google
@@ -28,6 +29,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const t = Number.parseInt(sp.get("travellers") ?? "", 10);
   const travellers = Number.isFinite(t) && t >= 1 && t <= 9 ? t : 1;
 
+  // C7: classify only when both texts are present; a blank side means "not entered yet".
+  const bothPresent = origin !== "" && destination !== "";
+  const pre: FlightAvailability = bothPresent
+    ? classifyFlightAvailability(origin, destination)
+    : "available";
+  const headers = { "Cache-Control": "no-store" };
+
+  // Req 9.8: no airport on a side -> stays only, no SerpApi flight call.
+  if (pre === "no-airport") {
+    const stays = await searchHotelRates({ destination, checkIn, checkOut, adults: travellers });
+    return NextResponse.json(
+      { stays, flights: null, flightAvailability: "no-airport" satisfies FlightAvailability },
+      { headers },
+    );
+  }
+
   const [stays, flights] = await Promise.all([
     searchHotelRates({ destination, checkIn, checkOut, adults: travellers }),
     searchFlightFares({
@@ -41,5 +58,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }),
   ]);
 
-  return NextResponse.json({ stays, flights }, { headers: { "Cache-Control": "no-store" } });
+  const flightAvailability: FlightAvailability = bothPresent
+    ? classifyFlightAvailability(origin, destination, {
+        status: flights.status,
+        flightCount: flights.flights.length,
+      })
+    : "available";
+
+  return NextResponse.json({ stays, flights, flightAvailability }, { headers });
 }

@@ -26,6 +26,13 @@ const passthrough = [
   "SERPAPI_API_KEY",
   "SERPAPI_MONTHLY_SOFT_LIMIT",
   "GOOGLE_PLACES_API_KEY",
+  // SearXNG itinerary grounding (server-only; read by lib/config.ts accessors).
+  "SEARXNG_BASE_URL",
+  "SEARXNG_SECRET_HEADER_NAME",
+  "SEARXNG_SECRET_HEADER_VALUE",
+  "TRIPGENIE_SEARXNG_ENABLED",
+  // Web-grounded pricing flag (server-only; read by lib/config.ts accessor).
+  "TRIPGENIE_WEB_PRICING_ENABLED",
 ] as const;
 
 const bakedEnv: Record<string, string> = {};

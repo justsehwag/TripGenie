@@ -18,7 +18,7 @@ const FONT_FACE_VARS = {
 } as React.CSSProperties;
 
 export const metadata = {
-  title: "TripGenie",
+  title: "Tripsaathi AI",
   description: "AWS-native agentic travel-planning concierge.",
 };
 

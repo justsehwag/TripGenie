@@ -9,6 +9,8 @@
  * Requirements: 19.1 (serverless-first, pure core / swappable edges).
  */
 
+import type { CostClass } from "./cost-caps";
+
 /* ---------------------------------------------------------------------------
  * Provenance (design: Payload_Provenance) — exactly one value per payload.
  * `estimated` implies no payment taken and no valid ticket/room issued.
@@ -149,11 +151,83 @@ export interface Promotion {
 /* ---------------------------------------------------------------------------
  * Itinerary (design: Itinerary Generation & Revision).
  * ------------------------------------------------------------------------- */
+export type ActivityCategory = "transfer" | "sight" | "meal" | "leisure";
+
+export type HoursLabel = "Typical hours" | "Hours not listed";
+
+/** One enrichment value: a verbatim snippet excerpt with its source. */
+export interface WebDetail {
+  /** At most 240 characters, verbatim from a retrieved snippet. */
+  text: string;
+  /** Absolute https URL. */
+  sourceUrl: string;
+  /** Equals new URL(sourceUrl).hostname. */
+  sourceHost: string;
+  /** ISO date accepted by Date.parse. */
+  checkedAt: string;
+}
+
+export interface WebDetails {
+  /** true when SearXNG answered for this Stop (even with nothing found); false = never checked. */
+  checked: boolean;
+  tip?: WebDetail;
+  booking?: WebDetail;
+  bestTime?: WebDetail;
+  /** Which price kind the top-level price is: entry or ticket price (sights) or typical cost (meals). */
+  priceKind?: "entry" | "typical";
+  /** true when the price lookup was unavailable (SearXNG down), so the Stop was not checked. */
+  unavailable?: true;
+}
+
 export interface Activity {
   time: string;
   title: string;
   description: string;
   cost: number;
+  /** Cost category for honest, destination-aware estimates (optional). */
+  category?: ActivityCategory;
+  /** Where the INR price came from: model-priced or category estimate (optional). */
+  priceSource?: "ai" | "estimated" | "web";
+  /** Short explanation of how the price was derived, up to 120 chars (optional). */
+  priceBasis?: string;
+  /** Web price evidence; present only with priceSource "web" (optional). */
+  sourceUrl?: string;
+  sourceHost?: string;
+  checkedAt?: string;
+  /** Whether `cost` is per person or per vehicle/group (optional). */
+  costBasis?: "person" | "group";
+  /** Cost class used for caps and pricing (optional). */
+  costClass?: CostClass;
+  /** Short note shown instead of a price for included/optional rows (optional). */
+  costNote?: string;
+  /** Set only when kept although Places could not resolve it (grounding, optional). */
+  mapVerified?: false;
+  /** Google Places id; present only when resolved by a real Places lookup (optional). */
+  placeId?: string;
+  /** Display name returned by Places for the matched place (optional). */
+  placeName?: string;
+  /** True only for a stop confirmed by a Places result (optional). */
+  verified?: true;
+  /** Google Maps link built from the real placeId and name (optional). */
+  mapsUrl?: string;
+  /** Neighbourhood or area label (optional). */
+  area?: string;
+  /** Coordinates from the Places result (optional). */
+  location?: { lat: number; lng: number };
+  /** Places photo resource name, "places/<id>/photos/<id>" (optional). */
+  photoRef?: string;
+  /** Estimated road minutes to the next stop of the same day (optional). */
+  travelToNextMin?: number;
+  /** Scheduled visit length in minutes, integer 1-1440 (optional). */
+  visitMin?: number;
+  /** Google's weekday description for the scheduled weekday, verbatim (optional). */
+  openingHours?: string;
+  /** "Typical hours" when the trip has no start date, "Hours not listed" when Google returned none (optional). */
+  hoursLabel?: HoursLabel;
+  /** Places photo resource names for this Stop, at most 3; photoRef equals photos[0] (optional). */
+  photos?: string[];
+  /** Web details; present on every Stop built by the places-first flow (optional). */
+  webDetails?: WebDetails;
 }
 
 export interface TripDay {
@@ -163,6 +237,33 @@ export interface TripDay {
   theme: string;
   activities: Activity[];
   total: number;
+  /** True when this day is a day trip beyond the destination radius (optional). */
+  dayTrip?: true;
+}
+
+/** How many requested days are verified, withheld or still pending (optional on Itinerary). */
+export interface ItineraryCompleteness {
+  requestedDays: number;
+  verifiedDays: number[];
+  withheldDays: number[];
+  pendingDays?: number[];
+}
+
+/** A web source shown to the traveller under the itinerary (title, https URL, host). */
+export interface SourceLink {
+  title: string;
+  url: string;
+  host: string;
+}
+
+/** Informational bus/train fare range for no-airport routes; never added to totals. */
+export interface RouteFareRange {
+  mode: "bus" | "train";
+  minInr: number;
+  maxInr: number;
+  sourceUrl: string;
+  sourceHost: string;
+  checkedAt: string;
 }
 
 export interface Itinerary {
@@ -170,6 +271,18 @@ export interface Itinerary {
   totalCost: number;
   days: TripDay[];
   revised?: boolean;
+  /** ISO 4217 code the costs are expressed in after conversion (optional). */
+  currency?: string;
+  /** True when costs are estimates rather than booked amounts (optional). */
+  estimated?: boolean;
+  /** When "inr", every cost, day total and totalCost is already in INR (optional). */
+  costUnit?: "inr";
+  /** Present only when web grounding contributed sources (optional). */
+  sources?: SourceLink[];
+  /** Verified informational route fare for no-airport trips (optional). */
+  routeFare?: RouteFareRange;
+  /** Which requested days are verified, withheld or pending (optional). */
+  completeness?: ItineraryCompleteness;
 }
 
 /* ---------------------------------------------------------------------------

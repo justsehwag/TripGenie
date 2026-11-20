@@ -40,7 +40,7 @@ export interface IdentitySession {
 /** Greet by first name when present, else a generic no-name greeting (Req 1.8/1.9). */
 export function greeting(session: IdentitySession | null): string {
   const first = session?.firstName?.trim();
-  return first ? `Welcome back, ${first}.` : "Welcome to TripGenie.";
+  return first ? `Welcome back, ${first}.` : "Welcome to Tripsaathi AI.";
 }
 
 export type PersistenceTarget = "dynamodb" | "browser-local";

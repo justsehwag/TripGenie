@@ -104,3 +104,55 @@ describe("Feature: account-history-and-drafts, record codec", () => {
     );
   });
 });
+
+describe("Feature: web-grounded-pricing, record codec web price fields", () => {
+  const activity = (extra: Record<string, unknown>) => ({
+    name: "Meenakshi Amman Temple entry",
+    cost: 250,
+    ...extra,
+  });
+  const planWith = (act: Record<string, unknown>): CapturedPlan => ({
+    context: {},
+    dates: {},
+    itinerary: {
+      title: "Madurai weekend",
+      totalCost: 250,
+      days: [{ day: 1, activities: [act] }],
+    } as unknown as Itinerary,
+  });
+  const firstActivity = (plan: CapturedPlan) =>
+    (plan.itinerary as unknown as { days: { activities: Record<string, unknown>[] }[] })
+      .days[0].activities[0];
+
+  it("round-trips a stored plan with valid web fields unchanged", () => {
+    const plan = planWith(
+      activity({
+        priceSource: "web",
+        priceBasis: "per person",
+        sourceUrl: "https://www.tamilnadutourism.tn.gov.in/destinations/madurai",
+        sourceHost: "www.tamilnadutourism.tn.gov.in",
+        checkedAt: "2025-01-15T09:30:00.000Z",
+      }),
+    );
+    expect(toSharedContext(fromSharedContext(plan))).toEqual(plan);
+  });
+
+  it("downgrades a stored web activity with an invalid sourceUrl to estimated and keeps the cost", () => {
+    const plan = planWith(
+      activity({
+        priceSource: "web",
+        priceBasis: "per person",
+        sourceUrl: "not-a-url",
+        sourceHost: "www.tamilnadutourism.tn.gov.in",
+        checkedAt: "2025-01-15T09:30:00.000Z",
+      }),
+    );
+    const act = firstActivity(toSharedContext(fromSharedContext(plan)));
+    expect(act.priceSource).toBe("estimated");
+    expect(act.cost).toBe(250);
+    expect(act).not.toHaveProperty("sourceUrl");
+    expect(act).not.toHaveProperty("sourceHost");
+    expect(act).not.toHaveProperty("checkedAt");
+    expect(act).not.toHaveProperty("priceBasis");
+  });
+});

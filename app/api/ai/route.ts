@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { TripContext } from "@/lib/types";
+import type { Itinerary, TripContext } from "@/lib/types";
 import {
   type ControllerState,
   type RequiredField,
@@ -10,12 +10,25 @@ import {
   createBedrockInvoke,
   extractAsync,
   phraseAsync,
-  generateItineraryAsync,
   syncModelFrom,
   fallbackPhrase,
   fallbackExtractForField,
   type BedrockModelDeps,
 } from "@/lib/bedrock-model";
+import { groundExtraction } from "@/lib/extraction-grounding";
+import { estimateMisc, validateMiscRequest } from "@/lib/itinerary/misc-estimate";
+import { runPlacesFirstBatch } from "@/lib/itinerary/places-first-batch";
+import {
+  unavailable,
+  validateBatchRequest,
+  type BatchRequest,
+  type BatchResponse,
+} from "@/lib/itinerary/batch-wire";
+import {
+  BATCH_DAYS,
+  BATCH_REQUEST_BUDGET_MS,
+  MAX_TRIP_DAYS,
+} from "@/lib/itinerary/constants";
 
 /**
  * Bedrock_Route - server-only edge over the Bedrock_Model and the
@@ -77,6 +90,8 @@ async function handleTurn(
     const fieldAware = fallbackExtractForField(inputDelta, state.context, askedField);
     extracted = { ...fieldAware, ...extracted };
   }
+  // Drop-only grounding: remove any field the traveller's text does not support.
+  extracted = groundExtraction({ text: inputDelta, asked: askedField, extracted }).fields;
 
   const mergedContext: TripContext = { ...state.context, ...extracted };
   const nextField: RequiredField | undefined = uncollected(mergedContext)[0];
@@ -101,6 +116,65 @@ async function handleTurn(
   );
 }
 
+interface ExtractBody {
+  action: "extract";
+  text: string;
+  asked?: RequiredField;
+}
+
+const REQUIRED_FIELD_NAMES: readonly string[] = [
+  "origin",
+  "destination",
+  "durationDays",
+  "travellers",
+  "budgetLevel",
+  "diet",
+  "pace",
+  "interests",
+];
+
+async function handleExtract(
+  deps: BedrockModelDeps,
+  text: string,
+  asked: RequiredField | undefined,
+): Promise<Response> {
+  const empty: TripContext = {};
+  let source: "bedrock" | "fallback" = "bedrock";
+  let extracted: Partial<TripContext> = {};
+  // extractAsync swallows model errors, so record a throw here.
+  let modelFailed = false;
+  const watched: BedrockModelDeps = {
+    ...deps,
+    invokeModel: async (...args: Parameters<BedrockModelDeps["invokeModel"]>) => {
+      try {
+        return await deps.invokeModel(...args);
+      } catch (e) {
+        modelFailed = true;
+        throw e;
+      }
+    },
+  };
+  try {
+    extracted = await extractAsync(watched, text, empty);
+    if (modelFailed) source = "fallback";
+  } catch {
+    source = "fallback";
+  }
+  const got = extracted as Record<string, unknown>;
+  const hasAny = Object.keys(got).some(
+    (k) => got[k] !== undefined && got[k] !== null && got[k] !== "",
+  );
+  if (!hasAny) {
+    source = "fallback";
+    extracted = fallbackExtractForField(text, empty, asked);
+  }
+  const grounded = groundExtraction({ text, asked, extracted });
+  return NextResponse.json(
+    { fields: grounded.fields, routeOnly: grounded.routeOnly, source },
+    { headers: NO_STORE },
+  );
+}
+
 function turnFallback(body: TurnBody): Response {
   const state = body.state;
   const inputDelta = typeof body.inputDelta === "string" ? body.inputDelta : "";
@@ -118,14 +192,75 @@ function turnFallback(body: TurnBody): Response {
   );
 }
 
-async function handleItinerary(
-  deps: BedrockModelDeps,
-  body: ItineraryBody,
-): Promise<Response> {
-  const context = (body.context ?? {}) as TripContext;
-  const itinerary = await generateItineraryAsync(deps, context);
+/** Runs one batch against the whole-request budget; never throws. */
+async function runBatchGuarded(
+  req: BatchRequest,
+  totalDays: number,
+): Promise<BatchResponse> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const deps = { invokeModel: createBedrockInvoke() };
+    const timeout = new Promise<BatchResponse>((resolve) => {
+      timer = setTimeout(
+        () => resolve(unavailable(req, "unavailable")),
+        BATCH_REQUEST_BUDGET_MS,
+      );
+    });
+    return await Promise.race([runPlacesFirstBatch(req, totalDays, deps), timeout]);
+  } catch {
+    return unavailable(req, "unavailable");
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function unavailableLegacy(reason: BatchResponse["reason"]): Response {
   return NextResponse.json(
-    { itinerary, source: "bedrock" },
+    { source: "unavailable", reason: reason ?? "unavailable" },
+    { headers: NO_STORE },
+  );
+}
+
+async function handleLegacyItinerary(context: TripContext): Promise<Response> {
+  const raw = context.durationDays;
+  const duration =
+    typeof raw === "number" && Number.isFinite(raw)
+      ? Math.min(MAX_TRIP_DAYS, Math.max(1, Math.round(raw)))
+      : 4;
+  const dayCount = Math.min(duration, BATCH_DAYS);
+  const req: BatchRequest = {
+    action: "itinerary-batch",
+    context: { ...context, durationDays: duration },
+    fromDay: 1,
+    dayCount,
+    usedPlaces: [],
+  };
+  const resp = await runBatchGuarded(req, duration);
+  if (resp.source !== "model" || resp.days.length === 0) {
+    return unavailableLegacy(resp.reason);
+  }
+  const withheld = [...resp.withheldDays];
+  for (let d = dayCount + 1; d <= duration; d++) withheld.push(d);
+  const itinerary: Itinerary = {
+    title: `${context.destination ?? "Your"} trip`,
+    totalCost: resp.days.reduce((n, d) => n + d.total, 0),
+    days: resp.days,
+    completeness: {
+      requestedDays: duration,
+      verifiedDays: resp.verifiedDays,
+      withheldDays: withheld,
+    },
+  };
+  if (resp.sources && resp.sources.length > 0) itinerary.sources = resp.sources;
+  return NextResponse.json(
+    resp.sources && resp.sources.length > 0
+      ? {
+          itinerary,
+          source: "model",
+          completeness: itinerary.completeness,
+          sources: resp.sources,
+        }
+      : { itinerary, source: "model", completeness: itinerary.completeness },
     { headers: NO_STORE },
   );
 }
@@ -162,6 +297,28 @@ export async function POST(request: Request): Promise<Response> {
     }
   }
 
+  if (action === "extract") {
+    const exBody = body as Partial<ExtractBody>;
+    if (typeof exBody.text !== "string") {
+      return NextResponse.json({ error: "Missing text." }, { status: 400 });
+    }
+    const asked =
+      typeof exBody.asked === "string" && REQUIRED_FIELD_NAMES.includes(exBody.asked)
+        ? exBody.asked
+        : undefined;
+    try {
+      const deps: BedrockModelDeps = { invokeModel: createBedrockInvoke() };
+      return await handleExtract(deps, exBody.text, asked);
+    } catch {
+      const fb = fallbackExtractForField(exBody.text, {}, asked);
+      const g = groundExtraction({ text: exBody.text, asked, extracted: fb });
+      return NextResponse.json(
+        { fields: g.fields, routeOnly: g.routeOnly, source: "fallback" },
+        { headers: NO_STORE },
+      );
+    }
+  }
+
   if (action === "itinerary") {
     const itinBody = body as Partial<ItineraryBody>;
     if (typeof itinBody.context !== "object" || itinBody.context === null) {
@@ -175,26 +332,38 @@ export async function POST(request: Request): Promise<Response> {
       context: itinBody.context as TripContext,
     };
     try {
-      const deps: BedrockModelDeps = { invokeModel: createBedrockInvoke() };
-      return await handleItinerary(deps, safeBody);
+      return await handleLegacyItinerary(safeBody.context);
     } catch {
-      const { buildItinerary } = await import("@/lib/itinerary-engine");
-      const context = safeBody.context;
-      const itinerary = buildItinerary({
-        destination: context.destination ?? "your destination",
-        startDate: new Date().toISOString().slice(0, 10),
-        days: context.durationDays ?? 4,
-        vibes: context.interests,
-      });
-      return NextResponse.json(
-        { itinerary, source: "fallback" },
-        { headers: NO_STORE },
-      );
+      return unavailableLegacy("unavailable");
     }
   }
 
+  if (action === "itinerary-batch") {
+    const parsed = validateBatchRequest(body);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const resp = await runBatchGuarded(parsed.value, parsed.totalDays);
+    return NextResponse.json(resp, { headers: NO_STORE });
+  }
+
+  if (action === "misc-estimate") {
+    const parsed = validateMiscRequest(body);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const result = await estimateMisc(
+      { invokeModel: createBedrockInvoke() },
+      parsed.value,
+    );
+    return NextResponse.json(result, { headers: NO_STORE });
+  }
+
   return NextResponse.json(
-    { error: "Invalid or missing action. Expected turn or itinerary." },
+    {
+      error:
+        "Invalid or missing action. Expected turn, extract, itinerary, itinerary-batch or misc-estimate.",
+    },
     { status: 400 },
   );
 }

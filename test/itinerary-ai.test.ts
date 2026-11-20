@@ -100,14 +100,14 @@ describe("Feature: realtime-ai-integration, Property 7 — itinerary spans the c
     );
   });
 
-  it("generateItineraryAsync (mocked model throws) falls back to a correctly-spanned itinerary", async () => {
+  it("generateItineraryAsync (mocked model throws) returns null", async () => {
     await fc.assert(
       fc.asyncProperty(contextArb, async (ctx) => {
         // The fallback uses `context.durationDays ?? 4`, then buildItinerary
         // clamps it. Our context always supplies durationDays.
         const expectedDays = clampDays(ctx.durationDays as number);
         const it = await generateItineraryAsync(depsThrowing(), ctx);
-        assertSpansDuration(it, expectedDays);
+        expect(it).toBeNull();
       }),
       { numRuns: 100 },
     );

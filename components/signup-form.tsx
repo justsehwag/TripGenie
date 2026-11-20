@@ -72,7 +72,7 @@ export default function SignupForm() {
       <div className="auth-glass-page__glow" aria-hidden="true" />
       <section className="motion-rise auth__intro">
         <p className="eyebrow">Create your account</p>
-        <h1 className="display">Join TripGenie</h1>
+        <h1 className="display">Join Tripsaathi AI</h1>
         <p className="lead">Sign up to save trips and sync across devices. We never see your password - accounts are secured by Amazon Cognito.</p>
       </section>
 

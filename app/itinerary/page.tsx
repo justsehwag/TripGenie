@@ -7,7 +7,7 @@ import Planner from "@/components/planner";
  * (no input composer). The /trip input page redirects here once a plan is ready,
  * so the plan opens on its own page instead of in-line on the same page.
  */
-export const metadata = { title: "Your itinerary - TripGenie" };
+export const metadata = { title: "Your itinerary - Tripsaathi AI" };
 
 export default function ItineraryPage() {
   return <Planner resultsOnly />;

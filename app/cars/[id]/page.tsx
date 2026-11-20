@@ -6,7 +6,7 @@ import type { InventoryQuery } from "@/lib/inventory-adapter";
 import type { CarOffer } from "@/lib/types";
 import ProvenanceLabel from "@/components/provenance-label";
 
-export const metadata = { title: "Car detail - TripGenie" };
+export const metadata = { title: "Car detail - Tripsaathi AI" };
 
 /**
  * Car Detail_Page (server component) — design "Booking Site ▸ Detail_Page",

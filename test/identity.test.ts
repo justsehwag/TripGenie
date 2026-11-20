@@ -31,7 +31,7 @@ describe("Feature: tripgenie, identity", () => {
     expect(greeting({ userId: "u1", firstName: "Asha" })).toContain("Asha");
     const generic = greeting({ userId: "u1" });
     expect(generic).not.toContain("@");
-    expect(generic.toLowerCase()).toContain("tripgenie");
+    expect(generic.toLowerCase()).toContain('tripsaathi');
     // A blank/missing first name is treated as generic.
     expect(greeting({ userId: "u1", firstName: "  " })).toBe(generic);
   });

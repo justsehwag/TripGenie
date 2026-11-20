@@ -1,0 +1,39 @@
+{
+  "places": [
+    {
+      "id": "ChIJFixtureNoPhoto0001",
+      "displayName": { "text": "Fixture Plaza", "languageCode": "en" },
+      "primaryType": "plaza"
+    },
+    {
+      "id": "ChIJFixtureTower00002",
+      "displayName": { "text": "Fixture Tower", "languageCode": "en" },
+      "primaryType": "tourist_attraction",
+      "photos": [
+        {
+          "name": "places/ChIJFixtureTower00002/photos/AeFixturePhotoTowerA",
+          "widthPx": 4032,
+          "heightPx": 3024,
+          "authorAttributions": [{ "displayName": "Fixture Author", "uri": "https://maps.google.com/contrib/0", "photoUri": "https://lh3.googleusercontent.com/a-/fixture" }]
+        },
+        {
+          "name": "places/ChIJFixtureTower00002/photos/AeFixturePhotoTowerB",
+          "widthPx": 3000,
+          "heightPx": 2000
+        }
+      ]
+    },
+    {
+      "id": "ChIJFixtureMuseum0003",
+      "displayName": { "text": "Fixture Museum", "languageCode": "en" },
+      "primaryType": "museum",
+      "photos": [
+        {
+          "name": "places/ChIJFixtureMuseum0003/photos/AeFixturePhotoMuseumA",
+          "widthPx": 2048,
+          "heightPx": 1365
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import type {
   LiveFlight,
 } from "@/lib/providers/serpapi-flights";
 import { checkedLabel, dayOffset } from "@/lib/ist-time";
+import { lowestVendorIndex, perPersonFromTotal, sortVendorPrices } from "@/lib/flight-list";
 import { BookingRequestButton } from "@/components/booking-request-button";
 import BrandLoader from "@/components/brand-loader";
 
@@ -134,13 +135,19 @@ function ReturnLeg({
   );
 }
 
-/** The loaded booking options, or a friendly empty-state message. */
-function OptionsList({
+/**
+ * The loaded vendor prices (Req 12.4, 12.7), or a friendly empty-state message.
+ * Sorted ascending by price (unpriced last), per-person price derived from the
+ * party total, and the lowest-priced vendor is marked.
+ */
+function VendorPrices({
   options,
   checkedAt,
+  travellers,
 }: {
   options: FlightBookingOption[];
   checkedAt: string;
+  travellers: number;
 }) {
   if (options.length === 0) {
     return (
@@ -151,29 +158,47 @@ function OptionsList({
     );
   }
   const siteCount = options.length;
+  const sorted = sortVendorPrices(options);
+  const lowest = lowestVendorIndex(sorted);
+  const people = Number.isFinite(travellers) && travellers >= 1 ? Math.floor(travellers) : 1;
   return (
     <>
     <p className="flight-booking__count">
       {siteCount === 1 ? "1 booking site compared" : `${siteCount} booking sites compared`} {"\u00B7"} lowest first
     </p>
-    <ul className="live-offer-list flight-booking__options" aria-label="Flight booking options">
-      {options.map((o: FlightBookingOption, i: number) => (
-        <li className="live-offer" key={`${o.source}-${o.optionTitle ?? ""}-${i}`}>
-          <span className="live-offer__source">
-            <span className="live-offer__name">{o.source}</span>
-            {o.isAirline ? <span className="live-offer__badge">Airline</span> : null}
-            {o.optionTitle ? <span className="live-offer__perk">{o.optionTitle}</span> : null}
-          </span>
-          <BookingRequestButton
-            source={o.source}
-            url={o.request.url}
-            method={o.request.method}
-            fields={o.request.fields}
-            logo={o.logo}
-            price={o.price}
-          />
-        </li>
-      ))}
+    <ul className="live-offer-list flight-booking__options vendor-prices" aria-label="Flight booking options">
+      {sorted.map((o: FlightBookingOption, i: number) => {
+        const hasPrice = typeof o.price === "number" && Number.isFinite(o.price) && o.price > 0;
+        return (
+          <li className="live-offer vendor-prices__row" key={`${o.source}-${o.optionTitle ?? ""}-${i}`}>
+            <span className="live-offer__source vendor-prices__vendor">
+              <span className="live-offer__name">{o.source}</span>
+              {o.isAirline ? <span className="live-offer__badge">Airline</span> : null}
+              {o.optionTitle ? <span className="live-offer__perk">{o.optionTitle}</span> : null}
+              {i === lowest ? <span className="live-offer__badge vendor-prices__lowest">Lowest</span> : null}
+            </span>
+            {hasPrice ? (
+              <span className="vendor-prices__price">
+                <span className="vendor-prices__per-person">
+                  {inr.format(perPersonFromTotal(o.price as number, people))} per person
+                </span>
+                {people > 1 ? (
+                  <span className="live-offer__unit vendor-prices__total">
+                    {inr.format(o.price as number)} total
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+            <BookingRequestButton
+              source={o.source}
+              url={o.request.url}
+              method={o.request.method}
+              fields={o.request.fields}
+              logo={o.logo}
+            />
+          </li>
+        );
+      })}
       <li className="flight-booking__checked" aria-hidden="false">
         <span className="live-offer__unit">Checked {checkedLabel(checkedAt)}</span>
       </li>
@@ -363,12 +388,16 @@ export default function FlightBookingPanel({
               </button>
             </p>
           ) : null}
-          <OptionsList options={state.result.options} checkedAt={state.result.checkedAt} />
+          <VendorPrices
+            options={state.result.options}
+            checkedAt={state.result.checkedAt}
+            travellers={criteria.travellers}
+          />
         </div>
       )}
 
       <p className="flight-booking__note live-hotel__note">
-        You book and pay on the chosen site; TripGenie takes no payment. The final fare and fare
+        You book and pay on the chosen site; Tripsaathi AI takes no payment. The final fare and fare
         rules are confirmed there and can change.
       </p>
     </div>

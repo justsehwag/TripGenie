@@ -20,6 +20,8 @@ export interface ImageResult {
   label: string;
   representative: boolean;
   source: "resolved" | "local-fallback";
+  /** Optional responsive candidates, "<url> 1x, <url> 2x". */
+  srcset?: string;
 }
 
 /** Slot is normalized into exactly four bundled photos per surface (Req 11.5/11.7). */
@@ -37,6 +39,39 @@ export function isAllowedImageUrl(value: string): boolean {
     return false;
   }
   return u.protocol === "https:" && awsConfig.imageHostAllowlist.includes(u.hostname);
+}
+
+const PLACE_PHOTO_REF_PATTERN = /^places\/[^/]+\/photos\/[^/]+$/;
+const PLACE_PHOTO_MAX_WIDTH = 1600;
+
+/**
+ * Whether a result URL may be returned to the client: an allowlisted https
+ * host, or the strict same-origin `/api/place-photo?ref=...&w=...` shape.
+ */
+export function isAllowedResultUrl(value: string): boolean {
+  if (typeof value !== "string" || value === "") return false;
+  if (isAllowedImageUrl(value)) return true;
+  if (!value.startsWith("/api/place-photo?")) return false;
+  let u: URL;
+  try {
+    u = new URL(value, "http://local.invalid");
+  } catch {
+    return false;
+  }
+  if (u.pathname !== "/api/place-photo") return false;
+  const keys = Array.from(u.searchParams.keys());
+  if (keys.some((k) => k !== "ref" && k !== "w")) return false;
+  if (u.searchParams.getAll("ref").length !== 1) return false;
+  if (u.searchParams.getAll("w").length > 1) return false;
+  const ref = u.searchParams.get("ref") ?? "";
+  if (!PLACE_PHOTO_REF_PATTERN.test(ref)) return false;
+  const w = u.searchParams.get("w");
+  if (w !== null) {
+    if (!/^\d{1,4}$/.test(w)) return false;
+    const n = Number(w);
+    if (n < 1 || n > PLACE_PHOTO_MAX_WIDTH) return false;
+  }
+  return true;
 }
 
 /**

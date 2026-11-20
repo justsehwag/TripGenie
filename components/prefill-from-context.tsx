@@ -96,7 +96,7 @@ export default function PrefillFromContext({
       <p className="lead" role="note">
         Start a search to see {PLACE_NOUN[category]}, or plan your trip from the{" "}
         <Link href="/" className="inline-link">
-          TripGenie concierge
+          Tripsaathi AI concierge
         </Link>
         .
       </p>

@@ -181,7 +181,7 @@ const CONCIERGE_STEPS: { step: string; title: string; copy: string }[] = [
   {
     step: "01",
     title: "Understands your preferences",
-    copy: "Describe the trip in your own words and TripGenie AI reads the pace, places and style you are after.",
+    copy: "Describe the trip in your own words and Tripsaathi AI reads the pace, places and style you are after.",
   },
   {
     step: "02",
@@ -218,7 +218,7 @@ function FeatureImage({
   slot: number;
   fallbackId: IllustrationId;
 }) {
-  const { url, alt } = useDestinationImage(query, slot);
+  const { url, srcSet, alt, onError } = useDestinationImage(query, slot, "hero");
   const fallback = illustration(fallbackId);
   return (
     <div className="image-frame home-feature2__frame">
@@ -226,7 +226,9 @@ function FeatureImage({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           className="home-feature2__photo"
+          srcSet={srcSet}
           src={url}
+          onError={onError}
           alt={alt || query}
           loading="lazy"
         />
@@ -492,7 +494,7 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
         (/stays, /flights, /cars) and the concierge (/plan).
       */}
       {showHero && (
-      <section className="home-hero home-hero2" aria-label="TripGenie">
+      <section className="home-hero home-hero2" aria-label="Tripsaathi AI">
         <div className="home-hero__inner shell">
           <div className="home-hero2__grid grid-2">
             {/* LEFT: serif heading + paragraph + compact trip-finder form. */}
@@ -500,7 +502,7 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
               <div className="home-hero__copy home-hero2__copy">
                 <h1 className="display home-hero__title">Your intelligent travel companion.</h1>
                 <p className="home-hero__sub">
-                  TripGenie AI discovers destinations, compares stays, flights and
+                  Tripsaathi AI discovers destinations, compares stays, flights and
                   cars, and plans full itineraries for you — so every journey comes
                   together in one place.
                 </p>
@@ -901,7 +903,7 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
             <p className="eyebrow">Featured</p>
             <h2 id="featured-heading" className="section-title">Destinations worth the journey</h2>
             <p className="section-sub">
-              A new way to explore the world — TripGenie AI learns the pace and places
+              A new way to explore the world — Tripsaathi AI learns the pace and places
               you love and turns them into a journey that feels made for you.
             </p>
           </div>
@@ -1020,11 +1022,11 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
         <div className="home-explainer__intro">
           <p className="eyebrow">
             <span className="ai-pulse home-explainer__pulse" aria-hidden="true" />
-            How TripGenie AI plans
+            How Tripsaathi AI plans
           </p>
           <h2 id="explainer-heading" className="section-title">Plan it with a sentence</h2>
           <p className="section-sub">
-            Tell TripGenie AI the trip you are dreaming about and a day-by-day plan
+            Tell Tripsaathi AI the trip you are dreaming about and a day-by-day plan
             takes shape. No forms, no tabs — just describe it in your own words.
           </p>
           <ul className="home-prompt-chips" aria-label="Example prompts">
@@ -1037,7 +1039,7 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
             ))}
           </ul>
           <a className="cta home-explainer__cta" href="/plan">
-            Plan with TripGenie AI {"\u2192"}
+            Plan with Tripsaathi AI {"\u2192"}
           </a>
         </div>
 
@@ -1053,7 +1055,7 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
 
         {/* Existing value highlights, folded into this section as supporting
             props rather than a standalone uniform grid. */}
-        <ul className="home-explainer__features" aria-label="Why TripGenie">
+        <ul className="home-explainer__features" aria-label="Why Tripsaathi AI">
           {FEATURES.map((f) => (
             <li key={f.title} className="home-explainer__feature">
               <span className="home-explainer__feature-icon" aria-hidden="true">
@@ -1094,7 +1096,7 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
           <div className="booking-surface empty-state">
             <p>You have not viewed or saved anything yet.</p>
             <p>Describe a trip above, or explore a destination, to pick up where you leave off.</p>
-            <a className="cta" href="/plan">Plan with TripGenie AI</a>
+            <a className="cta" href="/plan">Plan with Tripsaathi AI</a>
           </div>
         )}
       </section>

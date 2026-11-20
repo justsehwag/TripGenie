@@ -235,7 +235,7 @@ function HotelCard({
               </p>
             ))}
           <p className="live-hotel__note">
-            You book and pay on the site you choose; TripGenie takes no payment. Prices were checked{" "}
+            You book and pay on the site you choose; Tripsaathi AI takes no payment. Prices were checked{" "}
             {checkedLabel} for {criteria.adults} {criteria.adults === 1 ? "guest" : "guests"}
             {criteria.rooms > 1 ? ` (${criteria.rooms} rooms requested)` : ""}. The final price, room type and
             cancellation terms are confirmed on that site and can change.

@@ -64,7 +64,7 @@ export const FOOTER_SECTIONS: readonly FooterSection[] = [
 
 /** The estimated / no-payment provenance disclosure text (Req 29.3, 4.11). */
 export const PROVENANCE_DISCLOSURE =
-  "Offers shown on TripGenie are estimated. We take no payment and issue no valid ticket, room, or rental.";
+  "Offers shown on Tripsaathi AI are estimated. We take no payment and issue no valid ticket, room, or rental.";
 
 export interface SiteFooterProps {
   /** Enabled-provider policy, reused from Req 1; drives the account control (Req 29.5). */
@@ -85,7 +85,7 @@ export default function SiteFooter({
     <footer className="site-footer">
       <div className="shell site-footer__inner">
         <div className="site-footer__brand">
-          <p className="site-footer__wordmark">TripGenie</p>
+          <p className="site-footer__wordmark">Tripsaathi AI</p>
           <p className="site-footer__tagline">
            AI that takes you places.
           </p>

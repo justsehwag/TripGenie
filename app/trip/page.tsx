@@ -5,7 +5,7 @@
  * Shared_Trip_Context the concierge captured. The concierge redirects here once
  * the trip profile is complete.
  */
-export const metadata = { title: "Your trip plan - TripGenie" };
+export const metadata = { title: "Your trip plan - Tripsaathi AI" };
 
 export default function TripPage() {
   return <Planner />;

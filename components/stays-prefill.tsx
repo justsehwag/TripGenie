@@ -58,7 +58,7 @@ export default function StaysPrefill() {
       <p className="lead" role="note">
         Start a search to see stays, or plan your trip from the{" "}
         <Link href="/" className="inline-link">
-          TripGenie concierge
+          Tripsaathi AI concierge
         </Link>
         .
       </p>

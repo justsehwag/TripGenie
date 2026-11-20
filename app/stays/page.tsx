@@ -38,7 +38,7 @@ import StaysResults from "@/components/stays-results";
 import StaysSearchForm from "@/components/stays-search-form";
 import { searchHotelRates, type HotelRatesResult } from "@/lib/providers/serpapi-hotels";
 
-export const metadata = { title: "Stays - TripGenie" };
+export const metadata = { title: "Stays - Tripsaathi AI" };
 
 /** Next 16 passes searchParams as a Promise of a string→string|string[] map. */
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -66,7 +66,10 @@ function istPlusDays(n: number): string {
  * search runs and real photo results show instead of estimate fallbacks.
  */
 function ensureStayDates(c: StaysCriteria): { checkIn: string; checkOut: string } {
-  const ci = isIsoDate(c.checkIn) ? c.checkIn : istPlusDays(14);
+  // A valid but PAST check-in (e.g. a demo trip's old start date) must be
+  // pushed forward too, not kept - otherwise the live search is rejected as
+  // "in the past" and we fall back to estimates.
+  const ci = (isIsoDate(c.checkIn) && c.checkIn >= todayIst()) ? c.checkIn : istPlusDays(14);
   let co = isIsoDate(c.checkOut) ? c.checkOut : "";
   if (!isIsoDate(co) || co <= ci) co = (() => {
     const base = new Date(`${ci}T00:00:00Z`).getTime();

@@ -6,8 +6,11 @@ import { parseRoute, emptyRouteState, routeConfirmed } from "@/lib/route-intake"
 import { durationFromText } from "@/lib/date-intake";
 import { illustration } from "@/lib/illustrations";
 import type { RouteState, TripContext } from "@/lib/types";
-import { advance, uncollected, REQUIRED_FIELDS, type ControllerState, type ControllerResponse, type RequiredField } from "@/lib/preference-controller";
-import { syncFallbackModel } from "@/lib/intake-fallback";
+import { REQUIRED_FIELDS, type RequiredField } from "@/lib/preference-controller";
+import { step as intakeStep, initialIntakeState, summaryRows, SKIPPABLE, type ChatEvent, type ChatIntakeState } from "@/lib/chat-intake";
+import { groundExtraction } from "@/lib/extraction-grounding";
+import ChatSummaryCard from "@/components/chat-summary-card";
+import { fallbackExtractForField } from "@/lib/intake-fallback";
 import { useTripContext } from "@/components/trip-context";
 import { useScopedHistory } from "@/components/use-scoped-history";
 import { fromSharedContext } from "@/lib/history/record-codec";
@@ -34,7 +37,7 @@ function ConciergeMessage({ role, text }: ChatMessage) {
         {role === "assistant" && (
           <span className="concierge-message__avatar" aria-hidden="true" />
         )}
-        {role === "assistant" ? "TripGenie" : "You"}
+        {role === "assistant" ? "Tripsaathi AI" : "You"}
       </span>
       <p className="concierge-message__text">{text}</p>
     </div>
@@ -303,7 +306,7 @@ function MicIcon() {
  * during render.
  */
 function HeroImage({ query }: { query: string }) {
-  const { url, alt } = useDestinationImage(query, 0);
+  const { url, srcSet, alt, onError } = useDestinationImage(query, 0, "hero");
   const fallback = illustration("traveler-globe");
   return (
     <div className="image-frame concierge-hero__frame">
@@ -311,7 +314,7 @@ function HeroImage({ query }: { query: string }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           className="concierge-hero__photo"
-          src={url}
+          srcSet={srcSet} src={url} onError={onError}
           alt={alt || query}
           loading="eager"
           decoding="async"
@@ -380,11 +383,8 @@ export default function ConciergeHome({
   const [routeState, setRouteState] = useState<RouteState>(emptyRouteState());
   const [captured, setCaptured] = useState<CapturedCategories>({});
   const [draft, setDraft] = useState("");
-  /** Running preference-controller state carried across planning turns (Req 2.4). */
-  const [controllerState, setControllerState] = useState<ControllerState>({
-    context: {},
-    questionsAsked: 0,
-  });
+  /** Chat intake state (lib/chat-intake): fixed question order, no defaults, explicit skip. */
+  const [intake, setIntake] = useState<ChatIntakeState>(() => initialIntakeState());
   /** In-flight guard so a turn's request is never fired twice (no new markup). */
   const [pending, setPending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -452,8 +452,9 @@ export default function ConciergeHome({
     const dest = initialDestination?.trim();
     if (dest) {
       seededRef.current = true;
-      const ctx: TripContext = { ...controllerState.context, destination: dest };
-      setControllerState((prev) => ({ ...prev, context: ctx }));
+      const seededStep = intakeStep(intake, { type: "edit", field: "destination", value: dest });
+      const ctx: TripContext = seededStep.state.context;
+      setIntake(seededStep.state);
       sharedContext.patchContext({ destination: dest });
       setCaptured((prev) => capturedFromContext(prev, ctx));
       setRouteState((prev) => ({ ...prev, destination: dest, destinationConfirmed: true, routeCandidate: "" }));
@@ -508,10 +509,44 @@ export default function ConciergeHome({
           routeCandidate: "",
         }));
       }
-      setControllerState((prev) => ({ ...prev, context: plan.context }));
+      const resumed = intakeStep(intake, { type: "seed", context: plan.context });
+      setIntake(resumed.state);
+      setMessages((prev) => [...prev, { role: "assistant", text: resumed.message }]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTrip, history.loading, history.items]);
+
+  // Hydrate the chat from the Shared_Trip_Context when it already holds trip
+  // fields (for example after the traveller used the Quick form) and the chat
+  // has not started. Skipped when the seeded (?q / ?dest) or resume (?trip)
+  // paths ran or are pending, and once the local conversation has any state.
+  // Re-runs as the provider rehydrates, but applies at most once.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current || seededRef.current || resumedRef.current) return;
+    if (initialTrip?.trim() || initialDestination?.trim() || initialQuery?.trim()) return;
+    if (messages.length > 1) return;
+    if (Object.keys(intake.context).length > 0) return;
+    const ctx = sharedContext.context;
+    if (!ctx || Object.keys(ctx).length === 0) return;
+    hydratedRef.current = true;
+    // Persisted values enter as "carried" with a recap; they are never silently answered.
+    const hydrated = intakeStep(intake, { type: "seed", context: ctx });
+    setIntake(hydrated.state);
+    setMessages((prev) => [...prev, { role: "assistant", text: hydrated.message }]);
+    setCaptured((prev) => capturedFromContext(prev, ctx));
+    if (ctx.origin && ctx.destination) {
+      setRouteState((prev) => ({
+        ...prev,
+        origin: ctx.origin as string,
+        destination: ctx.destination as string,
+        originConfirmed: true,
+        destinationConfirmed: true,
+        routeCandidate: "",
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedContext.context]);
 
   const headerIllustration = illustration("location-pin");
 
@@ -645,70 +680,83 @@ export default function ConciergeHome({
     setPending(true);
 
     try {
-      const res = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "turn",
-          state: controllerState,
-          inputDelta: answer,
-        }),
-      });
-      if (!res.ok) throw new Error(`AI turn failed: ${res.status}`);
-      const data = (await res.json()) as { response: ControllerResponse };
-      const response = data.response;
-
-      // (a) advance the controller state for the next turn.
-      setControllerState(response.state);
-      // (b) mirror the resulting TripContext into BOTH the local display map
-      //     and the shared provider — only present fields, never fabricated.
-      const ctx = response.state.context;
-      setCaptured((prev) => capturedFromContext(prev, ctx));
-      sharedContext.setContext(ctx);
-      // Keep the route summary in sync for "Open full planner".
-      if (ctx.origin && ctx.destination) {
-        setRouteState((prev) => ({
-          ...prev,
-          origin: ctx.origin as string,
-          destination: ctx.destination as string,
-          originConfirmed: true,
-          destinationConfirmed: true,
-          routeCandidate: "",
-        }));
+      // One extraction per turn. The server grounds the result; on any failure the
+      // same field-aware fallback plus grounding runs locally (no fabricated fields).
+      const asked: RequiredField | undefined = intake.asked ?? undefined;
+      let fields: Partial<TripContext> = {}; let routeOnly = false;
+      try {
+        const res = await fetch("/api/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "extract", text: answer, asked }),
+        });
+        if (!res.ok) throw new Error(`AI extract failed: ${res.status}`);
+        const data = (await res.json()) as { fields?: Partial<TripContext>; routeOnly?: boolean };
+        fields = data.fields ?? {}; routeOnly = data.routeOnly === true;
+      } catch {
+        const fb = fallbackExtractForField(answer, {}, asked);
+        const g = groundExtraction({ text: answer, asked, extracted: fb }); fields = g.fields; routeOnly = g.routeOnly;
       }
-      // (c) append the controller's next question / completion text.
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: response.prompt },
-      ]);
-      redirectIfComplete(ctx);
-    } catch {
-      // Offline / route failure: run the REAL deterministic controller locally
-      // so the flow still advances (step counter + chips + captured all update)
-      // exactly as the server would. This is what makes the planner work with no
-      // network / no Bedrock. The field the controller is asking about drives a
-      // field-aware extraction that rejects greetings and never fabricates.
-      const askedField = uncollected(controllerState.context)[0];
-      const model = syncFallbackModel(askedField);
-      const r = advance(controllerState, answer, model);
-      setControllerState(r.state);
-      const ctx = r.state.context;
-      setCaptured((prev) => capturedFromContext(prev, ctx));
-      sharedContext.setContext(ctx);
-      if (ctx.origin && ctx.destination) {
-        setRouteState((prev) => ({ ...prev, origin: ctx.origin as string, destination: ctx.destination as string, originConfirmed: true, destinationConfirmed: true, routeCandidate: "" }));
-      }
-      setMessages((prev) => [...prev, { role: "assistant", text: r.prompt }]);
-      redirectIfComplete(ctx);
+      const r = applyIntakeEvent({ type: "text", text: answer, extracted: fields, routeOnly });
+      setMessages((prev) => [...prev, { role: "assistant", text: r.message }]);
     } finally {
       setPending(false);
     }
   }
 
-  function redirectIfComplete(ctx: TripContext) {
-    if (uncollected(ctx).length !== 0) return;
-    sharedContext.setContext(ctx);
-    window.setTimeout(() => router.push("/trip"), 900);
+  /** Run one intake event: update the intake state and mirror the context into the local display. */
+  function applyIntakeEvent(event: ChatEvent) {
+    const r = intakeStep(intake, event);
+    setIntake(r.state);
+    const ctx = r.state.context;
+    setCaptured((prev) => capturedFromContext(event.type === "edit" ? {} : prev, ctx));
+    if (ctx.origin && ctx.destination) {
+      setRouteState((prev) => ({
+        ...prev,
+        origin: ctx.origin as string,
+        destination: ctx.destination as string,
+        originConfirmed: true,
+        destinationConfirmed: true,
+        routeCandidate: "",
+      }));
+    }
+    return r;
+  }
+
+  /** Skip the open question (only offered for skippable fields). */
+  function skipQuestion() {
+    if (pending) return;
+    setMessages((prev) => [...prev, { role: "user", text: "Skip" }]);
+    const r = applyIntakeEvent({ type: "skip" });
+    setMessages((prev) => [...prev, { role: "assistant", text: r.message }]);
+  }
+
+  /** Keep the values carried from the earlier trip and continue with the next question. */
+  function keepCarried() {
+    if (pending) return;
+    const r = applyIntakeEvent({ type: "keep-carried" });
+    setMessages((prev) => [...prev, { role: "assistant", text: r.message }]);
+  }
+
+  /** Edit one summary row: clears the field and asks for it again. */
+  function editField(field: RequiredField) {
+    if (pending) return;
+    const r = applyIntakeEvent({ type: "edit", field, value: undefined });
+    setMessages((prev) => [...prev, { role: "assistant", text: r.message }]);
+    inputRef.current?.focus();
+  }
+
+  /** The ONLY navigation to /trip: the explicit Generate button on the summary card. */
+  function generateItinerary() {
+    if (pending) return;
+    const r = intakeStep(intake, { type: "generate" });
+    if (!r.navigate) {
+      setIntake(r.state);
+      setMessages((prev) => [...prev, { role: "assistant", text: r.message }]);
+      return;
+    }
+    sharedContext.setContext(intake.context);
+    router.push("/trip");
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -722,7 +770,7 @@ export default function ConciergeHome({
     setRouteState(emptyRouteState());
     setCaptured({});
     setDraft("");
-    setControllerState({ context: {}, questionsAsked: 0 });
+    setIntake(intakeStep(intake, { type: "reset" }).state);
     sharedContext.reset();
   }
 
@@ -758,21 +806,24 @@ export default function ConciergeHome({
   // Progress reflects the controller's real field completion so the counter and
   // the "profile ready" state stay in sync (route = origin + destination = 2).
   const totalFields = REQUIRED_FIELDS.length;
-  const remainingFields = uncollected(controllerState.context).length;
-  const progressCount = totalFields - remainingFields;
-  const isComplete = remainingFields === 0;
+  const progressCount = REQUIRED_FIELDS.filter(
+    (f) => intake.status[f] === "answered" || intake.status[f] === "carried",
+  ).length;
+  const inSummary = intake.phase === "summary";
+  const canSkip = intake.asked !== null && SKIPPABLE.includes(intake.asked);
+  const showKeepCarried = intake.phase === "recap" && intake.asked === null;
 
   // Suggestion chips track the field the assistant is currently asking about,
   // so a tap always offers a valid answer to the live question (falls back to
   // the route examples at the opening turn or once every field is captured).
   const activeSuggestions = useMemo<readonly string[]>(() => {
-    const nextField: RequiredField | undefined = uncollected(controllerState.context)[0];
+    const nextField: RequiredField | null = intake.asked;
     if (!nextField) return EXAMPLE_PROMPTS;
-    if (nextField === "origin" && !controllerState.context.origin && !controllerState.context.destination) {
+    if (nextField === "origin" && !intake.context.origin && !intake.context.destination) {
       return EXAMPLE_PROMPTS;
     }
     return SUGGESTIONS_BY_FIELD[nextField] ?? EXAMPLE_PROMPTS;
-  }, [controllerState]);
+  }, [intake]);
 
   const lastUser =
     [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
@@ -794,9 +845,9 @@ export default function ConciergeHome({
       {variant === "assistant" && (
         <header className="concierge__pagehead motion-rise">
           <p className="eyebrow">AI Travel Assistant</p>
-          <h1 className="concierge__pagetitle">Plan your trip with TripGenie</h1>
+          <h1 className="concierge__pagetitle">Plan your trip with Tripsaathi AI</h1>
           <p className="lead">
-            Answer a few short questions and TripGenie builds your trip as you go.
+            Answer a few short questions and Tripsaathi AI builds your trip as you go.
           </p>
         </header>
       )}
@@ -805,7 +856,7 @@ export default function ConciergeHome({
         <header
           ref={heroRevealRef}
           className="concierge-hero"
-          aria-label="Plan your trip with TripGenie"
+          aria-label="Plan your trip with Tripsaathi AI"
         >
           {/* LEFT — editorial copy + the trip-intent input (reuses the existing
               draft/submit pipeline, so validation and navigation are unchanged).
@@ -830,7 +881,7 @@ export default function ConciergeHome({
               className="lead concierge-hero__lead reveal"
               style={{ transitionDelay: "calc(var(--anim-stagger-step) * 2)" }}
             >
-              Tell TripGenie where you&apos;re headed and it designs flights,
+              Tell Tripsaathi AI where you&apos;re headed and it designs flights,
               stays and a day-by-day itinerary around how you like to travel.
             </p>
             <form
@@ -877,7 +928,7 @@ export default function ConciergeHome({
         <div className="concierge-planner card motion-rise">
           <header className="concierge-planner__header">
             <div className="concierge-planner__heading">
-              <p className="eyebrow">Plan with TripGenie</p>
+              <p className="eyebrow">Plan with Tripsaathi AI</p>
               <p className="lead">Pick a recommendation, or type a short answer.</p>
             </div>
             <div
@@ -904,11 +955,20 @@ export default function ConciergeHome({
             ref={conversationRef}
             className="concierge-conversation"
             aria-live="polite"
-            aria-label="Conversation with TripGenie"
+            aria-label="Conversation with Tripsaathi AI"
           >
             {messages.map((m, i) => (
               <ConciergeMessage key={i} role={m.role} text={m.text} />
             ))}
+
+            {inSummary && (
+              <ChatSummaryCard
+                rows={summaryRows(intake)}
+                onEdit={editField}
+                onGenerate={generateItinerary}
+                idPrefix={`chat-summary-${variant}`}
+              />
+            )}
 
             {/* Honest in-progress indicator (Req 4.3, 4.5). It is rendered ONLY
                 while the existing `pending` flag is true — i.e. strictly between
@@ -927,7 +987,7 @@ export default function ConciergeHome({
               >
                 <span className="chat-message__role concierge-message__role">
                   <span className="concierge-message__avatar" aria-hidden="true" />
-                  TripGenie
+                  Tripsaathi AI
                 </span>
                 <p className="concierge-thinking__row">
                   <span className="ai-pulse concierge-thinking__pulse" aria-hidden="true" />
@@ -942,7 +1002,7 @@ export default function ConciergeHome({
             role="group"
             aria-label="Example prompts"
           >
-            {activeSuggestions.map((prompt) => (
+            {!inSummary && activeSuggestions.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
@@ -952,6 +1012,16 @@ export default function ConciergeHome({
                 {prompt}
               </button>
             ))}
+            {canSkip && (
+              <button type="button" className="chat-chip press" onClick={skipQuestion}>
+                Skip
+              </button>
+            )}
+            {showKeepCarried && (
+              <button type="button" className="chat-chip press" onClick={keepCarried}>
+                Keep these details
+              </button>
+            )}
           </div>
 
           <form className="concierge-composer" onSubmit={handleSubmit}>

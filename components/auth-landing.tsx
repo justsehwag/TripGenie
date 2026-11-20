@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * Account landing / sign-in surface.
+ * Account landing / sign-in surface - two-panel split.
+ * Left: deep emerald brand panel (logo + tagline + feature bullets).
+ * Right: clean white sign-in form with provider brand icons.
  *
- * "Continue with email" now reveals a real in-app email/password sign-in
- * form that POSTs { action: "signin" } to /api/auth (Amazon Cognito,
- * USER_PASSWORD_AUTH on the server - no secret in the browser). Social
- * providers still redirect to the hosted UI when configured. All controls
- * reuse the existing auth / surface / field / cta / notice classes.
+ * Behavior is UNCHANGED: "Continue with email" toggles the in-app email/password
+ * form that POSTs { action: "signin" } to /api/auth (Amazon Cognito, server-side);
+ * social providers redirect to the hosted UI when configured; "continue without
+ * signing in" proceeds as a guest; a successful sign-in writes the browser-local
+ * session and routes to /plan.
  */
 
 import { useMemo, useState } from "react";
@@ -21,6 +23,38 @@ import {
   type Provider,
   type SignInControl,
 } from "@/lib/identity";
+/* --- Icons (inline, currentColor unless specified) --- */
+function GoogleGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.61l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
+  );
+}
+function MailIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2"/>
+      <path d="m3 7 9 6 9-6"/>
+    </svg>
+  );
+}
+function LockIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="5" y="11" width="14" height="9" rx="2"/>
+      <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+    </svg>
+  );
+}
+function controlIcon(p: Provider) {
+  if (p === "google") return <GoogleGlyph />;
+  if (p === "email") return <MailIcon />;
+  return null;
+}
 
 export interface AuthLandingProps {
   policy: IdentityProviderPolicy;
@@ -72,10 +106,7 @@ export default function AuthLanding({
   onSignIn,
 }: AuthLandingProps) {
   const router = useRouter();
-  const controls: SignInControl[] = useMemo(
-    () => landingControls(policy),
-    [policy],
-  );
+  const controls: SignInControl[] = useMemo(() => landingControls(policy), [policy]);
   const heading = greeting(session);
 
   const [showEmail, setShowEmail] = useState(false);
@@ -110,9 +141,6 @@ export default function AuthLanding({
     try {
       const r = await postSignin(email, password);
       if (r.ok && r.code === "SUCCESS") {
-        // Persist a minimal browser-local session so the rest of the app
-        // recognizes the signed-in traveler (same key My_Trips reads), then
-        // route into the planner rather than back to this sign-in page.
         if (typeof window !== "undefined") {
           try {
             window.localStorage.setItem(
@@ -143,120 +171,93 @@ export default function AuthLanding({
       onContinueAsGuest();
       return;
     }
-    if (
-      typeof window !== "undefined" &&
-      persistenceTarget(null) === "browser-local"
-    ) {
+    if (typeof window !== "undefined" && persistenceTarget(null) === "browser-local") {
       window.location.assign("/plan");
     }
   }
 
   return (
-    <main className="shell auth auth-glass-page">
-      <div className="auth-glass-page__glow auth-aurora" aria-hidden="true">
-        <span className="auth-aurora__layer auth-aurora__layer--one" />
-        <span className="auth-aurora__layer auth-aurora__layer--two" />
-        <span className="auth-aurora__layer auth-aurora__layer--three" />
-      </div>
+    <main className="auth-split">
+      {/* Left: brand panel */}
+      <aside className="auth-split__brand" aria-hidden="true">
+        <div className="auth-split__brand-inner">
+          <div className="auth-split__logo">
+            <span className="auth-split__logo-mark">✈</span>
+            <span className="auth-split__logo-word">Tripsaathi AI</span>
+          </div>
+          <h1 className="auth-split__tagline">Plan smarter.<br />Travel better.</h1>
+          <p className="auth-split__lead">Your trips, priced live and planned by AI - all in one place.</p>
+          <ul className="auth-split__features">
+            <li><span className="auth-split__dot" />Live hotel &amp; flight prices</li>
+            <li><span className="auth-split__dot" />AI day-by-day itineraries</li>
+            <li><span className="auth-split__dot" />Your plans, synced everywhere</li>
+          </ul>
+        </div>
+      </aside>
 
-      <section
-        className="motion-rise auth-rise auth__intro"
-        style={{ animationDelay: "40ms" }}
-      >
-        <p className="eyebrow">Your account</p>
-        <h1 className="display">{heading}</h1>
-        <p className="lead">
-          Sign in to keep your trips and profile in sync across devices, or
-          continue as a guest and we will keep everything on this device.
-        </p>
-      </section>
-
-      <div className="auth-glass-grid">
-        <section
-          className="auth-glass motion-rise auth-rise"
-          style={{ animationDelay: "140ms" }}
-          aria-labelledby="auth-signin-heading"
-        >
-          <h2 id="auth-signin-heading" className="auth__heading">
-            Sign in
-          </h2>
+      {/* Right: sign-in form */}
+      <section className="auth-split__form" aria-labelledby="auth-signin-heading">
+        <div className="auth-panel">
+          <p className="auth-panel__eyebrow">{heading}</p>
+          <h2 id="auth-signin-heading" className="auth-panel__title">Welcome back</h2>
+          <p className="auth-panel__sub">Sign in to continue planning your next trip.</p>
 
           {authError && (
-            <p role="alert" className="notice notice--error auth__error">
-              {authError}
-            </p>
+            <p role="alert" className="notice notice--error auth-panel__error">{authError}</p>
           )}
           {error && (
-            <p role="alert" className="notice notice--error auth__error">{error}</p>
+            <p role="alert" className="notice notice--error auth-panel__error">{error}</p>
           )}
-          {notice && <p className="notice">{notice}</p>}
+          {notice && <p className="notice auth-panel__notice">{notice}</p>}
 
-          <ul className="auth__options" aria-label="Available sign-in options">
+          <ul className="auth-panel__options" aria-label="Available sign-in options">
             {controls.map((control) => (
-              <li key={control.provider} className="auth__option">
+              <li key={control.provider}>
                 <button
                   type="button"
-                  className={control.provider === "email" ? "cta auth__cta" : "btn auth__cta auth__cta--social"}
+                  className={control.provider === "email" ? "auth-btn auth-btn--primary" : "auth-btn auth-btn--social"}
                   data-provider={control.provider}
                   aria-label={control.label}
                   aria-expanded={control.provider === "email" ? showEmail : undefined}
                   onClick={() => startSignIn(control.provider)}
                 >
-                  {control.label}
+                  <span className="auth-btn__icon">{controlIcon(control.provider)}</span>
+                  <span>{control.label}</span>
                 </button>
               </li>
             ))}
           </ul>
 
           {showEmail && (
-            <form className="auth__options auth-email-form" onSubmit={submitEmail}>
+            <form className="auth-panel__form" onSubmit={submitEmail}>
               <label className="field">
                 <span>Email</span>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                />
+                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" />
               </label>
               <label className="field">
                 <span>Password</span>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Your password"
-                  autoComplete="current-password"
-                />
+                <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" autoComplete="current-password" />
               </label>
-              <button type="submit" className="cta auth__cta" disabled={busy} aria-busy={busy}>
+              <button type="submit" className="auth-btn auth-btn--primary" disabled={busy} aria-busy={busy}>
                 {busy ? "Signing in..." : "Sign in"}
               </button>
             </form>
           )}
 
-          <p className="auth__note">
-            We never see or store your password. Sign-in is secured by Amazon
-            Cognito.
-          </p>
-          <p className="auth__note">
-            New to TripGenie? <a className="inline-link" href="/signup">Create an account</a>.
-          </p>
-
-          <div className="auth-glass__divider"><span>or</span></div>
+          <div className="auth-panel__divider"><span>or</span></div>
           <button
             type="button"
-            className="btn auth-glass__guest-btn"
+            className="auth-btn auth-btn--ghost"
             onClick={continueAsGuest}
             aria-label="Continue without signing in"
           >
             Continue without signing in
           </button>
-        </section>
-      </div>
+
+          <p className="auth-panel__trust"><LockIcon /> <span>We never see or store your password. Secured by Amazon Cognito.</span></p>
+          <p className="auth-panel__signup">New to Tripsaathi AI? <a className="inline-link" href="/signup">Create an account</a>.</p>
+        </div>
+      </section>
     </main>
   );
 }

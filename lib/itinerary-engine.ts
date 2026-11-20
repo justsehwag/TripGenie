@@ -1,5 +1,6 @@
 import type { Activity, Itinerary, TripContext, TripDay } from "./types";
 import { seedSights } from "./sights";
+import { estimateUsdFor, localCurrency } from "./activity-pricing";
 
 /**
  * Itinerary generation & revision (pure) — design section "11. Itinerary".
@@ -49,31 +50,36 @@ function dayActivities(dest: string, day: number, last: boolean, vibe: string): 
       time: "08:30",
       title: day === 1 ? `Arrive in ${dest} and settle in` : `Breakfast near ${morningArea}`,
       description: day === 1 ? "Airport transfer, check-in and an easy first stroll." : `A ${vibe} start before the day's sights.`,
-      cost: 1200,
+      category: "transfer",
+      cost: estimateUsdFor("transfer", dest),
     },
     {
       time: "10:30",
       title: `Visit ${morningName}`,
       description: `${morningName} in ${morningArea} - ${vibe} highlight of the morning.`,
-      cost: 2600,
+      category: "sight",
+      cost: estimateUsdFor("sight", dest),
     },
     {
       time: "13:00",
       title: `Lunch in ${morningArea}`,
       description: `A local table near ${morningName}, matched to your preferences.`,
-      cost: 1800,
+      category: "meal",
+      cost: estimateUsdFor("meal", dest),
     },
     {
       time: "15:30",
       title: last ? `Final stop: ${afternoonName}` : `Explore ${afternoonName}`,
       description: `${afternoonName} in ${afternoonArea}${last ? " - a relaxed farewell visit." : `, a ${vibe} afternoon.`}`,
-      cost: 2200,
+      category: "sight",
+      cost: estimateUsdFor("sight", dest),
     },
     {
       time: "19:00",
       title: last ? `Departure transfer from ${dest}` : `Evening around ${afternoonArea}`,
       description: last ? "Buffer included for a calm departure." : `Dinner and a wander to close Day ${day}.`,
-      cost: 1900,
+      category: "leisure",
+      cost: estimateUsdFor("leisure", dest),
     },
   ];
 }
@@ -101,6 +107,8 @@ export function buildItinerary(input: ItineraryInput): Itinerary {
     title: `${input.destination} trip`,
     totalCost: days.reduce((s, d) => s + d.total, 0),
     days,
+    currency: localCurrency(input.destination),
+    estimated: true,
   };
 }
 

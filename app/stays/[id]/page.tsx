@@ -35,7 +35,7 @@ const PRICE_LEVEL_LABEL: Record<number, string> = {
   4: "Very expensive",
 };
 
-export const metadata = { title: "Stay detail - TripGenie" };
+export const metadata = { title: "Stay detail - Tripsaathi AI" };
 
 type SearchParams = Record<string, string | string[] | undefined>;
 

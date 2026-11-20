@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ModelPrompt } from "@/lib/bedrock-model";
 
 /**
@@ -23,6 +23,16 @@ vi.mock("@/lib/bedrock-model", async () => {
     ...actual,
     // Only the AWS boundary is stubbed; extract/phrase/itinerary stay real.
     createBedrockInvoke: () => (prompt: ModelPrompt) => fakeInvoke(prompt),
+  };
+});
+
+// Web grounding never reaches the network in these tests.
+vi.mock("@/lib/grounding/service", async () => {
+  const types = await vi.importActual<typeof import("@/lib/grounding/types")>(
+    "@/lib/grounding/types",
+  );
+  return {
+    groundItinerary: async () => types.EMPTY_BUNDLE("unavailable"),
   };
 });
 
@@ -123,7 +133,7 @@ describe("Feature: realtime-ai-integration, Bedrock_Route /api/ai", () => {
     // with a ~5s timeout, so a fully hanging model takes ~10s to degrade.
   }, 20000);
 
-  it("itinerary with a failing model returns a valid fallback Itinerary", async () => {
+  it("itinerary with a failing model returns unavailable and no itinerary", async () => {
     fakeInvoke = async () => {
       throw new Error("bedrock unavailable");
     };
@@ -136,12 +146,9 @@ describe("Feature: realtime-ai-integration, Bedrock_Route /api/ai", () => {
     );
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.itinerary).toBeDefined();
-    expect(Array.isArray(json.itinerary.days)).toBe(true);
-    expect(json.itinerary.days.length).toBeGreaterThanOrEqual(1);
-    // The route reports a bedrock source even when the generator fell back
-    // internally (the generator does not distinguish); a source is present.
-    expect(typeof json.source).toBe("string");
+    expect(json.source).toBe("unavailable");
+    expect(typeof json.reason).toBe("string");
+    expect("itinerary" in json).toBe(false);
   });
 
   it("bad JSON body returns 400", async () => {
@@ -169,5 +176,97 @@ describe("Feature: realtime-ai-integration, Bedrock_Route /api/ai", () => {
   it("itinerary with missing context returns 400", async () => {
     const res = await POST(post({ action: "itinerary" }));
     expect(res.status).toBe(400);
+  });
+});
+
+describe("Feature: trustworthy-itinerary, itinerary-batch /api/ai", () => {
+  const KEY = "GOOGLE_PLACES_API_KEY";
+  let savedKey: string | undefined;
+
+  beforeEach(() => {
+    savedKey = process.env[KEY];
+    // No real network call may happen in any of these tests.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network disabled in test");
+      }),
+    );
+  });
+
+  afterEach(() => {
+    if (savedKey === undefined) delete process.env[KEY];
+    else process.env[KEY] = savedKey;
+    vi.unstubAllGlobals();
+  });
+
+  const validBatch = {
+    action: "itinerary-batch",
+    context: { destination: "Tokyo", durationDays: 3 },
+    fromDay: 1,
+    dayCount: 1,
+    usedPlaces: [] as string[],
+  };
+
+  it("returns 400 for an invalid body", async () => {
+    const res = await POST(
+      post({ action: "itinerary-batch", context: { destination: "", durationDays: 3 } }),
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(typeof json.error).toBe("string");
+  });
+
+  it("returns 200 unavailable/not-configured with no model call when the Places key is missing", async () => {
+    delete process.env[KEY];
+    let modelCalls = 0;
+    fakeInvoke = async () => {
+      modelCalls++;
+      return "";
+    };
+
+    const res = await POST(post(validBatch));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.source).toBe("unavailable");
+    expect(json.reason).toBe("not-configured");
+    expect(json.days).toEqual([]);
+    expect(modelCalls).toBe(0);
+  });
+
+  it("returns 200 unavailable (never fallback) when the model throws", async () => {
+    process.env[KEY] = "test-key-not-real";
+    fakeInvoke = async () => {
+      throw new Error("bedrock unavailable");
+    };
+
+    const res = await POST(post(validBatch));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.source).toBe("unavailable");
+    expect(json.source).not.toBe("fallback");
+    expect(json.days).toEqual([]);
+  });
+
+  it('action "turn" still behaves as before', async () => {
+    fakeInvoke = async (prompt) => {
+      if (prompt.user.includes("Missing field")) {
+        return "Which city are you flying out of for this trip?";
+      }
+      return JSON.stringify({ destination: "Tokyo" });
+    };
+
+    const res = await POST(
+      post({
+        action: "turn",
+        state: { context: {}, questionsAsked: 0 },
+        inputDelta: "I want to go to Tokyo",
+      }),
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.response.state.context.destination).toBe("Tokyo");
+    expect(json.response.phase).toBe("collecting");
+    expect(json.source).toBe("bedrock");
   });
 });

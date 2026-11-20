@@ -3,25 +3,32 @@ import {
   resolveImage,
   boundedSearchQuery,
   type ImageKind,
+  isAllowedImageUrl,
+  isAllowedResultUrl,
   type ImageRequest,
-  type ImageResult,
 } from "@/lib/imagery";
+import { resolveWikiImage, type WikiReason } from "@/lib/wiki-image";
+import { parseSizeClass, type SizeClass } from "@/lib/wiki-image-policy";
 
 /**
- * Imagery route (App Router edge over lib/imagery.ts).
+ * Imagery route (thin App Router edge).
  *
- * For a destination/attraction/hotel request WITHOUT a provider candidate, the
- * route resolves a REAL photo server-side from Wikipedia's REST summary
- * (thumbnail.source on upload.wikimedia.org - already allowlisted) and passes
- * it to resolveImage as the candidate. If Wikipedia has no thumbnail or the
- * lookup fails, it falls back to a deterministic Picsum photo seeded by the
- * query, so a card is NEVER blank. The pure resolveImage still owns labelling
- * and allowlist gating (Req 11.2, 11.3).
+ * With a provider candidate `url`, the pure resolveImage owns labelling and
+ * allowlist gating. Without one, lib/wiki-image.ts resolves a Wikipedia
+ * thumbnail. The route never substitutes a stock or bundled photograph for a
+ * named place: when no real image exists it answers `url: null` with a reason
+ * and the client shows its Image_Fallback (Req 11.5, 11.6, 11.7).
  */
 
 export const dynamic = "force-dynamic";
 
-const CACHE = { "Cache-Control": "public, max-age=86400" } as const;
+const CACHE_PUBLIC = { "Cache-Control": "public, max-age=86400" } as const;
+/** Definitive "no representative image": cacheable for 1 h, matching the server cache. */
+const CACHE_SHORT = { "Cache-Control": "public, max-age=3600" } as const;
+const CACHE_NONE = { "Cache-Control": "no-store" } as const;
+
+/** Transient failures must not stick in browser or CDN caches. */
+const TRANSIENT: readonly WikiReason[] = ["timeout", "rate-limited", "upstream-error"];
 
 const KINDS: readonly ImageKind[] = ["attraction", "hotel", "destination"];
 
@@ -37,6 +44,7 @@ function clampSlot(value: unknown): number {
 
 interface ParsedImageRequest {
   request: ImageRequest;
+  size: SizeClass;
   candidate?: { url: string; exactProperty?: boolean };
 }
 
@@ -53,7 +61,7 @@ function parse(raw: Record<string, unknown>): ParsedImageRequest | null {
   const request: ImageRequest = { kind: raw.kind, query, slot: clampSlot(raw.slot) };
   const candidateUrl = typeof raw.url === "string" ? raw.url.trim() : "";
   const candidate = candidateUrl.length > 0 ? { url: candidateUrl, exactProperty: parseBool(raw.exactProperty) } : undefined;
-  return { request, candidate };
+  return { request, size: parseSizeClass(raw.size), candidate };
 }
 
 function recordFromSearchParams(params: URLSearchParams): Record<string, unknown> {
@@ -66,52 +74,66 @@ const BAD_REQUEST = {
   error: "An image request requires a kind (attraction|hotel|destination) and a query.",
 } as const;
 
-
-/** Deterministic photographic fallback seeded by the query (Picsum, allowlisted). */
-function picsumFor(query: string): string {
-  const seed = encodeURIComponent(query.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "travel");
-  return 'https://picsum.photos/seed/' + seed + '/640/420';
+/** True when every "<url> <descriptor>" entry of a srcset passes isAllowedResultUrl. */
+function srcsetUrlsAllowed(srcset: string): boolean {
+  const parts = srcset.split(/,\s+/).map((p) => p.trim());
+  if (parts.length === 0 || parts.some((p) => p === "")) return false;
+  return parts.every((p) => {
+    const url = p.split(/\s+/)[0];
+    return isAllowedResultUrl(url);
+  });
 }
 
-/** Resolve a real Wikipedia REST thumbnail (upload.wikimedia.org) for a query. */
-async function wikiThumbnail(query: string): Promise<string | null> {
-  try {
-    const title = encodeURIComponent(query.trim().replace(new RegExp("\\s+", "g"), "_"));
-    const url = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + title;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: { Accept: "application/json", "User-Agent": "TripGenie/1.0 (image thumbnails)" },
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as { thumbnail?: { source?: string }; originalimage?: { source?: string } };
-      const src = data.originalimage?.source ?? data.thumbnail?.source ?? null;
-      return typeof src === "string" && src.startsWith("https://") ? src : null;
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch {
-    return null;
-  }
+function noImage(query: string, reason: WikiReason): NextResponse {
+  const headers = TRANSIENT.includes(reason)
+    ? CACHE_NONE
+    : reason === "no-representative-image"
+      ? CACHE_SHORT
+      : CACHE_PUBLIC;
+  return NextResponse.json(
+    { url: null, label: query, representative: false, source: "none", reason },
+    { status: 200, headers },
+  );
 }
 
 async function respond(parsed: ParsedImageRequest): Promise<NextResponse> {
-  let candidate = parsed.candidate;
-  // No provider candidate supplied: resolve a real photo server-side.
-  if (!candidate) {
-    const wiki = await wikiThumbnail(parsed.request.query);
-    candidate = { url: wiki ?? picsumFor(parsed.request.query), exactProperty: false };
+  const { request, candidate } = parsed;
+
+  if (candidate) {
+    const result = resolveImage(request, candidate);
+    // A rejected candidate must not turn into a bundled photo for a named place.
+    if (result.source === "local-fallback") return noImage(request.query, "rejected-url");
+    return NextResponse.json(result, { headers: CACHE_PUBLIC });
   }
-  const result: ImageResult = resolveImage(parsed.request, candidate);
-  // If the lib rejected the candidate (non-allowlisted) and fell back to a
-  // (possibly missing) local file, force the always-available Picsum photo.
-  const safe: ImageResult =
-    result.source === "local-fallback"
-      ? { ...result, url: picsumFor(parsed.request.query), source: "resolved" }
-      : result;
-  return NextResponse.json(safe, { headers: CACHE });
+
+  const wiki = await resolveWikiImage(request.query, {
+    size: parsed.size,
+    slot: request.slot,
+    kind: request.kind,
+  });
+  if (wiki.url === null) return noImage(request.query, wiki.reason);
+  const srcset =
+    typeof wiki.srcset === "string" && srcsetUrlsAllowed(wiki.srcset) ? wiki.srcset : undefined;
+
+  // A same-origin place-photo URL is not on the host allowlist: gate it by shape.
+  if (!isAllowedImageUrl(wiki.url)) {
+    if (!isAllowedResultUrl(wiki.url)) return noImage(request.query, "rejected-url");
+    const isStay = request.kind === "hotel" || request.kind === "destination";
+    return NextResponse.json(
+      {
+        url: wiki.url,
+        label: isStay ? `Representative ${request.query} image` : request.query,
+        representative: isStay,
+        source: "resolved",
+        ...(srcset ? { srcset } : {}),
+      },
+      { headers: CACHE_PUBLIC },
+    );
+  }
+
+  const result = resolveImage(request, { url: wiki.url, exactProperty: false });
+  if (result.source === "local-fallback") return noImage(request.query, "rejected-url");
+  return NextResponse.json(srcset ? { ...result, srcset } : result, { headers: CACHE_PUBLIC });
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -132,4 +154,3 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed) return NextResponse.json(BAD_REQUEST, { status: 400 });
   return respond(parsed);
 }
-
