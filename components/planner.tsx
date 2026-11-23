@@ -4,6 +4,9 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseRoute, emptyRouteState, routeConfirmed as _rc } from "@/lib/route-intake";
 import { resolveTripLength } from "@/lib/itinerary/trip-length";
+import { resolveTripDates, endFromDays } from "@/lib/itinerary/trip-dates";
+import { durationFromText } from "@/lib/date-intake";
+import { MAX_TRIP_DAYS } from "@/lib/itinerary/constants";
 import { flightOfferFare, type WorkspaceState } from "@/lib/workspace";
 import { buildItineraryPdf } from "@/lib/pdf";
 import { computeSummary, priceSourceCounts, formatSourceCounts, unpricedStopCount, hasWebDetails, itineraryHasWebDetails } from "@/lib/trip-summary";
@@ -33,7 +36,9 @@ import type { Activity, Itinerary, TripContext } from "@/lib/types";
 import { serializeCriteria } from "@/lib/search-criteria";
 import type { LiveHotel } from "@/lib/providers/serpapi-hotels";
 import type { LiveFlight, PriceInsights } from "@/lib/providers/serpapi-flights";
-import { checkedLabel as fmtCheckedLabel } from "@/lib/ist-time";
+import { checkedLabel as fmtCheckedLabel, todayIst } from "@/lib/ist-time";
+import { planStartDateWrite } from "@/lib/start-date";
+import { formatTripPreview } from "@/lib/trip-preview";
 import type { FlightBookingCriteria } from "@/components/flight-booking-panel";
 import BrandLoader from "@/components/brand-loader";
 import TravelFacts from "@/components/travel-facts";
@@ -64,6 +69,9 @@ import { ItineraryFailure, ItineraryBanner, DayHero, StopMeta, PriceCellNote, Pl
 import type { SourceLink } from "@/lib/types";
 import TripAssistant from "@/components/trip-assistant";
 import type { AppliedEdit } from "@/lib/assistant/types";
+
+const undatedNote = (n: number) => (n === 1 ? "Planned as Day 1 without calendar dates." : `Planned as Day 1 to Day ${n} without calendar dates.`);
+const isUndatedNote = (s: string) => /^Planned as Day 1( to Day \d+)? without calendar dates\.$/.test(s);
 
 /** Attach grounding sources; returns the same object when there are none. */
 function withSources(it: Itinerary, links: SourceLink[]): Itinerary {
@@ -363,6 +371,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   const [toast, setToast] = useState<ToastModel | null>(null);
   // Bumped per generate(): resets the Trip Assistant transcript and undo history.
   const assistantGenRef = useRef(0);
+  const startDateRef = useRef<HTMLInputElement | null>(null);
   const toastIdRef = useRef(0);
   const lastSavedFpRef = useRef<string | null>(null);
   function notify(outcome: SaveOutcome) {
@@ -656,11 +665,40 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     const checkOut = (days[days.length - 1]?.date || "").trim();
     const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
     if (isDate(checkIn) && isDate(checkOut) && checkOut > checkIn) {
-      sharedContext.setDates({
-        ...sharedContext.dates,
-        checkIn, checkOut, departDate: checkIn, returnDate: checkOut,
-      });
+      // Never replace a date the traveller already chose: fill only empty fields.
+      const cur = sharedContext.dates;
+      const has = (v: unknown) => typeof v === "string" && v.trim() !== "";
+      const next = { ...cur };
+      if (!has(cur.checkIn)) next.checkIn = checkIn;
+      if (!has(cur.checkOut)) next.checkOut = checkOut;
+      if (!has(cur.departDate)) next.departDate = checkIn;
+      if (!has(cur.returnDate)) next.returnDate = checkOut;
+      if (next.checkIn !== cur.checkIn || next.checkOut !== cur.checkOut || next.departDate !== cur.departDate || next.returnDate !== cur.returnDate) {
+        sharedContext.setDates(next);
+      }
     }
+  }
+
+  /** Start date edit (Req 1.4, 1.5, 1.7, 1.8): write the start and its end, or clear all four date keys. */
+  function onStartDateChange(value: string) {
+    if (!value) {
+      const { departDate: _d, checkIn: _c, returnDate: _r, checkOut: _o, ...rest } = sharedContext.dates;
+      sharedContext.setDates(rest);
+      return;
+    }
+    const write = planStartDateWrite(value, durationFromText(duration));
+    if (write) sharedContext.patchDates(write);
+  }
+
+  /** Day-count edit: keep the start date, move the return date to start + count - 1 (Req 3.8). Never invents a start date. */
+  function syncReturnToDayCount(text: string) {
+    const start = sharedContext.dates.departDate;
+    const n = durationFromText(text);
+    if (typeof start !== "string" || !resolveTripDates({ startDate: start, endDate: start }).startDate || n === null || n < 1) return;
+    const count = Math.min(MAX_TRIP_DAYS, n);
+    const end = endFromDays(start, count);
+    if (end === sharedContext.dates.returnDate) return;
+    sharedContext.patchDates({ returnDate: end, checkOut: end });
   }
 
   /** Restamp to the chosen dates (C1), then convert to INR exactly once. */
@@ -752,15 +790,37 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       return;
     }
 
+    // Chosen dates win over the typed length (Req 3.1, 3.2). Typed length is the fallback.
+    const chosenDates = resolveTripDates({
+      startDate: sharedContext.dates.departDate,
+      endDate: sharedContext.dates.returnDate,
+    });
     const trip = resolveTripLength({
       field: duration,
       contextDays: sharedContext.context.durationDays,
       startDate: sharedContext.dates.departDate,
       endDate: sharedContext.dates.returnDate,
     });
-    const days = trip.days;
-    setDateNote(dateSpanNotice(trip.dateSpanDays, days) ?? "");
-    setLimitNote(trip.capped);
+    let days = trip.days;
+    let tripStart: string | undefined;
+    let lengthNote = "";
+    let capped = trip.capped;
+    if (chosenDates.source === "dates" && chosenDates.days !== null) {
+      days = chosenDates.days;
+      capped = chosenDates.capped;
+      tripStart = chosenDates.startDate ?? undefined;
+      if (capped) lengthNote = `Your dates cover ${trip.dateSpanDays ?? days} days. Planning the first ${days}.`;
+      else if (trip.days !== days) lengthNote = `Using ${days} days from your dates.`;
+    } else {
+      const withStart = resolveTripDates({ startDate: sharedContext.dates.departDate, days: trip.days });
+      if (withStart.source === "days" && !withStart.needsStartDate) {
+        tripStart = withStart.startDate ?? undefined;
+      } else {
+        lengthNote = undatedNote(days);
+      }
+    }
+    setDateNote(lengthNote || (chosenDates.source === "dates" ? "" : (dateSpanNotice(trip.dateSpanDays, days) ?? "")));
+    setLimitNote(capped);
 
     // Build the itinerary-request context from the shared context, falling back
     // to the local inputs for any field the shared context does not carry. Never
@@ -813,7 +873,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     });
 
     try {
-      const startDate = sharedContext.dates.departDate;
+      const startDate = tripStart;
       const req = buildRequest(s0, slot, { ...context, durationDays: days }, typeof startDate === "string" ? startDate : undefined);
       dispatch({ type: "request", slotId: slot.id });
       const resp = await postBatch(req, controller.signal);
@@ -892,17 +952,16 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   /**
    * Export the current itinerary to a polished, dependency-free PDF via the
    * existing uildItineraryPdf builder, then trigger a browser download. Maps
-   * the planner's itinerary days onto the builder's TripDay shape, supplying a
-   * date per day (today + dayIndex) so the PDF reads with real calendar dates.
+   * the planner's itinerary days onto the builder's TripDay shape, using each
+   * day's own ISO date, or "Day N" when it has none (never today's date).
    */
   function exportPdf() {
     if (!state) return;
-    const base = new Date();
-    const days = state.itinerary.days.map((d, idx) => {
-      const dt = typeof d.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && !Number.isNaN(Date.parse(d.date)) ? new Date(d.date) : new Date(base.getTime() + idx * 86400000);
+    const days = state.itinerary.days.map((d) => {
+      const validDate = typeof d.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && !Number.isNaN(Date.parse(d.date));
       return {
         day: d.day,
-        date: dt.toISOString().slice(0, 10),
+        date: validDate ? d.date : "Day " + d.day,
         title: d.title,
         theme: d.theme,
         activities: d.activities,
@@ -1361,6 +1420,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
 
       {limitNote && <p className="chat-status" role="status">{LIMIT_NOTE}</p>}
       {dateNote && <p className="chat-status" role="status">{dateNote}</p>}
+      {isUndatedNote(dateNote) && <button type="button" className="chat-chip" onClick={() => startDateRef.current?.focus()}>Add a start date</button>}
       {progressMsg && <p className="chat-status" role="status" aria-live="polite">{progressMsg}</p>}
       {batchState.phase === "failed" && !generating && !state && (
         <ItineraryFailure
@@ -1382,7 +1442,12 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
           <div className="field-row">
             <label className="field">
               <span>How long?</span>
-              <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="4 days" />
+              <input value={duration} onChange={(e) => { setDuration(e.target.value); syncReturnToDayCount(e.target.value); }} placeholder="4 days" />
+            </label>
+            <label className="field">
+              <span>Start date</span>
+              <input type="date" min={todayIst()} ref={startDateRef} aria-describedby="start-date-hint" value={sharedContext.dates.departDate ?? ""} onChange={(e) => onStartDateChange(e.target.value)} />
+              <p id="start-date-hint" className="field-hint">Optional. Without a start date your days are labelled Day 1 to Day N.</p>
             </label>
             <label className="field">
               <span>Travellers</span>
@@ -1399,6 +1464,31 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
             <span>Vibe</span>
             <input value={vibe} onChange={(e) => setVibe(e.target.value)} placeholder="Culture & food" />
           </label>
+          {(() => {
+            const preview = formatTripPreview({
+              where: request,
+              destination: request.trim() ? undefined : sharedContext.context.destination,
+              origin: request.trim() ? undefined : sharedContext.context.origin,
+              startDate: sharedContext.dates.departDate,
+              days: durationFromText(duration) ?? undefined,
+              travellers,
+              vibe,
+            });
+            return (
+              <p className="trip-preview" aria-live="polite">
+                <strong>Trip preview</strong>{" "}
+                {preview.text ? (
+                  <>
+                    {preview.place}
+                    {preview.dates && <>{preview.place ? " · " : ""}<span className="trip-preview__dates">{preview.dates}</span></>}
+                    {[preview.travellers, preview.vibe].filter(Boolean).map((s) => " · " + s).join("")}
+                  </>
+                ) : (
+                  "Add a destination to see your trip summary."
+                )}
+              </p>
+            );
+          })()}
           <button className="cta" onClick={generate} disabled={generating} aria-busy={generating}>
             {generating ? "Planning your trip…" : "Generate itinerary"}
           </button>

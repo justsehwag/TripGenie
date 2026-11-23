@@ -38,6 +38,8 @@ import type { TripContext, Itinerary } from "@/lib/types";
 import { sanitizeStoredItinerary } from "@/lib/web-price-sources";
 import type { DateHints } from "@/lib/trip-context-map";
 import type { RequiredField } from "@/lib/preference-controller";
+import { keepStoredDates } from "@/lib/start-date";
+import { todayIst } from "@/lib/ist-time";
 
 // ---------------------------------------------------------------------------
 // State shape (design: Data Models → Shared_Trip_Context shape)
@@ -129,7 +131,10 @@ function readStorage(): SharedTripContextState {
       typeof candidate.userInitiated === "boolean"
         ? candidate.userInitiated
         : undefined;
-    return { context, dates, itinerary, userInitiated };
+    // Stored dates belong to a draft the traveller started or to its own
+    // itinerary. Otherwise they are stale and must not leak into a new request.
+    const keepDates = keepStoredDates({ userInitiated, hasItinerary: itinerary !== null, departDate: dates.departDate, today: todayIst() });
+    return { context, dates: keepDates ? dates : {}, itinerary, userInitiated };
   } catch {
     // Corrupt JSON or unavailable storage ⇒ empty default; never throw.
     return emptyState();

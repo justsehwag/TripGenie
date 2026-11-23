@@ -52,7 +52,7 @@ export interface Level {
   nextAt: number | null;
 }
 
-const LEVEL_BANDS: Array<{ level: number; name: string; min: number }> = [
+export const LEVEL_BANDS: Array<{ level: number; name: string; min: number }> = [
   { level: 1, name: "Daydreamer", min: 0 },
   { level: 2, name: "Explorer", min: 25 },
   { level: 3, name: "Navigator", min: 60 },

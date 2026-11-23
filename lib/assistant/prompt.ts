@@ -67,7 +67,7 @@ const SECTION_CLARIFY = [
 
 const SECTION_SIZE = [
   "SIZE",
-  "Answer in at most about 120 words unless the traveller asks for detail. Use plain sentences and short lists.",
+  "Answer in at most about 120 words unless the traveller asks for detail. Use plain sentences and short lists. Answer in plain text. Do not use markdown (no **, #, or backticks). Use short lines or numbered lines for lists.",
 ].join("\n");
 
 function contextText(c: AssistantContext | null | undefined): string {

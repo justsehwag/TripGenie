@@ -42,14 +42,11 @@ describe("summary-compact: pricing rows", () => {
 describe("summary-compact: XP panel", () => {
   const state = awardMany(emptyXp(), ["concierge_started", "route_set"]);
 
-  it("compact renders xp-panel--compact with a closed <details> around quests", () => {
+  it("compact renders xp-panel--compact with no Quests <details>", () => {
     const html = renderToStaticMarkup(createElement(GamificationPanel, { state, compact: true }));
     expect(html).toContain("xp-panel--compact");
-    const m = html.match(/<details[^>]*>/);
-    expect(m).not.toBeNull();
-    expect(m![0]).not.toMatch(/\sopen/);
-    const detailsBody = html.slice(html.indexOf("<details"), html.indexOf("</details>"));
-    expect(detailsBody).toContain("xp-quests");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("xp-quests");
   });
 
   it("default render has no xp-panel--compact", () => {

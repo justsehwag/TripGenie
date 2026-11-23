@@ -9517,3 +9517,144 @@ main.shell:has(.planner-itinerary) .planner-results__aside {
   .account-tile:hover .account-tile__chevron,
   .account-tile:active { transform: none; }
 }
+
+/* chat-dates-xp-fixes: proposal card layout (not width-conditioned) */
+.trip-assistant__compare {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trip-assistant__compare .trip-assistant__day { width: 100%; }
+.trip-assistant__compare .trip-assistant__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: start;
+  overflow-wrap: normal;
+}
+.trip-assistant__compare .trip-assistant__row-time { white-space: nowrap; }
+.trip-assistant__compare .trip-assistant__row-title {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.trip-assistant__compare .trip-assistant__row-cost {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* account-points: XP summary and "How points are calculated" on the account page */
+.account-points { margin-top: var(--space-4, 16px); display: grid; gap: var(--space-2, 8px); }
+.account-points__title, .account-points__subtitle { margin: 0; font-size: var(--text-base, 1rem); font-weight: 600; }
+.account-points__total { margin: 0; }
+.account-points__bar { height: 8px; border-radius: 9999px; background: rgba(0, 0, 0, 0.12); overflow: hidden; }
+.account-points__fill { display: block; height: 100%; background: var(--color-action-orange, #e8751a); border-radius: inherit; }
+.account-points__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--text-sm, 0.875rem); }
+.account-points__list li { display: flex; justify-content: space-between; gap: var(--space-3, 12px); }
+.account-points__list li span:first-child { min-width: 0; overflow-wrap: break-word; }
+.account-points__list li span:last-child { white-space: nowrap; }
+
+/* assistant chat text blocks */
+.trip-assistant__rich { white-space: normal; }
+.trip-assistant__rich > p { margin: 0; }
+.trip-assistant__rich > * + * { margin-top: 8px; }
+.trip-assistant__rich ol, .trip-assistant__rich ul { margin: 0; padding-left: 20px; }
+.trip-assistant__rich li + li { margin-top: 4px; }
+
+/* ===========================================================================
+   Start date + live trip preview (spec start-date-live-preview, task 4.1).
+   Appended, namespaced block. Existing design tokens only; no :root additions.
+   =========================================================================== */
+.field-hint {
+  margin: calc(-1 * var(--space-sm)) 0 var(--space-md);
+  min-width: 0;
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  color: var(--color-secondary-text);
+  overflow-wrap: anywhere;
+}
+
+/* A date field joins How long / Travellers: fit as many columns as the width
+   allows (3 at 768px+, stacked at 375px) instead of the fixed 2-column grid. */
+.field-row:has(input[type="date"]) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+}
+.field-row > .field { min-width: 0; }
+.field input[type="date"] { min-width: 0; max-width: 100%; }
+
+.field input[type="date"]:focus-visible,
+.start-date-prompt input[type="date"]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+  border-color: var(--color-primary-green);
+}
+
+.trip-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+  margin: 0 0 var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  background: var(--color-pale-mint);
+  color: var(--color-primary-text);
+  font-size: var(--type-helper-size);
+  line-height: var(--type-helper-line);
+  overflow-wrap: anywhere;
+}
+.trip-preview__dates {
+  min-width: 0;
+  font-weight: 700;
+  color: var(--color-deep-emerald);
+}
+
+.start-date-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+  max-width: 100%;
+  margin-top: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  background: var(--color-muted-bg);
+}
+.start-date-prompt > .field { margin: 0; }
+.start-date-prompt input[type="date"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.6rem var(--space-sm);
+  border: 1px solid var(--color-light-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-primary-text);
+  color-scheme: light;
+  font: inherit;
+}
+.start-date-prompt__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .start-date-prompt input[type="date"] { max-width: 16rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trip-preview,
+  .start-date-prompt,
+  .start-date-prompt input[type="date"],
+  .start-date-prompt .chat-chip,
+  .field input[type="date"] {
+    transition: none;
+    animation: none;
+  }
+}

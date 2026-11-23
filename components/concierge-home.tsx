@@ -17,6 +17,12 @@ import { fromSharedContext } from "@/lib/history/record-codec";
 import { useSpeechInput } from "@/components/use-speech-input";
 import { useDestinationImage } from "@/components/destination-image";
 import { useReveal } from "@/lib/use-reveal";
+import { todayIst } from "@/lib/ist-time";
+import { parseStartDateText, planStartDateWrite, shouldAskStartDate } from "@/lib/start-date";
+import { formatShortDate, formatTripPreview } from "@/lib/trip-preview";
+import { endFromDays } from "@/lib/itinerary/trip-dates";
+import { MAX_TRIP_DAYS } from "@/lib/itinerary/constants";
+import { StartDatePrompt } from "@/components/start-date-prompt";
 
 /** A single conversation turn shown in the planner transcript. */
 type ChatMessage = { role: "assistant" | "user"; text: string };
@@ -402,6 +408,23 @@ export default function ConciergeHome({
   const draftIdRef = useRef<string | null>(null);
   /** Guards the one-shot `/plan?trip=` resume so a re-render never replays it. */
   const resumedRef = useRef(false);
+  /** One-shot guard so "What date do you start?" is appended only once. */
+  const dateAskedRef = useRef(false);
+  /** Set when the traveller skips the start-date question. */
+  const dateDismissedRef = useRef(false);
+  /** True while the start-date question is open (shows the date prompt). */
+  const [dateOpen, setDateOpen] = useState(false);
+  // Keep the end date in step with the day count while a start date exists.
+  useEffect(() => {
+    const start = sharedContext.dates.departDate;
+    const days = sharedContext.context.durationDays;
+    if (!start || typeof days !== "number" || days < 1) return;
+    const end = endFromDays(start, Math.min(days, MAX_TRIP_DAYS));
+    if (!end) return;
+    if (sharedContext.dates.returnDate === end && sharedContext.dates.checkOut === end) return;
+    sharedContext.patchDates({ returnDate: end, checkOut: end });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedContext.dates.departDate, sharedContext.dates.returnDate, sharedContext.dates.checkOut, sharedContext.context.durationDays]);
   /** Reveal container for the immersive home hero's staggered entrance (Task
    *  7.1). SSR-safe: the hook adds `.reveal--in` only after mount, so the
    *  server render is stable. */
@@ -564,6 +587,12 @@ export default function ConciergeHome({
     const lower = answer.toLowerCase();
     let capturedRoute = false;
 
+    // A bare day count ("7 days") is not a date: keep the count in the shared
+    // context and ask for a start date instead of storing a text label as dates.
+    const typedDays = durationFromText(answer);
+    const needsStart = !!typedDays && !sharedContext.dates.departDate;
+    if (typedDays) sharedContext.patchContext({ durationDays: typedDays });
+
     setCaptured((prev) => {
       const updated: CapturedCategories = { ...prev };
 
@@ -572,8 +601,7 @@ export default function ConciergeHome({
         capturedRoute = true;
       }
 
-      const days = durationFromText(answer);
-      if (days) updated.dates = `${days} day${days > 1 ? "s" : ""}`;
+      if (typedDays && !needsStart) updated.dates = `${typedDays} day${typedDays > 1 ? "s" : ""}`;
 
       const food = detectFoodDietary(lower);
       if (food) updated.foodDietary = food;
@@ -601,6 +629,7 @@ export default function ConciergeHome({
 
     // Acknowledge what was just captured, reflecting the parsed route when
     // available and otherwise asking a gentle follow-up (Req 21.4).
+    if (needsStart) return "What date do you start?";
     return capturedRoute
       ? `Great - ${next.origin} to ${next.destination}. When are you travelling?`
       : "Thanks - tell me a little more and I'll keep filling in your trip.";
@@ -679,6 +708,19 @@ export default function ConciergeHome({
     setDraft("");
     setPending(true);
 
+    // Store a typed start date (e.g. "12 Dec", "tomorrow") before extraction.
+    let typedDate: string | null = null;
+    if (!sharedContext.dates.departDate) {
+      typedDate = parseStartDateText(answer, todayIst());
+      const write = typedDate ? planStartDateWrite(typedDate, sharedContext.context.durationDays) : null;
+      if (write) {
+        sharedContext.patchDates(write);
+        setDateOpen(false);
+      } else {
+        typedDate = null;
+      }
+    }
+
     try {
       // One extraction per turn. The server grounds the result; on any failure the
       // same field-aware fallback plus grounding runs locally (no fabricated fields).
@@ -698,7 +740,22 @@ export default function ConciergeHome({
         const g = groundExtraction({ text: answer, asked, extracted: fb }); fields = g.fields; routeOnly = g.routeOnly;
       }
       const r = applyIntakeEvent({ type: "text", text: answer, extracted: fields, routeOnly });
-      setMessages((prev) => [...prev, { role: "assistant", text: r.message }]);
+      const askDate = shouldAskStartDate({
+        origin: r.state.context.origin,
+        destination: r.state.context.destination,
+        departDate: typedDate ?? sharedContext.dates.departDate,
+        dismissed: dateDismissedRef.current,
+        asked: dateAskedRef.current,
+      });
+      if (askDate) {
+        dateAskedRef.current = true;
+        setDateOpen(true);
+      }
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: r.message },
+        ...(askDate ? [{ role: "assistant" as const, text: "What date do you start?" }] : []),
+      ]);
     } finally {
       setPending(false);
     }
@@ -721,6 +778,24 @@ export default function ConciergeHome({
       }));
     }
     return r;
+  }
+
+  /** Store a start date picked from the date input or a chip. */
+  function pickStartDate(iso: string) {
+    const write = planStartDateWrite(iso, sharedContext.context.durationDays);
+    if (!write) return;
+    sharedContext.patchDates(write);
+    setDateOpen(false);
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", text: `Starting ${formatShortDate(iso)}.` },
+    ]);
+  }
+
+  /** Skip the start-date question and keep the dates unset. */
+  function skipStartDate() {
+    dateDismissedRef.current = true;
+    setDateOpen(false);
   }
 
   /** Skip the open question (only offered for skippable fields). */
@@ -771,6 +846,9 @@ export default function ConciergeHome({
     setCaptured({});
     setDraft("");
     setIntake(intakeStep(intake, { type: "reset" }).state);
+    dateAskedRef.current = false;
+    dateDismissedRef.current = false;
+    setDateOpen(false);
     sharedContext.reset();
   }
 
@@ -810,6 +888,12 @@ export default function ConciergeHome({
     (f) => intake.status[f] === "answered" || intake.status[f] === "carried",
   ).length;
   const inSummary = intake.phase === "summary";
+  const datesLabel = sharedContext.dates.departDate
+    ? formatTripPreview({
+        startDate: sharedContext.dates.departDate,
+        days: sharedContext.context.durationDays,
+      }).dates
+    : "";
   const canSkip = intake.asked !== null && SKIPPABLE.includes(intake.asked);
   const showKeepCarried = intake.phase === "recap" && intake.asked === null;
 
@@ -961,6 +1045,10 @@ export default function ConciergeHome({
               <ConciergeMessage key={i} role={m.role} text={m.text} />
             ))}
 
+            {dateOpen && !sharedContext.dates.departDate && (
+              <StartDatePrompt onPick={pickStartDate} onSkip={skipStartDate} today={todayIst()} />
+            )}
+
             {inSummary && (
               <ChatSummaryCard
                 rows={summaryRows(intake)}
@@ -1105,7 +1193,7 @@ export default function ConciergeHome({
             </div>
 
             {CATEGORY_ROWS.map((row) => {
-              const value = captured[row.key];
+              const value = row.key === "dates" && datesLabel ? datesLabel : captured[row.key];
               return (
                 <div
                   key={row.key}

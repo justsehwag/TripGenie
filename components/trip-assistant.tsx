@@ -7,6 +7,7 @@
  */
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
+import { ChatText } from "@/components/chat-text";
 import type { Activity, Itinerary, TripDay } from "@/lib/types";
 import { formatInr } from "@/lib/itinerary-inr";
 import type {
@@ -568,7 +569,13 @@ export default function TripAssistant({
                   m.role === "assistant" && m.status === undefined ? " trip-assistant__message--note" : ""
                 }`}
               >
-                <p className="trip-assistant__text">{m.text}</p>
+                {m.role === "assistant" ? (
+                  <div className="trip-assistant__text trip-assistant__rich">
+                    <ChatText text={m.text} />
+                  </div>
+                ) : (
+                  <p className="trip-assistant__text">{m.text}</p>
+                )}
                 {m.status === "partial" ? (
                   <p className="trip-assistant__hint">Some sources were unavailable for this answer.</p>
                 ) : null}

@@ -26,6 +26,9 @@ import {
   type SessionUser,
 } from "@/lib/client/account-session";
 import { useSyncStatus } from "@/lib/client/use-sync-status";
+import { useAccountXp } from "@/lib/client/use-account-xp";
+import { LEVEL_BANDS, XP_POINTS, levelFor, type XpEvent } from "@/lib/gamification";
+import { XP_EVENT_LABELS } from "@/lib/account/xp-labels";
 
 function ExplorerAvatar() {
   return (
@@ -51,6 +54,90 @@ function TileIcon({ kind }: { kind: "trips" | "plan" | "discover" }) {
       <path d={d} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       {kind === "discover" && <circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.8" />}
     </svg>
+  );
+}
+
+function AccountPoints({ signedIn }: { signedIn: boolean }) {
+  const xp = useAccountXp(signedIn);
+  const total = xp.state?.total ?? 0;
+  const level = levelFor(total);
+  const span = level.nextAt === null ? 0 : level.nextAt - level.min;
+  const pct = level.nextAt === null || span <= 0 ? 100 : Math.max(0, Math.min(100, Math.round(((total - level.min) / span) * 100)));
+  const awarded = (xp.state?.awarded ?? []).filter((e) => e in XP_POINTS);
+
+  return (
+    <section className="account-points" aria-labelledby="account-points-title">
+      {signedIn && (
+        <>
+          <h2 id="account-points-title" className="account-points__title">Your points</h2>
+          {xp.status === "loading" && (
+            <p className="account-card__note" role="status">Loading your XP{"\u2026"}</p>
+          )}
+          {xp.status === "error" && (
+            <p className="account-card__note" role="alert">
+              {xp.error ?? "Couldn't load your XP. Please try again."}{" "}
+              <button type="button" className="inline-link" onClick={() => xp.retry()}>Retry</button>
+            </p>
+          )}
+          {xp.status === "ready" && xp.state && (
+            <>
+              <p className="account-points__total">
+                <strong>{total} XP</strong> {"\u00b7"} Level {level.level}: {level.name}
+              </p>
+              <div
+                className="account-points__bar"
+                role="progressbar"
+                aria-label="Progress to the next level"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={pct}
+                aria-valuetext={level.nextAt === null ? "Top level reached" : `${level.toNext} XP to the next level`}
+              >
+                <span className="account-points__fill" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="account-card__note">
+                {level.nextAt === null ? "You have reached the top level." : `${level.toNext} XP to the next level.`}
+              </p>
+              {awarded.length === 0 ? (
+                <p className="account-card__note">No XP earned yet. Plan a trip to start earning points.</p>
+              ) : (
+                <ul className="account-points__list" aria-label="XP you have earned">
+                  {awarded.map((e) => (
+                    <li key={e}>
+                      <span>{XP_EVENT_LABELS[e]}</span>
+                      <span>+{XP_POINTS[e]} XP</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </>
+      )}
+      {!signedIn && (
+        <p className="account-card__note" id="account-points-title">Sign in to earn XP</p>
+      )}
+
+      <h3 className="account-points__subtitle">How points are calculated</h3>
+      <ul className="account-points__list" aria-label="Points per action">
+        {(Object.keys(XP_POINTS) as XpEvent[]).map((e) => (
+          <li key={e}>
+            <span>{XP_EVENT_LABELS[e]}</span>
+            <span>+{XP_POINTS[e]} XP</span>
+          </li>
+        ))}
+      </ul>
+      <ul className="account-points__list" aria-label="Levels">
+        {LEVEL_BANDS.map((b) => (
+          <li key={b.level}>
+            <span>Level {b.level}: {b.name}</span>
+            <span>{b.min} XP</span>
+          </li>
+        ))}
+      </ul>
+      <p className="account-card__note">Each action counts once per trip or draft.</p>
+      <p className="account-card__note">XP is earned only while signed in.</p>
+    </section>
   );
 }
 
@@ -112,6 +199,7 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
             Sign in to earn XP. Guests do not earn or store XP.
           </p>
         )}
+        {user === null && <AccountPoints signedIn={false} />}
       </>
     );
   }
@@ -188,6 +276,8 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
               </a>
             </li>
           </ul>
+
+          <AccountPoints signedIn />
 
           <button type="button" className="cta account-card__signout" onClick={() => { void signOut(); }}>
             Sign out

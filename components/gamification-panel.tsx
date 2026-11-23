@@ -4,7 +4,7 @@
  * Gamification panel (TripGenie parity with TripSaathi FR-06). A presentational
  * client component that renders a summary of the pure lib/gamification.ts state:
  * total XP, current level with a progress bar toward the next band, unlocked
- * badges, and quest progress. State is owned by the caller (idempotent award()),
+ * badges. State is owned by the caller (idempotent award()),
  * so this component never mutates anything - it only visualizes a summary.
  *
  * Token-only styling via the xp-* classes in globals.css; no new :root tokens.
@@ -14,7 +14,7 @@ import Link from "next/link";
 import { summarize, type XpState } from "@/lib/gamification";
 
 function XpSummary({ state, compact = false }: { state: XpState; compact?: boolean }) {
-  const { total, level, badges, quests } = summarize(state);
+  const { total, level, badges } = summarize(state);
   const span = level.nextAt !== null ? level.nextAt - level.min : 1;
   const progressed = total - level.min;
   const pct = level.nextAt !== null ? Math.max(0, Math.min(100, Math.round((progressed / span) * 100))) : 100;
@@ -41,24 +41,6 @@ function XpSummary({ state, compact = false }: { state: XpState; compact?: boole
       ))}
     </ul>
   );
-  const questList = (
-    <ul className="xp-quests" aria-label="Quests">
-      {quests.map((quest) => (
-        <li key={quest.id} className="xp-quest">
-          <div className={`xp-quest__row${quest.complete ? " xp-quest__row--done" : ""}`}>
-            <span>{quest.name}</span>
-            <span>
-              {quest.done}/{quest.total}
-              {quest.complete ? " done" : ""}
-            </span>
-          </div>
-          <div className="xp-bar" aria-hidden="true">
-            <span className="xp-bar__fill" style={{ width: `${Math.round((quest.done / quest.total) * 100)}%` }} />
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
 
   if (compact) {
     return (
@@ -69,11 +51,7 @@ function XpSummary({ state, compact = false }: { state: XpState; compact?: boole
         <span className="xp-panel__total">{total} XP</span>
         {bar}
         <span className="xp-panel__next">{nextText}</span>
-        <details className="xp-panel__more">
-          <summary>Quests</summary>
-          {badgeList}
-          {questList}
-        </details>
+        {badgeList}
       </section>
     );
   }
@@ -110,26 +88,6 @@ function XpSummary({ state, compact = false }: { state: XpState; compact?: boole
           ))}
         </ul>
       )}
-
-      <ul className="xp-quests" aria-label="Quests">
-        {quests.map((quest) => (
-          <li key={quest.id} className="xp-quest">
-            <div className={`xp-quest__row${quest.complete ? " xp-quest__row--done" : ""}`}>
-              <span>{quest.name}</span>
-              <span>
-                {quest.done}/{quest.total}
-                {quest.complete ? " done" : ""}
-              </span>
-            </div>
-            <div className="xp-bar" aria-hidden="true">
-              <span
-                className="xp-bar__fill"
-                style={{ width: `${Math.round((quest.done / quest.total) * 100)}%` }}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }
