@@ -9658,3 +9658,10 @@ main.shell:has(.planner-itinerary) .planner-results__aside {
     animation: none;
   }
 }
+/* === day-photo-band: Misc placeholder shimmer stays inside its box, loading only === */
+.misc-line__placeholder::after { content: none; animation: none; }
+.misc-line[aria-busy="true"] .misc-line__placeholder { overflow: hidden; }
+.misc-line[aria-busy="true"] .misc-line__placeholder::after { content: ""; animation: skeleton-shimmer 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .misc-line[aria-busy="true"] .misc-line__placeholder::after { transform: none; animation: skeleton-pulse 1.4s ease-in-out infinite; }
+}
