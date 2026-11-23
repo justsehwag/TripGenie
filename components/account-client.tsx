@@ -118,7 +118,8 @@ function AccountPoints({ signedIn }: { signedIn: boolean }) {
         <p className="account-card__note" id="account-points-title">Sign in to earn XP</p>
       )}
 
-      <h3 className="account-points__subtitle">How points are calculated</h3>
+      <details className="account-points__how">
+      <summary className="account-points__summary">How points are calculated</summary>
       <ul className="account-points__list" aria-label="Points per action">
         {(Object.keys(XP_POINTS) as XpEvent[]).map((e) => (
           <li key={e}>
@@ -137,6 +138,7 @@ function AccountPoints({ signedIn }: { signedIn: boolean }) {
       </ul>
       <p className="account-card__note">Each action counts once per trip or draft.</p>
       <p className="account-card__note">XP is earned only while signed in.</p>
+      </details>
     </section>
   );
 }

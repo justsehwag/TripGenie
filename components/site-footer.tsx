@@ -16,8 +16,8 @@
  * enabled. The footer uses the editorial palette/typography tokens from
  * `app/globals.css`, distinct from the TripSaathi interface (Req 29.6).
  *
- * This is a presentational (server) component - no client interactivity is
- * required, so it is deliberately not a client component.
+ * This is a presentational (server) component. Only the account link is a
+ * client child (`SiteFooterAccount`), which follows the live session.
  *
  * Requirements: 29.1, 29.2, 29.3, 29.4, 29.5, 29.6.
  */
@@ -29,6 +29,7 @@ import {
   type IdentitySession,
 } from "@/lib/identity";
 import { NAV_LINKS, ACCOUNT_HREF, type NavLink } from "@/lib/nav-links";
+import SiteFooterAccount from "@/components/site-footer-account";
 
 export interface FooterSection {
   heading: string;
@@ -79,7 +80,6 @@ export default function SiteFooter({
 }: SiteFooterProps) {
   // The account entry is presented only when the policy enables a provider (Req 29.5).
   const accountEnabled = landingControls(providerPolicy).length > 0;
-  const authed = Boolean(session?.userId);
 
   return (
     <footer className="site-footer">
@@ -91,16 +91,7 @@ export default function SiteFooter({
           </p>
 
           {accountEnabled && (
-            <Link
-              href={ACCOUNT_HREF}
-              className="site-footer__account"
-            >
-              {authed
-                ? session?.firstName
-                  ? `Manage ${session.firstName}'s account`
-                  : "Manage your account"
-                : "Sign in"}
-            </Link>
+            <SiteFooterAccount initialSession={session} />
           )}
         </div>
 

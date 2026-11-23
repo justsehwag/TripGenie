@@ -9665,3 +9665,43 @@ main.shell:has(.planner-itinerary) .planner-results__aside {
 @media (prefers-reduced-motion: reduce) {
   .misc-line[aria-busy="true"] .misc-line__placeholder::after { transform: none; animation: skeleton-pulse 1.4s ease-in-out infinite; }
 }
+
+/* === points-explainer-collapse === */
+.account-points__how { margin: 0; }
+.account-points__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: 44px;
+  margin: 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--type-body-size);
+  font-weight: 600;
+  color: var(--color-primary-text);
+}
+.account-points__summary::-webkit-details-marker { display: none; }
+.account-points__summary::marker { content: ""; }
+.account-points__summary::after {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.account-points__how[open] > .account-points__summary::after { transform: translateY(2px) rotate(-135deg); }
+.account-points__summary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-offset);
+  border-radius: 6px;
+}
+.account-points__how[open] > .account-points__summary { margin-bottom: var(--space-sm); }
+.account-points__how[open] > .account-points__list + .account-points__list { margin-top: var(--space-sm); }
+.account-points__how[open] > .account-card__note { margin: var(--space-sm) 0 0; }
+@media (prefers-reduced-motion: reduce) {
+  .account-points__summary::after { transition: none; }
+}
