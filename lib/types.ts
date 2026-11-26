@@ -228,6 +228,21 @@ export interface Activity {
   photos?: string[];
   /** Web details; present on every Stop built by the places-first flow (optional). */
   webDetails?: WebDetails;
+  /** Google price data, AI estimate or unverified web price when no verified web price exists (optional). */
+  priceFallback?: PriceFallback;
+}
+
+export type GooglePriceLevel = 0 | 1 | 2 | 3 | 4;
+
+export interface PriceFallback {
+  google?: {
+    level?: GooglePriceLevel;
+    range?: { lowInr: number; highInr: number };
+    checkedAt: string; // ISO
+  };
+  ai?: { lowInr: number; highInr: number; basis: string; checkedAt: string };
+  /** A cited web price that failed the cross-check. Never copied into cost or priceSource. */
+  unverifiedWeb?: { inr: number; sourceUrl: string; sourceHost: string; checkedAt: string; reasons: string[] };
 }
 
 export interface TripDay {

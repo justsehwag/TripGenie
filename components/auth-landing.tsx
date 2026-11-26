@@ -2,21 +2,23 @@
 
 /**
  * Account landing / sign-in surface - two-panel split.
- * Left: deep emerald brand panel (logo + tagline + feature bullets).
- * Right: clean white sign-in form with provider brand icons.
+ * Left: full-bleed landscape AccountHero backdrop (tagline + feature bullets).
+ * Right: clean white sign-in card with provider brand icons.
  *
  * Behavior is UNCHANGED: "Continue with email" toggles the in-app email/password
  * form that POSTs { action: "signin" } to /api/auth (Amazon Cognito, server-side);
  * Google navigates to /api/auth/login (shown only when the server reports
  * googleSignIn); "continue without signing in" proceeds as a guest; a
  * successful sign-in relies on the server cookie, refreshes the session via
- * fetchSession and routes to /plan.
+ * fetchSession and routes to `afterSignInPath` (default "/", Discover). The
+ * default guest button (no `onContinueAsGuest`) still goes to /plan.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { fetchSession, notifySession } from "@/lib/client/account-session";
 import { useAuthErrorMessage } from "@/components/auth-error-notice";
+import { WelcomeHeroBackdrop } from "@/components/welcome-hero-backdrop";
 import {
   landingControls,
   greeting,
@@ -65,6 +67,11 @@ export interface AuthLandingProps {
   authError?: string;
   onContinueAsGuest?: () => void;
   onSignIn?: (provider: Provider) => void;
+  /** Where to go after a successful sign-in. Default "/" (Discover). */
+  afterSignInPath?: string;
+  heading?: string;
+  subheading?: string;
+  footerNote?: ReactNode;
 }
 
 async function postSignin(email: string, password: string) {
@@ -81,15 +88,18 @@ async function postSignin(email: string, password: string) {
   };
 }
 
-const GOOGLE_LOGIN_URL = "/api/auth/login?provider=Google&returnTo=/plan";
-
 export default function AuthLanding({
   policy,
   session = null,
   authError,
   onContinueAsGuest,
   onSignIn,
+  afterSignInPath = "/",
+  heading: headingText = "Welcome back",
+  subheading = "Sign in to continue planning your next trip.",
+  footerNote,
 }: AuthLandingProps) {
+  const googleLoginUrl = `/api/auth/login?provider=Google&returnTo=${encodeURIComponent(afterSignInPath)}`;
   const router = useRouter();
   const [googleSignIn, setGoogleSignIn] = useState(false);
   const queryAuthError = useAuthErrorMessage();
@@ -136,7 +146,7 @@ export default function AuthLanding({
       return;
     }
     if (provider === "google" && typeof window !== "undefined") {
-      window.location.assign(GOOGLE_LOGIN_URL);
+      window.location.assign(googleLoginUrl);
     }
   }
 
@@ -156,8 +166,14 @@ export default function AuthLanding({
           notifySession({ signedIn: true, user: { email: r.user.email, name: r.user.name } });
         }
         setPassword("");
-        setNotice("Signed in. Taking you to the planner...");
-        window.setTimeout(() => router.push("/plan"), 700);
+        setNotice(
+          afterSignInPath === "/"
+            ? "Signed in. Taking you to Discover..."
+            : afterSignInPath === "/plan"
+              ? "Signed in. Taking you to the planner..."
+              : "Signed in. Taking you back...",
+        );
+        window.setTimeout(() => router.push(afterSignInPath), 700);
       } else if (r.code === "CONFIRM_REQUIRED") {
         setNotice(r.message);
         window.setTimeout(() => router.push("/signup"), 1200);
@@ -182,30 +198,25 @@ export default function AuthLanding({
   }
 
   return (
-    <main className="auth-split">
-      {/* Left: brand panel */}
-      <aside className="auth-split__brand" aria-hidden="true">
-        <div className="auth-split__brand-inner">
-          <div className="auth-split__logo">
-            <span className="auth-split__logo-mark">✈</span>
-            <span className="auth-split__logo-word">Tripsaathi AI</span>
-          </div>
-          <h1 className="auth-split__tagline">Plan smarter.<br />Travel better.</h1>
-          <p className="auth-split__lead">Your trips, priced live and planned by AI - all in one place.</p>
-          <ul className="auth-split__features">
-            <li><span className="auth-split__dot" />Live hotel &amp; flight prices</li>
-            <li><span className="auth-split__dot" />AI day-by-day itineraries</li>
-            <li><span className="auth-split__dot" />Sign in to save your trips to your account and see them on any device</li>
-          </ul>
-        </div>
-      </aside>
+    <main className="auth-split auth-split--scenic">
+      {/* Backdrop: full-bleed landscape hero behind the sign-in card */}
+      <WelcomeHeroBackdrop
+        eyebrow="Tripsaathi AI"
+        title="Plan smarter. Travel better."
+        subtitle="Your trips, priced live and planned by AI - all in one place."
+        points={[
+          "Live hotel & flight prices",
+          "AI day-by-day itineraries",
+          "Sign in to save your trips to your account and see them on any device",
+        ]}
+      />
 
       {/* Right: sign-in form */}
       <section className="auth-split__form" aria-labelledby="auth-signin-heading">
         <div className="auth-panel">
           <p className="auth-panel__eyebrow">{heading}</p>
-          <h2 id="auth-signin-heading" className="auth-panel__title">Welcome back</h2>
-          <p className="auth-panel__sub">Sign in to continue planning your next trip.</p>
+          <h2 id="auth-signin-heading" className="auth-panel__title">{headingText}</h2>
+          <p className="auth-panel__sub">{subheading}</p>
 
           {(authError || queryAuthError) && (
             <p role="alert" className="notice notice--error auth-panel__error">{authError || queryAuthError}</p>
@@ -248,6 +259,8 @@ export default function AuthLanding({
               </button>
             </form>
           )}
+
+          {footerNote}
 
           <div className="auth-panel__divider"><span>or</span></div>
           <button

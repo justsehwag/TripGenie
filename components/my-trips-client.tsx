@@ -372,16 +372,13 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
   // the account landing page.
   if (!signedIn) {
     return (
-      <main className="shell my-trips">
-        <p className="eyebrow">Your trips</p>
-        <h1 className="display">My Trips</h1>
-        <p className="lead">
-          Sign in to see your saved trips and confirmed bookings. We keep each
-          traveler&rsquo;s trips private to their account.
-        </p>
-        {/* Reuses the Requirement 1 Identity_Provider landing controls. */}
-        <AuthLanding policy={providerPolicy} session={null} />
-      </main>
+      <AuthLanding
+        policy={providerPolicy}
+        session={null}
+        afterSignInPath="/trips"
+        heading="My Trips"
+        subheading="Sign in to see your saved trips and confirmed bookings. We keep each traveler's trips private to their account."
+      />
     );
   }
 

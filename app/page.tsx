@@ -1,5 +1,6 @@
 import DiscoverSights from "@/components/discover-sights";
 import AuthErrorNotice from "@/components/auth-error-notice";
+import WelcomeGate from "@/components/welcome-gate";
 
 /**
  * Homepage route. The landing experience is the Discover destination-search
@@ -13,8 +14,10 @@ export const metadata = { title: "Tripsaathi AI - Discover your next place to wa
 export default function Home() {
   return (
     <>
-      <AuthErrorNotice />
-      <DiscoverSights />
+      <WelcomeGate>
+        <AuthErrorNotice />
+        <DiscoverSights />
+      </WelcomeGate>
     </>
   );
 }

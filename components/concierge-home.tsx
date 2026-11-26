@@ -23,6 +23,7 @@ import { formatShortDate, formatTripPreview } from "@/lib/trip-preview";
 import { endFromDays } from "@/lib/itinerary/trip-dates";
 import { MAX_TRIP_DAYS } from "@/lib/itinerary/constants";
 import { StartDatePrompt } from "@/components/start-date-prompt";
+import { DidYouMeanHint } from "@/components/did-you-mean-hint";
 
 /** A single conversation turn shown in the planner transcript. */
 type ChatMessage = { role: "assistant" | "user"; text: string };
@@ -982,6 +983,7 @@ export default function ConciergeHome({
                   aria-label="Where are you travelling from and to?"
                 />
               </label>
+              <DidYouMeanHint text={draft} onAccept={setDraft} />
               <button
                 type="submit"
                 className="cta concierge-hero__submit"
@@ -1123,6 +1125,7 @@ export default function ConciergeHome({
                 aria-label="Your answer"
               />
             </label>
+            <DidYouMeanHint text={draft} onAccept={setDraft} />
             <button
               type="button"
               className="concierge-mic"

@@ -16,6 +16,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shuffledPlaces, searchPlaces, type WorldPlace } from "@/lib/world-places";
+import { suggestReducer } from "@/lib/suggest-nav";
+import { didYouMean } from "@/lib/fuzzy-match";
+import { WORLD_PLACES } from "@/lib/world-places";
 
 /* ----------------------------- live data hooks --------------------------- */
 
@@ -460,6 +463,19 @@ export default function DiscoverSights() {
   const [acSuggestions, setAcSuggestions] = useState<Array<{ placeId: string; primary: string; secondary: string; text: string }>>([]);
   const [acOpen, setAcOpen] = useState(false);
   const acReq = useRef(0);
+  const [acActive, setAcActive] = useState(-1);
+  // "Did you mean" over place names and countries; shown before the user accepts.
+  const fuzzyCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ id: string; label: string }> = [];
+    for (const p of WORLD_PLACES) {
+      for (const label of [p.name, p.country]) {
+        if (label && !seen.has(label)) { seen.add(label); out.push({ id: label, label }); }
+      }
+    }
+    return out;
+  }, []);
+  const hint = useMemo(() => (query.trim().length >= 4 ? didYouMean(query, fuzzyCandidates) : null), [query, fuzzyCandidates]);
   useEffect(() => {
     const q = query.trim();
     if (q.length < 1) { setAcSuggestions([]); setAcOpen(false); return; }
@@ -477,6 +493,27 @@ export default function DiscoverSights() {
     }, 180);
     return () => window.clearTimeout(timer);
   }, [query]);
+
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    const key = e.key;
+    if (key === "Enter") {
+      // Accept the highlighted suggestion; otherwise let the form submit.
+      if (acOpen && acActive >= 0 && acActive < acSuggestions.length) {
+        e.preventDefault();
+        const s = acSuggestions[acActive];
+        setAcActive(-1);
+        chooseSuggestion(s.primary + (s.secondary ? ", " + s.secondary : ""));
+      }
+      return;
+    }
+    if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Home" && key !== "End" && key !== "Escape") return;
+    // Home/End keep their text-caret meaning unless an option is highlighted.
+    if ((key === "Home" || key === "End") && !(acOpen && acActive >= 0)) return;
+    if (key !== "Escape") e.preventDefault();
+    const next = suggestReducer({ text: query, active: acActive, open: acOpen }, { type: "key", key, length: acSuggestions.length });
+    setAcActive(next.active);
+    setAcOpen(next.open);
+  }
 
   function chooseSuggestion(label: string) {
     setQuery(label);
@@ -536,21 +573,30 @@ export default function DiscoverSights() {
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setAcActive(-1); }}
+            onKeyDown={onSearchKeyDown}
             onFocus={() => { if (acSuggestions.length > 0) setAcOpen(true); }}
             onBlur={() => window.setTimeout(() => setAcOpen(false), 120)}
             role="combobox"
             aria-expanded={acOpen}
+            aria-controls="disc-ac-list"
+            aria-activedescendant={acOpen && acActive >= 0 ? `disc-ac-opt-${acActive}` : undefined}
             aria-autocomplete="list"
             placeholder="Try beaches, mountains, Japan, temples..."
             aria-label="Search places"
           />
           <button type="submit" className="cta disc-search__cta">Search</button>
         </form>
+          {hint && (
+            <p className="place-suggest__hint" role="status">
+              Did you mean{" "}
+              <button type="button" onClick={() => { setQuery(hint.label); setAcActive(-1); setAcOpen(false); }}>{hint.label}</button>?
+            </p>
+          )}
           {acOpen && acSuggestions.length > 0 && (
-            <ul className="disc-ac" role="listbox" aria-label="Place suggestions">
-              {acSuggestions.map((s) => (
-                <li key={s.placeId} className="disc-ac__item" role="option" aria-selected={false}>
+            <ul className="disc-ac" id="disc-ac-list" role="listbox" aria-label="Place suggestions">
+              {acSuggestions.map((s, i) => (
+                <li key={s.placeId} id={`disc-ac-opt-${i}`} className="disc-ac__item" role="option" aria-selected={i === acActive}>
                   <button type="button" className="disc-ac__btn" onMouseDown={(ev) => ev.preventDefault()} onClick={() => chooseSuggestion(s.primary + (s.secondary ? ", " + s.secondary : ""))}>
                     <span className="disc-ac__icon" aria-hidden="true"><PinIcon /></span>
                     <span className="disc-ac__text">

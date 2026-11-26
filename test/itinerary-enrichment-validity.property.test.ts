@@ -56,6 +56,9 @@ const DETAIL_PHRASES = [
 ];
 const FILLER = ["A popular place in the city.", "Open daily.", "Rated highly by visitors.", "Located near the old town."];
 
+// Every generated snippet names the places so the name-match check passes.
+const ALL_NAMES = "Amber Fort City Palace Hawa Mahal Chokhi Dhani Nahargarh";
+
 const phrase = fc.constantFrom(...PRICE_PHRASES, ...DETAIL_PHRASES, ...FILLER);
 const contentArb = fc
   .array(phrase, { minLength: 1, maxLength: 7 })
@@ -65,7 +68,12 @@ const resultArb = fc.record({
   host: fc.integer({ min: 1, max: 6 }),
   path: fc.integer({ min: 1, max: 9 }),
   scheme: fc.constantFrom("https", "https", "https", "http"),
-  title: fc.constantFrom("Visitor guide", "Entry tickets and fees", "Travel tips", "Reviews"),
+  title: fc.constantFrom(
+    `${ALL_NAMES} visitor info`,
+    `${ALL_NAMES} entry tickets and fees`,
+    `${ALL_NAMES} travel tips`,
+    `${ALL_NAMES} overview`,
+  ),
   content: contentArb,
 });
 

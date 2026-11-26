@@ -50,6 +50,8 @@ export interface ModelPrompt {
   maxTokens: number;
   /** Bounded per-call timeout in milliseconds. */
   timeoutMs: number;
+  /** Optional sampling temperature; omitted means the model default. */
+  temperature?: number;
 }
 
 /** Injected dependencies; `invokeModel` is mocked in tests, real in the route. */
@@ -600,7 +602,7 @@ export function createBedrockInvoke(options?: {
       modelId,
       system: [{ text: prompt.system }],
       messages: [{ role: "user" as const, content: [{ text: prompt.user }] }],
-      inferenceConfig: { maxTokens: prompt.maxTokens },
+      inferenceConfig: { maxTokens: prompt.maxTokens, ...(typeof prompt.temperature === "number" && Number.isFinite(prompt.temperature) ? { temperature: prompt.temperature } : {}) },
     };
     try {
       if (!partialOnTimeout) {

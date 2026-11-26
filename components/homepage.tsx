@@ -40,6 +40,11 @@ import DestinationPanel from "@/components/destination-panel";
 import { useTripContext } from "@/components/trip-context";
 import { illustration, type IllustrationId } from "@/lib/illustrations";
 import { useReveal } from "@/lib/use-reveal";
+import { PlaceSuggestInput } from "@/components/place-suggest-input";
+import { airportCandidates } from "@/lib/destination-airports";
+
+// Stable reference so PlaceSuggestInput's memoised matching is not recomputed per render.
+const FLIGHT_PLACE_CANDIDATES = airportCandidates();
 
 type BookingTab = "stays" | "flights" | "cars";
 
@@ -540,18 +545,21 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
               onSubmit={submitStays}
               noValidate
             >
-              <label className="field">
-                <span>Destination</span>
-                <input
-                  type="text"
+              <div className="field">
+                <PlaceSuggestInput
+                  id="stays-destination"
+                  name="destination"
+                  label="Destination"
                   value={stays.destination ?? ""}
-                  aria-invalid={!!staysErrors.destination}
-                  aria-describedby="err-stays-destination"
-                  onChange={(e) => setStays({ ...stays, destination: e.target.value })}
+                  onChange={(v) => setStays((s) => ({ ...s, destination: v }))}
                   placeholder="Where to?"
+                  candidates={FLIGHT_PLACE_CANDIDATES}
+                  remote
+                  errorId="err-stays-destination"
+                  ariaInvalid={!!staysErrors.destination}
                 />
                 <FieldError id="err-stays-destination" message={staysErrors.destination} />
-              </label>
+              </div>
               <label className="field">
                 <span>Check-in</span>
                 <input
@@ -623,18 +631,20 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
                 </label>
               </fieldset>
               <div className="search-row">
-                <label className="field">
-                  <span>Origin</span>
-                  <input
-                    type="text"
+                <div className="field">
+                  <PlaceSuggestInput
+                    id="flights-origin"
+                    name="origin"
+                    label="Origin"
                     value={flights.origin ?? ""}
-                    aria-invalid={!!flightsErrors.origin}
-                    aria-describedby="err-flights-origin"
-                    onChange={(e) => setFlights({ ...flights, origin: e.target.value })}
+                    onChange={(v) => setFlights((f) => ({ ...f, origin: v }))}
                     placeholder="From"
+                    candidates={FLIGHT_PLACE_CANDIDATES}
+                    errorId="err-flights-origin"
+                    ariaInvalid={!!flightsErrors.origin}
                   />
                   <FieldError id="err-flights-origin" message={flightsErrors.origin} />
-                </label>
+                </div>
                 <button
                   type="button"
                   className="swap-btn"
@@ -644,18 +654,20 @@ export default function Homepage({ showHero = true }: { showHero?: boolean } = {
                 >
                   {"\u21C4"}
                 </button>
-                <label className="field">
-                  <span>Destination</span>
-                  <input
-                    type="text"
+                <div className="field">
+                  <PlaceSuggestInput
+                    id="flights-destination"
+                    name="destination"
+                    label="Destination"
                     value={flights.destination ?? ""}
-                    aria-invalid={!!flightsErrors.destination}
-                    aria-describedby="err-flights-destination"
-                    onChange={(e) => setFlights({ ...flights, destination: e.target.value })}
+                    onChange={(v) => setFlights((f) => ({ ...f, destination: v }))}
                     placeholder="To"
+                    candidates={FLIGHT_PLACE_CANDIDATES}
+                    errorId="err-flights-destination"
+                    ariaInvalid={!!flightsErrors.destination}
                   />
                   <FieldError id="err-flights-destination" message={flightsErrors.destination} />
-                </label>
+                </div>
                 <label className="field">
                   <span>Depart</span>
                   <input

@@ -9,9 +9,81 @@
  */
 import { isValidPhotoRef } from "@/lib/itinerary/maps-link";
 import { sanitizeWebDetails } from "@/lib/itinerary/web-details";
+import { PRICE_MAX_INR } from "@/lib/price-limits";
+import { isValidWebFields } from "@/lib/web-price-sources";
 
 export const MAX_STOP_PHOTOS = 3;
 const MAX_HOURS_CHARS = 300;
+const MAX_BASIS_CHARS = 120;
+const MAX_REASONS = 8;
+const MAX_REASON_CHARS = 40;
+
+function isInrInt(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= PRICE_MAX_INR;
+}
+
+function isIsoTime(v: unknown): v is string {
+  return typeof v === "string" && v.length > 0 && v.length <= 40 && Number.isFinite(Date.parse(v));
+}
+
+/**
+ * Validates an untrusted priceFallback; returns a normalised copy, or undefined
+ * when nothing valid remains. Invalid parts are dropped alone. Idempotent.
+ */
+function sanitizePriceFallback(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  const g = r.google;
+  if (g && typeof g === "object" && !Array.isArray(g)) {
+    const go = g as Record<string, unknown>;
+    if (isIsoTime(go.checkedAt)) {
+      const clean: Record<string, unknown> = {};
+      const lvl = go.level;
+      if (typeof lvl === "number" && Number.isInteger(lvl) && lvl >= 0 && lvl <= 4) clean.level = lvl;
+      const rg = go.range;
+      if (rg && typeof rg === "object") {
+        const { lowInr, highInr } = rg as Record<string, unknown>;
+        if (isInrInt(lowInr) && isInrInt(highInr) && lowInr <= highInr) clean.range = { lowInr, highInr };
+      }
+      if (clean.level !== undefined || clean.range !== undefined) {
+        clean.checkedAt = go.checkedAt;
+        out.google = clean;
+      }
+    }
+  }
+
+  const ai = r.ai;
+  if (ai && typeof ai === "object" && !Array.isArray(ai)) {
+    const { lowInr, highInr, basis, checkedAt } = ai as Record<string, unknown>;
+    if (
+      isInrInt(lowInr) &&
+      isInrInt(highInr) &&
+      lowInr <= highInr &&
+      typeof basis === "string" &&
+      basis.length <= MAX_BASIS_CHARS &&
+      isIsoTime(checkedAt)
+    ) {
+      out.ai = { lowInr, highInr, basis, checkedAt };
+    }
+  }
+
+  const uw = r.unverifiedWeb;
+  if (uw && typeof uw === "object" && !Array.isArray(uw)) {
+    const { inr, sourceUrl, sourceHost, checkedAt, reasons } = uw as Record<string, unknown>;
+    if (isInrInt(inr) && isValidWebFields({ sourceUrl, sourceHost, checkedAt })) {
+      const rs = Array.isArray(reasons)
+        ? reasons
+            .filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= MAX_REASON_CHARS)
+            .slice(0, MAX_REASONS)
+        : [];
+      out.unverifiedWeb = { inr, sourceUrl, sourceHost, checkedAt, reasons: rs };
+    }
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
 
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -64,6 +136,12 @@ export function cleanNewActivityFields(a: Record<string, unknown>): Record<strin
       const clean = sanitizeWebDetails(a.webDetails);
       if (clean === undefined) drop.push("webDetails");
       else if (!deepEqual(clean, a.webDetails)) set.webDetails = clean;
+    }
+
+    if ("priceFallback" in a) {
+      const clean = sanitizePriceFallback(a.priceFallback);
+      if (clean === undefined) drop.push("priceFallback");
+      else if (!deepEqual(clean, a.priceFallback)) set.priceFallback = clean;
     }
 
     if ("visitMin" in a) {

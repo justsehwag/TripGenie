@@ -13,6 +13,7 @@ import { extractPrices } from "@/lib/price-extractor";
 import type { SourceLink, WebDetail, WebDetails } from "@/lib/types";
 import { isValidWebFields } from "@/lib/web-price-sources";
 import { checkWebCitation, type WebAccepted, type WebCheckContext } from "@/lib/web-pricing/citation";
+import { assessWebPrice } from "@/lib/web-pricing/plausibility";
 import { evidenceText, MAX_SNIPPET_CHARS, type EvidenceSet } from "@/lib/web-pricing/evidence";
 import { MAX_RESEARCH_QUERIES, type ResearchActivity } from "@/lib/web-pricing/query-planner";
 import {
@@ -35,6 +36,8 @@ export interface EnrichedStop {
   placeId: string;
   webDetails: WebDetails;
   price?: AcceptedPrice;
+  /** The accepted web price with the cross-check flag, for the price fallback service. */
+  candidate?: { price: AcceptedPrice; needsReference: boolean };
 }
 export type EnrichmentStatus = "ok" | "partial" | "not-checked";
 export interface EnrichmentResult {
@@ -88,13 +91,42 @@ function hostOf(url: string): string {
   }
 }
 
-/** Pure. Accepts a price only through checkWebCitation, using extractPrices on the supplied snippets. */
-export function pickWebPrice(set: EvidenceSet | undefined, ctx: WebCheckContext): WebAccepted | undefined {
+/** Place identity used by the plausibility check. When absent, the check is skipped. */
+export interface PlausibilityContext {
+  placeName: string;
+  primaryType?: string | null;
+}
+
+export interface PickedWebPrice {
+  price: WebAccepted;
+  /** True when the plausibility check asks for a Google or AI reference. */
+  needsReference: boolean;
+}
+
+/** Pure. Like pickWebPrice, but also reports `needsReference` for the accepted candidate. */
+export function pickWebPriceChecked(
+  set: EvidenceSet | undefined,
+  ctx: WebCheckContext,
+  place?: PlausibilityContext,
+): PickedWebPrice | undefined {
   try {
     if (!set || !Array.isArray(set.snippets) || set.snippets.length === 0) return undefined;
     const c: WebCheckContext = { ...ctx, evidence: set };
     const allowFree = ctx.kind === "entry-fee";
-    let freeSnippetUrl: string | undefined;
+    // Returns null when the candidate is rejected as implausible.
+    const plausible = (snip: EvidenceSet["snippets"][number], inr: number): { needsReference: boolean } | null => {
+      if (!place) return { needsReference: false };
+      const r = assessWebPrice({
+        inr,
+        snippet: { title: snip.title, text: snip.text },
+        placeName: place.placeName,
+        costClass: ctx.costClass,
+        primaryType: place.primaryType ?? null,
+        costBasis: ctx.costBasis === "group" ? "group" : "person",
+      });
+      return r.verdict === "reject" ? null : { needsReference: r.needsReference };
+    };
+    let freeSnippet: EvidenceSet["snippets"][number] | undefined;
     for (const snip of set.snippets) {
       const ex = extractPrices(evidenceText(snip));
       let hasPlain = false;
@@ -103,18 +135,32 @@ export function pickWebPrice(set: EvidenceSet | undefined, ctx: WebCheckContext)
         hasPlain = true;
         if (cand.unit === "vehicle") continue;
         const v = checkWebCitation({ source: "web", sourceUrl: snip.url, inr: cand.min }, c);
-        if (v.ok) return v.price;
+        if (!v.ok) continue;
+        const p = plausible(snip, v.price.inr);
+        if (p) return { price: v.price, needsReference: p.needsReference };
       }
-      if (allowFree && ex.freeEntry && !hasPlain && freeSnippetUrl === undefined) freeSnippetUrl = snip.url;
+      if (allowFree && ex.freeEntry && !hasPlain && freeSnippet === undefined) freeSnippet = snip;
     }
-    if (freeSnippetUrl !== undefined) {
-      const v = checkWebCitation({ source: "web", sourceUrl: freeSnippetUrl, inr: 0 }, c);
-      if (v.ok) return v.price;
+    if (freeSnippet !== undefined) {
+      const v = checkWebCitation({ source: "web", sourceUrl: freeSnippet.url, inr: 0 }, c);
+      if (v.ok) {
+        const p = plausible(freeSnippet, 0);
+        if (p) return { price: v.price, needsReference: p.needsReference };
+      }
     }
   } catch {
     // fall through
   }
   return undefined;
+}
+
+/** Pure. Accepts a price only through checkWebCitation (and assessWebPrice when `place` is given). */
+export function pickWebPrice(
+  set: EvidenceSet | undefined,
+  ctx: WebCheckContext,
+  place?: PlausibilityContext,
+): WebAccepted | undefined {
+  return pickWebPriceChecked(set, ctx, place)?.price;
 }
 
 /** Pure. One verbatim snippet text of at most MAX_SNIPPET_CHARS, with its source. No rewriting. */
@@ -249,14 +295,26 @@ export async function enrichStops(
       checkedCount += 1;
       const details: WebDetails = { checked: true };
       let price: AcceptedPrice | undefined;
-      const accepted = pickWebPrice(set, {
-        evidence: set,
-        kind: target.kind,
-        costClass: classOf.get(s.placeId) ?? "paid-sight",
-        costBasis: "person",
-        budget,
-        tier,
-      });
+      const picked = pickWebPriceChecked(
+        set,
+        {
+          evidence: set,
+          kind: target.kind,
+          costClass: classOf.get(s.placeId) ?? "paid-sight",
+          costBasis: "person",
+          budget,
+          tier,
+        },
+        { placeName: s.name, primaryType: s.primaryType },
+      );
+      const accepted = picked?.price;
+      let candidate: EnrichedStop["candidate"];
+      if (picked && accepted && isValidWebFields(accepted)) {
+        candidate = {
+          price: { ...accepted, kind: target.kind === "meal" ? "typical" : "entry" },
+          needsReference: picked.needsReference,
+        };
+      }
       if (accepted && isValidWebFields(accepted)) {
         const kind = target.kind === "meal" ? "typical" : "entry";
         price = { ...accepted, kind };
@@ -274,7 +332,11 @@ export async function enrichStops(
           addSource(title, detail.sourceUrl, detail.sourceHost);
         }
       }
-      out.set(s.placeId, price ? { placeId: s.placeId, webDetails: details, price } : { placeId: s.placeId, webDetails: details });
+      const stop: EnrichedStop = price
+        ? { placeId: s.placeId, webDetails: details, price }
+        : { placeId: s.placeId, webDetails: details };
+      if (candidate) stop.candidate = candidate;
+      out.set(s.placeId, stop);
     }
 
     const status: EnrichmentStatus =

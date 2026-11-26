@@ -199,7 +199,7 @@ async function runBatchGuarded(
 ): Promise<BatchResponse> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const deps = { invokeModel: createBedrockInvoke() };
+    const deps = { invokeModel: createBedrockInvoke(), priceFallback: true };
     const timeout = new Promise<BatchResponse>((resolve) => {
       timer = setTimeout(
         () => resolve(unavailable(req, "unavailable")),

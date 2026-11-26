@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal } from "react-dom"; import { fallbackBrief, isEmptyBrief, truncateWords, type BriefFacts, type BriefSource, type DayBrief } from "@/lib/know-more/brief";
 
 /**
  * DayDetailModal ("Know more") - detailed, real-time info for ONE day, in sync
@@ -36,7 +36,7 @@ function withWidth(src: string, w: number): string {
 
 export default function DayDetailModal({ day, destination, onClose }: { day: DayInput; destination: string; onClose: () => void; }) {
   const [places, setPlaces] = useState<PlaceInfo[]>([]);
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted] = useState(false); const [brief, setBrief] = useState<{ brief: DayBrief; source: BriefSource } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -67,7 +67,33 @@ export default function DayDetailModal({ day, destination, onClose }: { day: Day
     return () => { cancelled = true; };
   }, [day, destination]);
 
+  // Once every place request has settled, ask for ONE short day brief built from those facts.
+  useEffect(() => {
+    if (places.length === 0 || places.some((p) => p.loading)) { setBrief(null); return; }
+    const facts: BriefFacts = {
+      destination, day: day.day,
+      places: places.map((p) => {
+        const r = p.google?.reviews?.hasReviews ? p.google.reviews.items[0] : null;
+        return { title: p.label, time: p.time, description: p.description, rating: typeof p.google?.rating === "number" ? p.google.rating : null, ratingCount: typeof p.google?.userRatingCount === "number" ? p.google.userRatingCount : null, reviewExcerpt: r ? truncateWords(r.text, 25) : null };
+      }),
+    };
+    let cancelled = false;
+    const useFallback = () => { if (!cancelled) setBrief({ brief: fallbackBrief(facts), source: "itinerary" }); };
+    fetch("/api/day-brief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(facts) })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error())))
+      .then((d: { brief?: DayBrief; source?: BriefSource }) => {
+        if (cancelled) return;
+        if (d.brief && !isEmptyBrief(d.brief) && d.source === "ai") setBrief({ brief: d.brief, source: "ai" });
+        else if (d.brief && !isEmptyBrief(d.brief)) setBrief({ brief: d.brief, source: "itinerary" });
+        else useFallback();
+      })
+      .catch(useFallback);
+    return () => { cancelled = true; };
+  }, [places, day.day, destination]);
+
   if (!mounted || typeof document === "undefined") return null;
+
+  const briefSections: Array<[keyof DayBrief, string]> = [["highlights", "Highlights"], ["bestTime", "Best time"], ["tips", "Tips"], ["gettingThere", "Getting there"], ["goodToKnow", "Good to know"]];
 
   return createPortal(
     <div className="daydetail" role="dialog" aria-modal="true" aria-label={"Details for Day " + day.day}>
@@ -82,6 +108,23 @@ export default function DayDetailModal({ day, destination, onClose }: { day: Day
           <button ref={closeRef} type="button" className="btn daydetail__close" onClick={onClose} aria-label="Close">Close</button>
         </header>
         <div className="daydetail__body">
+          <section className="daydetail__brief" aria-label="Day summary">
+            {brief === null ? (
+              <p className="daydetail__brief-loading">Preparing a short summary&hellip;</p>
+            ) : (
+              <>
+                {briefSections.map(([key, title]) => brief.brief[key].length > 0 && (
+                  <div key={key} className="daydetail__brief-section">
+                    <h3 className="daydetail__brief-title">{title}</h3>
+                    <ul className="daydetail__brief-list">
+                      {brief.brief[key].map((b, i) => <li key={i}>{b}</li>)}
+                    </ul>
+                  </div>
+                ))}
+                <p className="daydetail__brief-label">{brief.source === "ai" ? "Summary written by AI from the details below. Check opening hours before you go." : "From your itinerary"}</p>
+              </>
+            )}
+          </section>
           {places.map((p) => {
             const photo = p.google?.photos?.[0];
             const rating = p.google && typeof p.google.rating === "number" ? p.google.rating : null;
@@ -107,7 +150,7 @@ export default function DayDetailModal({ day, destination, onClose }: { day: Day
                     <p className="daydetail__place-loading">Loading real-time details&hellip;</p>
                   ) : review ? (
                     <blockquote className="daydetail__place-review">
-                      &ldquo;{review.text}&rdquo;
+                      <span className="daydetail__place-review-label">Google review excerpt</span> &ldquo;{truncateWords(review.text, 25)}&rdquo;
                       <cite>&mdash; {review.author}, via Google</cite>
                     </blockquote>
                   ) : (

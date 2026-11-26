@@ -1207,3 +1207,73 @@ export async function searchCandidatesNearby(
   if (types.length > 0) body.includedTypes = types;
   return runCandidateRequest("https://places.googleapis.com/v1/places:searchNearby", body, fetchImpl, opts);
 }
+
+/** INR price information from Place Details (task 2.1, itinerary-price-trust). */
+export interface PlacePriceInfo {
+  level: import("@/lib/types").GooglePriceLevel | null;
+  range: { lowInr: number; highInr: number } | null;
+}
+
+/** Parse a Google Money value into whole INR, or null when not INR / invalid. */
+function parseInrMoney(m: unknown): number | null {
+  if (typeof m !== "object" || m === null) return null;
+  const o = m as { currencyCode?: unknown; units?: unknown };
+  if (o.currencyCode !== "INR") return null;
+  const raw = typeof o.units === "string" ? o.units : typeof o.units === "number" ? String(o.units) : "0";
+  if (!/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/**
+ * Fetch only `priceLevel` and `priceRange` for a place (mask `id,priceLevel,priceRange`).
+ * Same key/timeout discipline as `fetchPlaceDetails`. A non-INR range is ignored,
+ * never converted. Returns null on no key, non-ok status, error or timeout.
+ * NEVER throws.
+ */
+export async function fetchPlacePriceInfo(
+  placeId: string,
+  fetchImpl: PostFetchLike = defaultFetch(),
+): Promise<PlacePriceInfo | null> {
+  const id = placeId.trim();
+  if (id.length === 0) return null;
+
+  const key = googlePlacesApiKey();
+  if (key.length === 0) return null;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), clampTimeout());
+  try {
+    const response = await fetchImpl(GOOGLE_PLACES.detailsBase + encodeURIComponent(id), {
+      method: "GET",
+      headers: {
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "id,priceLevel,priceRange",
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as {
+      priceLevel?: unknown;
+      priceRange?: { startPrice?: unknown; endPrice?: unknown };
+    };
+
+    const level =
+      typeof data.priceLevel === "string" && data.priceLevel in PRICE_LEVEL_BY_ENUM
+        ? PRICE_LEVEL_BY_ENUM[data.priceLevel]
+        : null;
+
+    let range: PlacePriceInfo["range"] = null;
+    if (data.priceRange && typeof data.priceRange === "object") {
+      const low = parseInrMoney(data.priceRange.startPrice);
+      const high = parseInrMoney(data.priceRange.endPrice);
+      if (low !== null && high !== null && low <= high) range = { lowInr: low, highInr: high };
+    }
+    return { level: (level ?? null) as PlacePriceInfo["level"], range };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

@@ -60,6 +60,9 @@ import { useMiscEstimates, miscKeyForDay } from "@/components/use-misc-estimate"
 import { MiscLine } from "@/components/misc-line";
 import { buildCostBreakdown } from "@/lib/cost-breakdown";
 import { CostBreakdown } from "@/components/cost-breakdown";
+import { aggregateTripCost, toTripPricing } from "@/lib/trip-cost-aggregate";
+import { PriceTierLabel } from "@/components/price-tier-label";
+import { priceTierText, dayCostText } from "@/lib/price-tier-text";
 import { ItinerarySearch } from "@/components/itinerary-search";
 import { Highlight } from "@/components/highlight";
 import { filterItinerary } from "@/lib/itinerary/search";
@@ -68,6 +71,8 @@ import { LIMIT_NOTE, dateSpanNotice, TOTAL_NOTE, activitiesLabel, progressText, 
 import { ItineraryFailure, ItineraryBanner, DayHero, StopMeta, PriceCellNote, PlaceholderCard } from "@/components/itinerary-parts";
 import type { SourceLink } from "@/lib/types";
 import TripAssistant from "@/components/trip-assistant";
+import { planHeading } from "@/lib/plan-heading";
+import { DidYouMeanHint } from "@/components/did-you-mean-hint";
 import type { AppliedEdit } from "@/lib/assistant/types";
 
 const undatedNote = (n: number) => (n === 1 ? "Planned as Day 1 without calendar dates." : `Planned as Day 1 to Day ${n} without calendar dates.`);
@@ -969,7 +974,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       };
     });
     const routeLabel = (route.origin || "-") + " to " + (route.destination || "your destination");
-    const bytes = buildItineraryPdf(state.itinerary.title, routeLabel, days, state.pricing);
+    const bytes = buildItineraryPdf(state.itinerary.title, routeLabel, days, trip ? toTripPricing(trip) : state.pricing);
     const blob = new Blob([bytes as unknown as BlobPart], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1162,6 +1167,19 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
     () => filterItinerary(state ? state.itinerary : ({ days: [] } as unknown as Itinerary), searchQuery),
     [state, searchQuery],
   );
+  // Single source of truth for day totals, activities line and grand total.
+  // Derived during render; never stored in state.
+  const trip = useMemo(() => {
+    if (!state) return null;
+    return aggregateTripCost({
+      itinerary: state.itinerary,
+      travellers: travellersCount,
+      rooms: roomsCount,
+      flight: noFlight ? null : { perPersonInr: liveFare.perPerson, live: liveFare.flightLive },
+      stay: { ratePerNightInr: liveFare.stayRate },
+      discountInr: state.pricing.discount,
+    });
+  }, [state, travellersCount, roomsCount, noFlight, liveFare]);
   const costBreakdown = useMemo(() => {
     if (!state) return null;
     const miscSum = Object.values(misc).reduce(
@@ -1175,7 +1193,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       travellersSource: ctxTravellers ? "context" : "state",
       rooms: roomsCount,
       roomsDerived,
-      nights: live.nights,
+      nights: trip ? trip.nights : live.nights,
       hasFlights: !noFlight,
       flight: noFlight ? null : {
         amountInr: liveFare.flightLive ? liveFare.perPerson : null,
@@ -1184,7 +1202,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       },
       stay: { rateInr: liveFare.stayRate, source: "Live hotel search" },
       activities: {
-        amountInr: state.pricing.activities,
+        amountInr: trip ? trip.activities.pricedInr : state.pricing.activities,
         webPricedCount: priceSourceCounts(state.itinerary).web,
         unpricedStopCount: unpricedStopCount(stops),
       },
@@ -1194,7 +1212,9 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
       misc: miscSum > 0 ? { sumInr: miscSum, source: "Web prices" } : null,
       discount: state.pricing.discount > 0 ? { code: state.pricing.coupon, amountInr: state.pricing.discount } : null,
     });
-  }, [state, misc, travellersCount, ctxTravellers, roomsCount, roomsDerived, live.nights, noFlight, liveFare, includeRouteFare]);
+  }, [state, trip, misc, travellersCount, ctxTravellers, roomsCount, roomsDerived, live.nights, noFlight, liveFare, includeRouteFare]);
+  // Road/rail fare the user opted to add; the breakdown includes it, so the summary total must too.
+  const selectedFareInr = costBreakdown?.lines.find((l) => l.key === "transport" && l.included)?.amountInr ?? 0;
   // Key of the last slot attempt the driver launched (guards StrictMode double effects).
   const launchedRef = useRef("");
   // The Retry the user asked for: days to restore and the busy-flag key.
@@ -1332,17 +1352,20 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   const _ok = _rc;
   const fare = flightOfferFare(liveFare.perPerson, travellersCount);
   const generating = status === "generating";
+  const head = planHeading({ resultsOnly, generating, itineraryTitle: state?.itinerary.title ?? null });
 
   return (
     <main className="shell">
       {resultsOnly ? (
         <>
-          <p className="eyebrow">Your itinerary</p>
-          <h1>{state?.itinerary.title ?? "Building your trip plan…"}</h1>
+          {head.eyebrow && <p className="eyebrow">{head.eyebrow}</p>}
+          <h1>{head.title}</h1>
+          {head.showLead && (
           <p className="lead">
             Here is your day-by-day plan with a live cost summary. Every day pulls
             its own photos, and costs are estimates — no activity is a confirmed booking.
           </p>
+          )}
         </>
       ) : (
         <>
@@ -1439,6 +1462,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
             <span>Where to?</span>
             <input value={request} onChange={(e) => setRequest(e.target.value)} placeholder="Goa from Delhi" />
           </label>
+          <DidYouMeanHint text={request} onAccept={setRequest} />
           <div className="field-row">
             <label className="field">
               <span>How long?</span>
@@ -1626,7 +1650,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                 <>
                   <div className="planner-summary__cost">
                     <strong>Final payable</strong>
-                    <span className="planner-summary__cost-amount">{INR(costBreakdown.totalInr)}</span>
+                    <span className="planner-summary__cost-amount">{INR(trip ? trip.grandTotalInr + selectedFareInr : costBreakdown.totalInr)}</span>{trip && trip.lowTotalInr !== trip.highTotalInr && <span className="planner-summary__cost-range">{INR(trip.lowTotalInr + selectedFareInr)} – {INR(trip.highTotalInr + selectedFareInr)}</span>}
                     <button
                       type="button"
                       className="planner-summary__cost-toggle"
@@ -1637,7 +1661,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                       Cost breakdown
                     </button>
                   </div>
-                  <div id="planner-cost-breakdown">{costOpen && <CostBreakdown breakdown={costBreakdown} />}</div>
+                  {trip && trip.composition && <p className="planner-summary__note">{trip.composition}</p>}<div id="planner-cost-breakdown">{costOpen && <CostBreakdown breakdown={costBreakdown} />}</div>
                 </>
               )}
               {/* AI pick justification. */}
@@ -1765,7 +1789,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                                     {dayDate && <span className="day-toggle__date">{dayDate}</span>}
                                     <span className="day-toggle__title"><Highlight text={d.title} query={searchQuery} /></span>
                                   </span>
-                                  <span className="day-toggle__meta">{stopsLabel(d.activities.length)}{hasWebDetails(d.activities) ? " · " + unpricedLabel(unpricedStopCount(d.activities)) : ""} · {formatInr(d.total)}</span>
+                                  <span className="day-toggle__meta">{stopsLabel(d.activities.length)}{hasWebDetails(d.activities) ? " · " + unpricedLabel(unpricedStopCount(d.activities)) : ""} · {dayCostText(trip?.days, d.day, travellersCount)}</span>
                                 </span>
                               </h3>
                               <p className="planner-day__theme"><Highlight text={d.theme} query={searchQuery} /></p>
@@ -1807,7 +1831,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                               <Highlight text={a.title} query={searchQuery} />
                             </span>
                             <span className="price-basis stop-row__price">
-                              {a.webDetails && a.priceSource !== "web" ? (<PriceCellNote a={a} />) : a.costNote && (a.costClass === "stay-checkin" || a.costClass === "route-transport" || a.costClass === "shopping") ? (
+                              {["google-range", "google-level", "ai", "unverified-web"].includes(priceTierText(a).tier) ? (<PriceTierLabel activity={a} />) : a.webDetails && a.priceSource !== "web" ? (<PriceCellNote a={a} />) : a.costNote && (a.costClass === "stay-checkin" || a.costClass === "route-transport" || a.costClass === "shopping") ? (
                                 <span className="price-cell__note">{a.costNote}</span>
                               ) : (
                                 <span className="price-group"><span>{a.priceSource === "web" ? webAmountText(a.cost, a.sourceHost ?? "") : formatInr(a.cost)}</span>{" "}
@@ -1855,7 +1879,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
                             })}
                           <div className="row">
                             <span>Day total{hasWebDetails(d.activities) ? " · " + unpricedLabel(unpricedStopCount(d.activities)) : ""}</span>
-                            <span>{formatInr(d.total)}</span>
+                            <span>{dayCostText(trip?.days, d.day, travellersCount)}</span>
                           </div>
                           <MiscLine key={miscKeyForDay(d, miscDestination, miscTravellers)} day={d} result={misc[miscKeyForDay(d, miscDestination, miscTravellers)]} />
                           <div className="timeline__actions">

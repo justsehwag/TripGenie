@@ -12,7 +12,13 @@
 
 import { googlePlacesApiKey } from "@/lib/config";
 import type { BedrockModelDeps } from "@/lib/bedrock-model";
-import type { LatLng, PlaceCandidate, PostFetchLike } from "@/lib/providers/google-places";
+import {
+  fetchPlacePriceInfo,
+  type LatLng,
+  type PlaceCandidate,
+  type PlacePriceInfo,
+  type PostFetchLike,
+} from "@/lib/providers/google-places";
 import type { TripContext, TripDay } from "@/lib/types";
 import { unavailable, type BatchRequest, type BatchResponse } from "./batch-wire";
 import { BATCH_DIAG_TAG, BATCH_LOG_TAG, formatBatchDiag, type DiagInput } from "./batch-diag";
@@ -41,6 +47,7 @@ import { addDays, weekdayOf } from "./hours";
 import { planCandidateQueries, widenPlan, type CandidatePlan } from "./interests";
 import { batchStats, mapDays, plainDays, polishedDays } from "./map-days";
 import { dayLimits, resolvePace } from "./pace";
+import { applyPriceFallback, type FallbackOutcome, type FallbackStopInput } from "./price-fallback";
 import { interestRow } from "./place-categories";
 import { nameKey } from "./place-key";
 import { buildPlannerInput, selectPlannerCandidates } from "./planner";
@@ -67,6 +74,13 @@ export interface PlacesFirstDeps {
   enrichment?: Omit<EnrichmentDeps, "now" | "budgetMs">;
   /** Default BATCH_REQUEST_BUDGET_MS. */
   budgetMs?: number;
+  /**
+   * Google price lookup for the price fallback. Providing it turns the fallback on.
+   * Default (when `priceFallback` is true): `fetchPlacePriceInfo` with `fetchImpl`.
+   */
+  fetchPriceInfo?: (placeId: string) => Promise<PlacePriceInfo | null>;
+  /** Turn the price fallback on with the default lookup. Absent or false without `fetchPriceInfo`: skipped. */
+  priceFallback?: boolean;
 }
 
 type Outcome = "ok" | "partial" | "unavailable" | "not-configured" | "timeout";
@@ -307,12 +321,59 @@ async function execute(
   }
   tally.enrichQueries = enrichment ? enrichment.queries : 0;
 
+  // 11b. Price fallback (Google price info, then AI estimate). Skipped unless enabled; never throws.
+  let fallback: FallbackOutcome | undefined;
+  if ((deps.fetchPriceInfo || deps.priceFallback === true) && deps.invokeModel) {
+    try {
+      const fetchPriceInfo =
+        deps.fetchPriceInfo ?? ((placeId: string) => fetchPlacePriceInfo(placeId, deps.fetchImpl));
+      const stopsIn: FallbackStopInput[] = [];
+      for (const d of mapInput) {
+        for (const s of d.stops) {
+          const c = s.candidate;
+          const cand = enrichment?.stops.get(c.placeId)?.candidate;
+          const p = enrichment?.stops.get(c.placeId)?.price;
+          if (p && !cand) continue; // accepted web price without cross-check need: no fallback
+          const meal = Boolean(mealKind(c));
+          const item: FallbackStopInput = {
+            placeId: c.placeId,
+            title: c.name,
+            day: d.day,
+            costClass: meal ? "meal" : "paid-sight",
+            costBasis: "person",
+            primaryType: c.primaryType ?? null,
+          };
+          if (cand) {
+            item.webCandidate = {
+              inr: cand.price.inr,
+              sourceUrl: cand.price.sourceUrl,
+              sourceHost: cand.price.sourceHost,
+              checkedAt: cand.price.checkedAt,
+              needsReference: cand.needsReference,
+            };
+          }
+          stopsIn.push(item);
+        }
+      }
+      if (stopsIn.length > 0 && remaining() >= MIN_STEP_MS) {
+        fallback = await applyPriceFallback(
+          stopsIn,
+          { destination, budgetLevel: context.budgetLevel },
+          { fetchPriceInfo, invokeModel: deps.invokeModel, now, remainingMs: remaining },
+        );
+      }
+    } catch {
+      fallback = undefined;
+    }
+  }
+
   // 12. Map and stats.
   const mapped = mapDays({
     days: mapInput,
     enrichment: enrichment?.stops,
     sources: enrichment?.sources,
     enrichmentUnavailable: enrichment?.unavailable === true,
+    fallback,
     startDate: req.startDate,
     destination,
     flightDate: context.selectedFlight?.date,

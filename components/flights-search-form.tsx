@@ -21,6 +21,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { validateFlights, type FlightsCriteria, type FlightTripType } from "@/lib/search-criteria";
 import { buildResultsHref } from "@/lib/results-view";
+import { airportCandidates } from "@/lib/destination-airports";
+import { PlaceSuggestInput } from "@/components/place-suggest-input";
+
+/** Static airport, city and country candidates for typo suggestions. */
+const PLACE_CANDIDATES = airportCandidates();
 
 export interface FlightsSearchFormProps {
   /** Today's date (YYYY-MM-DD, IST) computed on the server; earliest departure. */
@@ -151,20 +156,20 @@ export default function FlightsSearchForm({ today, initial, keep, compact }: Fli
         </label>
       </fieldset>
       <div className="flights-search__fields">
-        <label className="field flights-search__origin">
-          <span>From</span>
-          <input
-            type="text"
+        <div className="field flights-search__origin">
+          <PlaceSuggestInput
+            id="flights-origin"
             name="origin"
+            label="From"
             placeholder="City or airport, e.g. Mumbai (BOM)"
-            autoComplete="off"
             value={origin}
-            aria-invalid={!!errors.origin}
-            aria-describedby={errors.origin ? "flights-err-origin" : undefined}
-            onChange={(e) => edit(setOrigin)(e.target.value)}
+            onChange={edit(setOrigin)}
+            candidates={PLACE_CANDIDATES}
+            errorId={errors.origin ? "flights-err-origin" : undefined}
+            ariaInvalid={!!errors.origin}
           />
           {errors.origin && <small id="flights-err-origin" className="field-error">{errors.origin}</small>}
-        </label>
+        </div>
         <button
           type="button"
           className="flights-search__swap"
@@ -173,22 +178,22 @@ export default function FlightsSearchForm({ today, initial, keep, compact }: Fli
         >
           {"\u21C4"}
         </button>
-        <label className="field flights-search__destination">
-          <span>To</span>
-          <input
-            type="text"
+        <div className="field flights-search__destination">
+          <PlaceSuggestInput
+            id="flights-destination"
             name="destination"
+            label="To"
             placeholder="City or airport, e.g. Goa (GOI)"
-            autoComplete="off"
             value={destination}
-            aria-invalid={!!errors.destination}
-            aria-describedby={errors.destination ? "flights-err-destination" : undefined}
-            onChange={(e) => edit(setDestination)(e.target.value)}
+            onChange={edit(setDestination)}
+            candidates={PLACE_CANDIDATES}
+            errorId={errors.destination ? "flights-err-destination" : undefined}
+            ariaInvalid={!!errors.destination}
           />
           {errors.destination && (
             <small id="flights-err-destination" className="field-error">{errors.destination}</small>
           )}
-        </label>
+        </div>
         <label className="field">
           <span>Depart</span>
           <input

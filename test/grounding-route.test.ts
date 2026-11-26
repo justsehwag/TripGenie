@@ -377,7 +377,16 @@ describe("itinerary route (places-first)", () => {
     invoke.mockImplementation(async (p: { user: string }) => goodPolish(p));
     const body = await (await POST(legacyPost())).json();
     expect(body.sources).toBeUndefined();
-    expect(invoke).toHaveBeenCalledTimes(1);
+    // One polish call; any other call is a price-estimate call from price-fallback.ts
+    // (one per day, temperature 0.1). Estimates never contribute sources.
+    const isEstimate = (c: unknown[]): boolean => {
+      const p = c[0] as { system: string; temperature?: number };
+      return p.temperature === 0.1 && p.system.includes("estimate a typical price in Indian rupees");
+    };
+    const estimateCalls = invoke.mock.calls.filter(isEstimate).length;
+    const polishCalls = invoke.mock.calls.length - estimateCalls;
+    expect(polishCalls).toBe(1);
+    expect(estimateCalls).toBeLessThanOrEqual(1); // durationDays: 1
     const prompt = promptText(0);
     expect(prompt).not.toContain(GROUNDING_OPEN);
     const days = body.itinerary.days as DayLike[];

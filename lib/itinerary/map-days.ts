@@ -10,6 +10,7 @@ import type { PlaceCandidate } from "../providers/google-places";
 import { MAX_SOURCES } from "../grounding/sources";
 import type { Activity, SourceLink, TripDay } from "../types";
 import type { EnrichedStop } from "./enrichment";
+import type { FallbackOutcome } from "./price-fallback";
 import { buildMapsUrl } from "./maps-link";
 import { MAX_PHOTOS_PER_STOP, TITLE_CHARS } from "./constants";
 import { nameKey } from "./place-key";
@@ -42,6 +43,11 @@ export interface MapDaysInput {
   flightDate?: string;
   /** EnrichmentResult.unavailable: every sent search failed. Marks unchecked stops. */
   enrichmentUnavailable?: boolean;
+  /**
+   * Price fallback outcome. A placeId in `unverified` keeps cost 0 and no priceSource;
+   * every Stop with an entry in `fallback` gets `priceFallback`.
+   */
+  fallback?: FallbackOutcome;
 }
 
 export interface MapDaysResult {
@@ -122,7 +128,7 @@ export function mapDays(input: MapDaysInput): MapDaysResult {
       const sc = s.scheduled!;
       const name = sanitizeDisplayText(c.name, PLACE_CHARS);
       const e = input.enrichment?.get(c.placeId);
-      const price = e?.price;
+      const price = input.fallback?.unverified.has(c.placeId) ? undefined : e?.price;
       const act: Activity = {
         time: hhmm(sc.startMin),
         title: name,
@@ -169,6 +175,8 @@ export function mapDays(input: MapDaysInput): MapDaysResult {
       } else {
         dayUnpriced += 1;
       }
+      const fb = input.fallback?.fallback.get(c.placeId);
+      if (fb) act.priceFallback = fb;
       for (const k of ["tip", "booking", "bestTime"] as const) {
         const w = e?.webDetails[k];
         if (w) used.add(w.sourceUrl);

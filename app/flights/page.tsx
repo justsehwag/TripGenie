@@ -4,13 +4,15 @@ import { checkedLabel, todayIst } from "@/lib/ist-time";
 import { searchFlightFares } from "@/lib/providers/serpapi-flights";
 import {
   classifyFlightAvailability,
-  unresolvedSides,
   GROUND_TRANSPORT_NOTE,
   NO_FLIGHTS_FOR_DATES,
 } from "@/lib/flight-availability";
 import { decideFlightsView, parseFlightSort } from "@/lib/flight-list";
+import { resolveAirport } from "@/lib/airports";
+import { resolveDestination, type ResolvedDestination } from "@/lib/destination-airports";
+import { mergeByAirport, type AirportSearch } from "@/lib/flight-groups";
+import FlightGroupsList from "@/components/flight-groups-list";
 import PrefillFromContext from "@/components/prefill-from-context";
-import FlightCoupons from "@/components/flight-coupons";
 import FlightsSearchForm from "@/components/flights-search-form";
 import FlightOptionsList from "@/components/flight-options-list";
 import type { FlightBookingCriteria } from "@/components/flight-booking-panel";
@@ -30,7 +32,7 @@ export const metadata: Metadata = { title: "Flights - Tripsaathi AI" };
  *        "list"        -> FlightOptionsList with provenance (12.x, 13.x)
  *
  * No estimated fares are ever rendered here (Req 13.4). The compact form is
- * wrapped in #flight-search and FlightCoupons is kept (Req 12.12).
+ * wrapped in #flight-search. No coupon strip is rendered on this page.
  */
 
 /** True when a string is a real YYYY-MM-DD date. */
@@ -150,30 +152,210 @@ export default async function FlightsResultsPage({
     </section>
   );
 
+  // Resolve typed places. `exact=1` (the "search what I typed" link) skips correction.
+  const exactRaw = Array.isArray(raw.exact) ? raw.exact[0] : raw.exact;
+  const resolveSide = (text: string): ResolvedDestination => {
+    if (exactRaw !== "1") return resolveDestination(text);
+    const code = resolveAirport(text);
+    const typed = text.trim();
+    return code
+      ? { kind: "airport", code, typed }
+      : { kind: "unresolved", typed, suggestions: [] };
+  };
+  const originRes = resolveSide(criteria.origin);
+  const destRes = resolveSide(criteria.destination);
+
+  /** Link back to this page with one field replaced. */
+  const hrefWith = (key: "origin" | "destination", value: string, exact: boolean) => {
+    const p = new URLSearchParams(qs);
+    p.set(key, value);
+    if (exact) p.set("exact", "1");
+    else p.delete("exact");
+    return `/flights?${p.toString()}`;
+  };
+
   // Pre-check: an unresolvable place means no provider call at all.
-  const pre = classifyFlightAvailability(criteria.origin, criteria.destination);
-  if (pre === "no-airport") {
-    const sides = unresolvedSides(criteria.origin, criteria.destination);
-    const names = sides.map((s) => (s === "origin" ? criteria.origin : criteria.destination).trim() || s);
+  if (originRes.kind !== "airport" || destRes.kind === "unresolved") {
+    const names: string[] = [];
+    if (originRes.kind !== "airport") names.push(criteria.origin.trim() || "origin");
+    if (destRes.kind === "unresolved") names.push(criteria.destination.trim() || "destination");
+    const suggestions = [
+      ...(originRes.kind === "unresolved"
+        ? originRes.suggestions.map((s) => ({ side: "origin" as const, label: s.label }))
+        : []),
+      ...(destRes.kind === "unresolved"
+        ? destRes.suggestions.map((s) => ({ side: "destination" as const, label: s.label }))
+        : []),
+    ];
     return (
       <main className="shell results">
         {header("No flights for this route")}
         {compactForm}
-        <FlightCoupons />
         <section className="card live-hotel-notice" role="status">
           <p>{GROUND_TRANSPORT_NOTE}</p>
           <p>
             We couldn&rsquo;t find an airport for {names.join(" or ")}.{" "}
             <a href="#flight-search">Edit your search</a>
           </p>
+          {suggestions.length > 0 && (
+            <p>
+              Did you mean{" "}
+              {suggestions.map((s, i) => (
+                <span key={`${s.side}-${s.label}`}>
+                  {i > 0 ? ", " : ""}
+                  <a href={hrefWith(s.side, s.label, false)}>{s.label}</a>
+                </span>
+              ))}
+              ?
+            </p>
+          )}
         </section>
       </main>
     );
   }
 
+  const originCode = originRes.code;
+
+  // Correction_Notice: what was searched, what was typed, and a link to search the typed text as is.
+  const noticeParts: { text: string; typed: string; side: "origin" | "destination" }[] = [];
+  if (originRes.corrected) {
+    noticeParts.push({
+      text: `Showing flights from ${originRes.corrected.label} (${originCode}).`,
+      typed: originRes.typed,
+      side: "origin",
+    });
+  }
+  if (destRes.kind === "country") {
+    noticeParts.push({
+      text: `Showing flights to ${destRes.country} (${destRes.airports
+        .filter((a) => a.code !== originCode)
+        .map((a) => a.code)
+        .join(", ")}).`,
+      typed: destRes.typed,
+      side: "destination",
+    });
+  } else if (destRes.corrected) {
+    noticeParts.push({
+      text: `Showing flights to ${destRes.corrected.label} (${destRes.code}).`,
+      typed: destRes.typed,
+      side: "destination",
+    });
+  }
+  const correctionNotice =
+    noticeParts.length > 0 ? (
+      <div className="card flight-notice" role="status">
+        {noticeParts.map((n) => (
+          <p key={n.side}>
+            {n.text} You typed &lsquo;{n.typed}&rsquo;.{" "}
+            <a href={hrefWith(n.side, n.typed, true)}>Search &lsquo;{n.typed}&rsquo; instead</a>
+          </p>
+        ))}
+      </div>
+    ) : null;
+
+  const roundTripCountry = criteria.tripType === "round-trip";
+  if (destRes.kind === "country") {
+    const airports = destRes.airports.filter((a) => a.code !== originCode).slice(0, 4);
+    if (airports.length === 0) {
+      return (
+        <main className="shell results">
+          {header("No flights for this route")}
+          {compactForm}
+          <section className="card live-hotel-notice" role="status">
+            <p>{GROUND_TRANSPORT_NOTE}</p>
+            <p>
+              <a href="#flight-search">Edit your search</a>
+            </p>
+          </section>
+        </main>
+      );
+    }
+    const results = await Promise.all(
+      airports.map((a) =>
+        searchFlightFares({
+          origin: originCode,
+          destination: a.code,
+          tripType: criteria.tripType,
+          departDate: criteria.departDate,
+          returnDate: criteria.returnDate,
+          cabin: criteria.cabin,
+          adults: criteria.travellers,
+        }),
+      ),
+    );
+    const searches: AirportSearch[] = results.map((r, i) => ({
+      code: airports[i].code,
+      city: airports[i].city,
+      name: airports[i].name,
+      status: r.status,
+      flights: r.flights,
+      error: r.error,
+    }));
+    const merged = mergeByAirport(searches);
+    const first = results[0];
+    const routeText = `${originCode} → ${destRes.country}`;
+
+    if (merged.total === 0) {
+      const firstFailed = results.find((r) => r.status !== "live");
+      const allFailed = merged.failed.length === airports.length;
+      return (
+        <main className="shell results">
+          {header(allFailed ? `Flights for ${routeText}` : `No flights found for ${routeText}`)}
+          {compactForm}
+          {correctionNotice}
+          <section className="card live-hotel-notice" role="status">
+            <p>
+              {allFailed && firstFailed
+                ? liveNotice(firstFailed.status, firstFailed.error)
+                : NO_FLIGHTS_FOR_DATES}
+            </p>
+            <p>
+              <a href="#flight-search">{allFailed ? "Edit your search" : "Change dates"}</a>
+            </p>
+          </section>
+        </main>
+      );
+    }
+
+    const countryCriteria: FlightBookingCriteria = {
+      origin: originCode,
+      destination: airports[0].code,
+      tripType: criteria.tripType,
+      departDate: criteria.departDate,
+      returnDate: criteria.returnDate ?? null,
+      cabin: criteria.cabin,
+      travellers: criteria.travellers,
+    };
+    const total = merged.total;
+    return (
+      <main className="shell results">
+        {header(
+          `${total} ${total === 1 ? "flight" : "flights"} with live fares for ${routeText}`,
+          `${routeText} · ${total} ${total === 1 ? "flight" : "flights"} · ${
+            roundTripCountry ? "Round-trip" : "One-way"
+          } · ${criteria.cabin} · ${travellers} ${travellers === 1 ? "traveller" : "travellers"}`,
+        )}
+        {compactForm}
+        {correctionNotice}
+        <FlightGroupsList
+          merged={merged}
+          criteria={countryCriteria}
+          travellers={travellers}
+          roundTrip={roundTripCountry}
+          provider={first.provider}
+          checkedAt={first.checkedAt}
+          checkedLabel={checkedLabel(first.checkedAt)}
+          initialSort={sort}
+        />
+      </main>
+    );
+  }
+
+  const destCode = destRes.code;
+
   const live = await searchFlightFares({
-    origin: criteria.origin,
-    destination: criteria.destination,
+    origin: originCode,
+    destination: destCode,
     tripType: criteria.tripType,
     departDate: criteria.departDate,
     returnDate: criteria.returnDate,
@@ -181,7 +363,7 @@ export default async function FlightsResultsPage({
     adults: criteria.travellers,
   });
 
-  const availability = classifyFlightAvailability(criteria.origin, criteria.destination, {
+  const availability = classifyFlightAvailability(originCode, destCode, {
     status: live.status,
     flightCount: live.flights.length,
   });
@@ -191,14 +373,13 @@ export default async function FlightsResultsPage({
     flightCount: live.flights.length,
   });
 
-  const routeLabel = `${live.route.origin || criteria.origin} → ${live.route.destination || criteria.destination}`;
+  const routeLabel = `${live.route.origin || originCode} → ${live.route.destination || destCode}`;
 
   if (kind === "ground-note") {
     return (
       <main className="shell results">
         {header("No flights for this route")}
         {compactForm}
-        <FlightCoupons />
         <section className="card live-hotel-notice" role="status">
           <p>{GROUND_TRANSPORT_NOTE}</p>
           <p>
@@ -214,7 +395,7 @@ export default async function FlightsResultsPage({
       <main className="shell results">
         {header(`No flights found for ${routeLabel}`)}
         {compactForm}
-        <FlightCoupons />
+        {correctionNotice}
         <section className="card live-hotel-notice" role="status">
           <p>{NO_FLIGHTS_FOR_DATES}</p>
           <p>
@@ -230,7 +411,7 @@ export default async function FlightsResultsPage({
       <main className="shell results">
         {header(`Flights for ${routeLabel}`)}
         {compactForm}
-        <FlightCoupons />
+        {correctionNotice}
         <p className="card live-hotel-notice" role="status">
           {liveNotice(live.status, live.error)}
         </p>
@@ -239,8 +420,8 @@ export default async function FlightsResultsPage({
   }
 
   const bookingCriteria: FlightBookingCriteria = {
-    origin: criteria.origin,
-    destination: criteria.destination,
+    origin: originCode,
+    destination: destCode,
     tripType: criteria.tripType,
     departDate: criteria.departDate,
     returnDate: criteria.returnDate ?? null,
@@ -258,7 +439,7 @@ export default async function FlightsResultsPage({
         } · ${criteria.cabin} · ${travellers} ${travellers === 1 ? "traveller" : "travellers"}`,
       )}
       {compactForm}
-      <FlightCoupons />
+      {correctionNotice}
       <FlightOptionsList
         flights={live.flights}
         criteria={bookingCriteria}

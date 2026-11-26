@@ -13,6 +13,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { serializeCriteria, validateStays, type StaysCriteria } from "@/lib/search-criteria";
+import { airportCandidates } from "@/lib/destination-airports";
+import { PlaceSuggestInput } from "@/components/place-suggest-input";
+
+/** Stable local suggestion list (airport cities and countries); Google Places adds more via `remote`. */
+const DESTINATION_CANDIDATES = airportCandidates();
 
 export interface StaysSearchFormProps {
   /** Today's date (YYYY-MM-DD, IST) computed on the server; earliest check-in. */
@@ -97,20 +102,21 @@ export default function StaysSearchForm({ today, initial, keep, compact }: Stays
         </div>
       )}
       <div className="stays-search__fields">
-        <label className="field stays-search__destination">
-          <span>Destination</span>
-          <input
-            type="text"
+        <div className="field stays-search__destination">
+          <PlaceSuggestInput
+            id="stays-destination"
             name="destination"
+            label="Destination"
             placeholder="City or area, e.g. Goa"
-            autoComplete="off"
             value={destination}
-            aria-invalid={!!errors.destination}
-            aria-describedby={errors.destination ? "stays-err-destination" : undefined}
-            onChange={(e) => edit(setDestination)(e.target.value)}
+            onChange={edit(setDestination)}
+            candidates={DESTINATION_CANDIDATES}
+            remote
+            errorId={errors.destination ? "stays-err-destination" : undefined}
+            ariaInvalid={!!errors.destination}
           />
           {errors.destination && <small id="stays-err-destination" className="field-error">{errors.destination}</small>}
-        </label>
+        </div>
         <label className="field">
           <span>Check-in</span>
           <input

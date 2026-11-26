@@ -32,27 +32,48 @@ export function AccountHero({
   title,
   subtitle,
   points = [],
+  query: queryProp,
+  onImageError,
+  onImageLoad,
+  media,
 }: {
   eyebrow: string;
   title: string;
   subtitle: string;
   points?: string[];
+  /** Optional externally-controlled query (welcome screen rotation). When
+   *  omitted, falls back to the internal random pick (unchanged behavior). */
+  query?: string;
+  /** Optional: called when the hero <img> fails to load. */
+  onImageError?: () => void;
+  /** Optional: called when the hero <img> finishes loading. */
+  onImageLoad?: () => void;
+  /** Optional: rendered in place of the photo layer when provided. */
+  media?: React.ReactNode;
 }) {
   // Choose the query on the client after mount (avoids SSR/CSR mismatch from
   // Math.random, and keeps the first paint a clean gradient).
-  const [query, setQuery] = useState<string>(HERO_QUERIES[0]);
+  const [query, setQuery] = useState<string>(queryProp ?? HERO_QUERIES[0]);
   useEffect(() => {
+    if (queryProp !== undefined) return; // externally controlled; skip random pick
     setQuery(HERO_QUERIES[Math.floor(Math.random() * HERO_QUERIES.length)]);
-  }, []);
+  }, [queryProp]);
+  useEffect(() => {
+    if (queryProp !== undefined) setQuery(queryProp);
+  }, [queryProp]);
   const { url, srcSet, alt, onError } = useDestinationImage(query, 0, "cover");
 
   return (
     <div className="account-cine" aria-hidden={!url ? undefined : undefined}>
       {/* Full-bleed photo (or animated gradient while loading). */}
       <div className="account-cine__media">
-        {url ? (
+        {media ? (
+          media
+        ) : url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="account-cine__img" src={url} srcSet={srcSet} alt={alt} onError={onError} />
+          <img className="account-cine__img" src={url} srcSet={srcSet} alt={alt}
+            onError={() => { onError(); onImageError?.(); }}
+            onLoad={() => onImageLoad?.()} />
         ) : (
           <div className="account-cine__placeholder" aria-hidden="true" />
         )}

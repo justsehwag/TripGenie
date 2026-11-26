@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthLanding from "@/components/auth-landing";
 import { AccountHero } from "@/components/account-hero";
+import { AccountRecentTrips } from "@/components/account-recent-trips";
 import type { IdentityProviderPolicy } from "@/lib/identity";
 import {
   fetchSession,
@@ -201,6 +202,7 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
             Sign in to earn XP. Guests do not earn or store XP.
           </p>
         )}
+        {user === null && <AccountRecentTrips signedIn={false} />}
         {user === null && <AccountPoints signedIn={false} />}
       </>
     );
@@ -278,6 +280,8 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
               </a>
             </li>
           </ul>
+
+          <AccountRecentTrips signedIn />
 
           <AccountPoints signedIn />
 
