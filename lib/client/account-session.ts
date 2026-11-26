@@ -6,6 +6,8 @@
  * cache `{ email, name? }`. Every storage access is guarded and never throws.
  */
 
+import { clearSessionHistory } from "../site-assistant/session-history";
+
 export const SESSION_KEY = "tripgenie.session";
 export const PREFERENCES_KEY = "tripgenie.preferences.v1";
 export const GUEST_HISTORY_KEY = "tripgenie.history.guest.v1";
@@ -164,6 +166,7 @@ export async function signOut(): Promise<void> {
 
 /** Clear the display cache and cached account data; keep preferences and guest history. */
 export function clearLocalAccountState(): void {
+  clearSessionHistory();
   const s = storage();
   if (!s) return;
   try { s.removeItem(SESSION_KEY); } catch { /* ignore */ }

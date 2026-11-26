@@ -116,6 +116,14 @@ export const COUNTRY_AIRPORTS: readonly CountryAirports[] = [
       { code: "BNE", city: "Brisbane", name: "Brisbane Airport" },
     ],
   },
+  {
+    country: "South Africa",
+    aliases: ["south africa"],
+    airports: [
+      { code: "JNB", city: "Johannesburg", name: "O. R. Tambo International" },
+      { code: "CPT", city: "Cape Town", name: "Cape Town International" },
+    ],
+  },
 ];
 
 export type ResolvedDestination =

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseRoute, emptyRouteState, routeConfirmed as _rc } from "@/lib/route-intake";
+import { decideLiveFaresFetch, resolvablePlace, isCurrentLiveKey } from "@/lib/live-fares-trigger";
 import { resolveTripLength } from "@/lib/itinerary/trip-length";
 import { resolveTripDates, endFromDays } from "@/lib/itinerary/trip-dates";
 import { durationFromText } from "@/lib/date-intake";
@@ -70,7 +71,7 @@ import { selectSlides, chooseDayMedia, formatTimeRange } from "@/lib/itinerary/c
 import { LIMIT_NOTE, dateSpanNotice, TOTAL_NOTE, activitiesLabel, progressText, verifiedLabel, stopsLabel, unpricedLabel, priceBadgeText, ACTIVITIES_WEB_ONLY_LABEL } from "@/lib/itinerary/labels";
 import { ItineraryFailure, ItineraryBanner, DayHero, StopMeta, PriceCellNote, PlaceholderCard } from "@/components/itinerary-parts";
 import type { SourceLink } from "@/lib/types";
-import TripAssistant from "@/components/trip-assistant";
+import { usePageAssistantContext } from "@/components/use-page-assistant-context";
 import { planHeading } from "@/lib/plan-heading";
 import { DidYouMeanHint } from "@/components/did-you-mean-hint";
 import type { AppliedEdit } from "@/lib/assistant/types";
@@ -376,6 +377,34 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   const [toast, setToast] = useState<ToastModel | null>(null);
   // Bumped per generate(): resets the Trip Assistant transcript and undo history.
   const assistantGenRef = useRef(0);
+  // Site-wide assistant: register the itinerary context (replaces the old TripAssistant mount).
+  const assistantDays = state?.itinerary?.days ?? [];
+  const assistantHasTrip = assistantDays.length > 0;
+  const assistantDest = (route.destination || sharedContext.context.destination || "").trim();
+  const assistantFirst = assistantDays[0]?.date;
+  const assistantLast = assistantDays[assistantDays.length - 1]?.date;
+  usePageAssistantContext({
+    page: assistantHasTrip ? "itinerary" : "general",
+    slot: "planner",
+    summary: assistantHasTrip
+      ? `Itinerary${assistantDest ? ` for ${assistantDest}` : ""}, ${assistantDays.length} day${assistantDays.length === 1 ? "" : "s"}${assistantFirst ? `, ${assistantFirst}${assistantLast && assistantLast !== assistantFirst ? ` to ${assistantLast}` : ""}` : ""}`
+      : "",
+    data: assistantHasTrip && state
+      ? {
+          itinerary: state.itinerary,
+          context: sharedContext.context,
+          estimate: (a: Parameters<typeof withEstimatedActivity>[0]) => withEstimatedActivity(a, route.destination || sharedContext.context.destination || "", usdInrRef.current, costOpts()),
+          profile: undefined,
+          resetKey: assistantGenRef.current,
+        }
+      : undefined,
+    actions: assistantHasTrip
+      ? {
+          onApply: (p: unknown) => { const { next, inverse } = p as { next: Itinerary; inverse: AppliedEdit }; applyAssistantProposal(next, inverse); },
+          onRestore: (prev: unknown) => restoreAssistantItinerary(prev as Itinerary),
+        }
+      : undefined,
+  });
   const startDateRef = useRef<HTMLInputElement | null>(null);
   const toastIdRef = useRef(0);
   const lastSavedFpRef = useRef<string | null>(null);
@@ -999,11 +1028,11 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
   const liveKeyRef = useRef<string>("");
   useEffect(() => {
     if (!state) return;
-    const dest = (route.destination || sharedContext.context.destination || "").trim();
-    const orig = (route.origin || sharedContext.context.origin || "").trim();
+    const dest = resolvablePlace(route.destination || sharedContext.context.destination || "");
+    const orig = resolvablePlace(route.origin || sharedContext.context.origin || "");
     const days = state.itinerary.days;
-    const checkIn = (days[0]?.date || "").trim();
-    const checkOut = (days[days.length - 1]?.date || "").trim();
+    const checkIn = (days[0]?.date || sharedContext.dates.checkIn || sharedContext.dates.departDate || "").trim();
+    const checkOut = (days[days.length - 1]?.date || sharedContext.dates.checkOut || sharedContext.dates.returnDate || "").trim();
     const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
     const staysC = isDate(checkIn) && isDate(checkOut) && checkOut > checkIn && dest
       ? serializeCriteria({ category: "stays", destination: dest, checkIn, checkOut, guests: travellersCount, rooms: roomsCount })
@@ -1034,12 +1063,19 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
         note: "Add your travel dates and route in the chat to see live stays and flights for this trip." });
       return;
     }
-    const key = `${orig}|${dest}|${checkIn}|${checkOut}|${travellersCount}`;
+    const decision = decideLiveFaresFetch({ origin: orig, destination: dest, checkIn, checkOut, travellers: travellersCount });
+    if (decision.kind === "wait") {
+      setLive({ ...EMPTY_LIVE, status: "ready", staysHref, flightsHref,
+        note: "Add your travel dates and route in the chat to see live stays and flights for this trip." });
+      return;
+    }
+    const key = decision.key;
     if (liveKeyRef.current === key) return;
     liveKeyRef.current = key;
     // Route changed: forget the previous classification and refetch (Req 10.10).
     if (orig && dest && classifyFlightAvailability(orig, dest) !== "no-airport") { setFlightMode("unknown"); setFlightAvail(null); }
-    let cancelled = false;
+    // Responses are discarded by key (the route/dates changed), never by effect cleanup:
+    // a state change mid-flight must not drop this fetch (the key is already recorded).
     setLive((pv) => ({ ...pv, status: "loading", staysHref, flightsHref, note: null, nights, staysCriteria, flightsCriteria }));
     const qs = new URLSearchParams({ origin: orig, destination: dest, checkIn, checkOut, travellers: String(travellersCount), cabin: "economy", tripType: "round-trip" });
     fetch(`/api/trip-live?${qs.toString()}`, { cache: "no-store" })
@@ -1049,7 +1085,7 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
         flights?: { status: string; provider?: string; currency?: string; checkedAt?: string; insights?: PriceInsights | null; flights?: LiveFlight[]; error?: string } | null;
         flightAvailability?: FlightAvailability;
       }) => {
-        if (cancelled) return;
+        if (!mountedRef.current || !isCurrentLiveKey(liveKeyRef.current, key)) return;
         // Server classification is authoritative; flights is null for "no-airport".
         const av: FlightAvailability = data.flightAvailability === "no-airport" || data.flightAvailability === "no-flights"
           ? data.flightAvailability : "available";
@@ -1072,9 +1108,9 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
           insights: data.flights?.insights ?? null, staysCriteria, flightsCriteria,
         });
       })
-      .catch(() => { if (!cancelled) setLive((pv) => ({ ...pv, status: "error", staysHref, flightsHref, note: "Live prices are unavailable right now. Open the full search to try again." })); });
-    return () => { cancelled = true; };
-  }, [state, route.destination, route.origin, travellersCount, roomsCount, sharedContext.context.destination, sharedContext.context.origin]);
+      .catch(() => { if (mountedRef.current && isCurrentLiveKey(liveKeyRef.current, key)) setLive((pv) => ({ ...pv, status: "error", staysHref, flightsHref, note: "Live prices are unavailable right now. Open the full search to try again." })); });
+    return undefined;
+  }, [state, route.destination, route.origin, travellersCount, roomsCount, sharedContext.context.destination, sharedContext.context.origin, sharedContext.dates.departDate, sharedContext.dates.returnDate]);
 
   // Feed the cheapest live flight and stay into the Pricing Engine (real prices),
   // falling back to the base estimate when a live result is unavailable. Only INR
@@ -1989,16 +2025,6 @@ export default function Planner({ resultsOnly = false }: { resultsOnly?: boolean
             </section>
           </div>
         </div>
-      )}
-      {state && state.itinerary.days.length > 0 && (
-        <TripAssistant
-          itinerary={state.itinerary}
-          context={sharedContext.context}
-          resetKey={assistantGenRef.current}
-          onApply={applyAssistantProposal}
-          onRestore={restoreAssistantItinerary}
-          estimate={(a) => withEstimatedActivity(a, route.destination || sharedContext.context.destination || "", usdInrRef.current, costOpts())}
-        />
       )}
     </main>
   );

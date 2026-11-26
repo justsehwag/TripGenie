@@ -27,7 +27,9 @@ import { useRouter } from "next/navigation";
 
 import { useTripContext } from "@/components/trip-context";
 import { toStaysCriteria } from "@/lib/trip-context-map";
-import { serializeCriteria } from "@/lib/search-criteria";
+import { serializeCriteria, type StaysCriteria } from "@/lib/search-criteria";
+import { buildResultsHref } from "@/lib/results-view";
+import { usePageAssistantContext } from "@/components/use-page-assistant-context";
 
 export default function StaysPrefill() {
   const { context, dates } = useTripContext();
@@ -42,6 +44,28 @@ export default function StaysPrefill() {
     const query = serializeCriteria(toStaysCriteria(context, dates));
     return query ? `/stays?${query}` : "/stays";
   })();
+
+  // Site assistant: no results yet, so only setSearch is offered (Req 4.4).
+  usePageAssistantContext({
+    page: "stays",
+    slot: "search",
+    summary: "Stays search page with no search run yet.",
+    actions: {
+      setSearch: (params) => {
+        const p = (params ?? {}) as Record<string, unknown>;
+        if (typeof p.destination !== "string" || typeof p.checkIn !== "string" || typeof p.checkOut !== "string") return;
+        const next: StaysCriteria = {
+          category: "stays",
+          destination: p.destination,
+          checkIn: p.checkIn,
+          checkOut: p.checkOut,
+          guests: typeof p.guests === "number" ? p.guests : 1,
+          rooms: 1,
+        };
+        router.push(buildResultsHref("/stays", next));
+      },
+    },
+  });
 
   // Auto-run the search as soon as a trip is captured (no click). This renders
   // only on the no-search branch, so navigating to the prefilled URL re-renders

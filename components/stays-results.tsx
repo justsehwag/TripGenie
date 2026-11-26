@@ -22,7 +22,13 @@
  */
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { usePageAssistantContext } from "@/components/use-page-assistant-context";
+import { parseCriteria, type StaysCriteria } from "@/lib/search-criteria";
 import {
+  STAYS_SORTS,
+  MIN_RATINGS,
+  buildResultsHref,
   PAGE_SIZE,
   effectiveStaysView,
   filterStays,
@@ -159,6 +165,86 @@ export default function StaysResults(props: StaysResultsProps) {
   function showMore(): void {
     applyView({ ...view, show: view.show + PAGE_SIZE });
   }
+
+  // Site assistant context (Req 4.4, 10.7): criteria, view and up to 20 visible stays.
+  const router = useRouter();
+  const criteria = useMemo(
+    () => parseCriteria("stays", criteriaQuery) as StaysCriteria,
+    [criteriaQuery],
+  );
+  const visibleStays = useMemo(() => {
+    const names = new Map<string, string>();
+    if (live) for (const h of liveHotels ?? []) names.set(h.token, h.name);
+    else for (const o of estimateOffers ?? []) names.set(o.id, `${o.stayStyle} stay in ${o.destination}`);
+    return visible.slice(0, 20).map((item) => ({
+      name: names.get(item.key) ?? "Stay",
+      nightlyPrice: item.price,
+      currency,
+      priceLabel: live ? "live" : "estimated",
+    }));
+  }, [visible, live, liveHotels, estimateOffers, currency]);
+
+  usePageAssistantContext({
+    page: "stays",
+    slot: "results",
+    summary:
+      `Stays results for ${criteria.destination || "an unspecified destination"}, ` +
+      `${criteria.checkIn} to ${criteria.checkOut}, ${criteria.guests} guest(s). ` +
+      `Sorted by ${effView.sort}. Showing ${visibleStays.length} of ${filtered.length} stays ` +
+      `(${live ? "live prices" : "estimated prices"}).`,
+    data: {
+      criteria: {
+        destination: criteria.destination,
+        checkIn: criteria.checkIn,
+        checkOut: criteria.checkOut,
+        guests: criteria.guests,
+        rooms: criteria.rooms,
+      },
+      view: {
+        sort: effView.sort,
+        style: effView.style,
+        minPrice: effView.minPrice,
+        maxPrice: effView.maxPrice,
+        minRating: effView.minRating,
+        freeCancel: effView.freeCancel,
+      },
+      stays: visibleStays,
+    },
+    actions: {
+      setSearch: (params) => {
+        const p = (params ?? {}) as Record<string, unknown>;
+        const next: StaysCriteria = {
+          ...criteria,
+          destination: typeof p.destination === "string" ? p.destination : criteria.destination,
+          checkIn: typeof p.checkIn === "string" ? p.checkIn : criteria.checkIn,
+          checkOut: typeof p.checkOut === "string" ? p.checkOut : criteria.checkOut,
+          guests: typeof p.guests === "number" ? p.guests : criteria.guests,
+        };
+        const viewParams = serializeStaysView(view);
+        const previousHref = buildResultsHref("/stays", criteria, viewParams);
+        router.push(buildResultsHref("/stays", next, viewParams));
+        return { undo: () => router.push(previousHref) };
+      },
+      setSort: (params) => {
+        const sort = (params as { sort?: unknown } | null)?.sort;
+        if (!(STAYS_SORTS as readonly unknown[]).includes(sort)) return;
+        const previous = view;
+        applyView({ ...view, sort: sort as StaysView["sort"] });
+        return { undo: () => applyView(previous) };
+      },
+      setFilter: (params) => {
+        const p = (params ?? {}) as { maxPrice?: unknown; minRating?: unknown };
+        const next: StaysView = { ...view };
+        if (typeof p.maxPrice === "number" && p.maxPrice > 0) next.maxPrice = p.maxPrice;
+        if (typeof p.minRating === "number" && (MIN_RATINGS as readonly number[]).includes(p.minRating)) {
+          next.minRating = p.minRating as StaysView["minRating"];
+        }
+        const previous = view;
+        applyView(next);
+        return { undo: () => applyView(previous) };
+      },
+    },
+  });
 
   // Active filters (named for the empty state), and whether the Result_Set has
   // offers at all. An empty state only appears when filters hide a non-empty

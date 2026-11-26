@@ -14,6 +14,8 @@ import { mergeByAirport, type AirportSearch } from "@/lib/flight-groups";
 import FlightGroupsList from "@/components/flight-groups-list";
 import PrefillFromContext from "@/components/prefill-from-context";
 import FlightsSearchForm from "@/components/flights-search-form";
+import FlightsAssistantContext, { type AssistantFare } from "@/components/flights-assistant-context";
+import type { LiveFlight } from "@/lib/providers/serpapi-flights";
 import FlightOptionsList from "@/components/flight-options-list";
 import type { FlightBookingCriteria } from "@/components/flight-booking-panel";
 
@@ -54,6 +56,17 @@ function ensureFlightDates(departDate: string, returnDate: string | undefined, r
   let ret = returnDate;
   if (roundTrip) ret = isIsoDate(ret ?? "") && (ret as string) > dep ? (ret as string) : isoPlusDays(dep, 6);
   return { departDate: dep, returnDate: ret };
+}
+
+/** Compact fare records for the site assistant, from the flights the page renders. */
+function assistantFares(flights: readonly LiveFlight[]): AssistantFare[] {
+  return flights.slice(0, 100).map((f) => ({
+    airline: f.airlines.join(", ") || "Unknown airline",
+    stops: f.stops,
+    duration: `${Math.floor(f.durationMin / 60)}h ${f.durationMin % 60}m`,
+    price: f.farePerPerson,
+    priceLabel: `\u20B9${Math.round(f.farePerPerson).toLocaleString("en-IN")} per person`,
+  }));
 }
 
 type RawSearchParams = Record<string, string | string[] | undefined>;
@@ -107,6 +120,7 @@ export default async function FlightsResultsPage({
           <p className="eyebrow">Flights</p>
           <h1>Search flights</h1>
         </section>
+        <FlightsAssistantContext criteria={criteria} />
         <FlightsSearchForm today={today} />
         <section className="card results__empty">
           <PrefillFromContext category="flights" />
@@ -190,6 +204,7 @@ export default async function FlightsResultsPage({
     return (
       <main className="shell results">
         {header("No flights for this route")}
+        <FlightsAssistantContext criteria={criteria} fares={[]} note="No airport found for this route." />
         {compactForm}
         <section className="card live-hotel-notice" role="status">
           <p>{GROUND_TRANSPORT_NOTE}</p>
@@ -260,6 +275,7 @@ export default async function FlightsResultsPage({
       return (
         <main className="shell results">
           {header("No flights for this route")}
+          <FlightsAssistantContext criteria={criteria} fares={[]} note="No other airports in this country." />
           {compactForm}
           <section className="card live-hotel-notice" role="status">
             <p>{GROUND_TRANSPORT_NOTE}</p>
@@ -301,6 +317,11 @@ export default async function FlightsResultsPage({
       return (
         <main className="shell results">
           {header(allFailed ? `Flights for ${routeText}` : `No flights found for ${routeText}`)}
+          <FlightsAssistantContext
+            criteria={criteria}
+            fares={[]}
+            note={allFailed ? "Live fares unavailable." : "No flights found for these dates."}
+          />
           {compactForm}
           {correctionNotice}
           <section className="card live-hotel-notice" role="status">
@@ -335,6 +356,10 @@ export default async function FlightsResultsPage({
             roundTripCountry ? "Round-trip" : "One-way"
           } · ${criteria.cabin} · ${travellers} ${travellers === 1 ? "traveller" : "travellers"}`,
         )}
+        <FlightsAssistantContext
+          criteria={criteria}
+          fares={assistantFares(merged.groups.flatMap((g) => g.flights))}
+        />
         {compactForm}
         {correctionNotice}
         <FlightGroupsList
@@ -379,6 +404,7 @@ export default async function FlightsResultsPage({
     return (
       <main className="shell results">
         {header("No flights for this route")}
+        <FlightsAssistantContext criteria={criteria} fares={[]} note="No flights on this route; ground transport suggested." />
         {compactForm}
         <section className="card live-hotel-notice" role="status">
           <p>{GROUND_TRANSPORT_NOTE}</p>
@@ -394,6 +420,7 @@ export default async function FlightsResultsPage({
     return (
       <main className="shell results">
         {header(`No flights found for ${routeLabel}`)}
+        <FlightsAssistantContext criteria={criteria} fares={[]} note="No flights found for these dates." />
         {compactForm}
         {correctionNotice}
         <section className="card live-hotel-notice" role="status">
@@ -410,6 +437,7 @@ export default async function FlightsResultsPage({
     return (
       <main className="shell results">
         {header(`Flights for ${routeLabel}`)}
+        <FlightsAssistantContext criteria={criteria} fares={[]} note={liveNotice(live.status, live.error)} />
         {compactForm}
         {correctionNotice}
         <p className="card live-hotel-notice" role="status">
@@ -438,6 +466,7 @@ export default async function FlightsResultsPage({
           roundTrip ? "Round-trip" : "One-way"
         } · ${criteria.cabin} · ${travellers} ${travellers === 1 ? "traveller" : "travellers"}`,
       )}
+      <FlightsAssistantContext criteria={criteria} fares={assistantFares(live.flights)} />
       {compactForm}
       {correctionNotice}
       <FlightOptionsList

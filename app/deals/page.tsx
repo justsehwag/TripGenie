@@ -3,6 +3,7 @@ import DealsClient, {
   type DealsCategory,
   type EditorialItem,
 } from "@/components/deals-client";
+import DealsAssistantContext from "@/components/deals-assistant-context";
 import { buildCarOffers, buildFlightOffers, buildStayOffers } from "@/lib/inventory-adapter";
 import { applyPromotion } from "@/lib/promotions";
 import { serializeCriteria } from "@/lib/search-criteria";
@@ -242,6 +243,9 @@ export default function DealsPage() {
   const offers = buildOffers();
 
   return (
-    <DealsClient categories={CATEGORIES} editorial={editorial} offers={offers} />
+    <>
+      <DealsAssistantContext deals={offers.map((o) => ({ title: o.title, priceLabel: o.priceLabel }))} />
+      <DealsClient categories={CATEGORIES} editorial={editorial} offers={offers} />
+    </>
   );
 }

@@ -512,7 +512,7 @@ export default function TripAssistant({
         aria-controls={open ? PANEL_ID : undefined}
         onClick={() => (open ? collapse() : setOpen(true))}
       >
-        Trip assistant
+        Trip Saathi
       </button>
 
       {open ? (
@@ -522,12 +522,12 @@ export default function TripAssistant({
           className="trip-assistant__panel card"
           role={isMobile ? "dialog" : "region"}
           aria-modal={isMobile ? true : undefined}
-          aria-label="Trip assistant"
+          aria-label="Trip Saathi"
           onKeyDown={onPanelKeyDown}
         >
           <div className="trip-assistant__header">
             <div className="trip-assistant__title-block">
-              <h2 className="trip-assistant__title">Trip assistant</h2>
+              <h2 className="trip-assistant__title">Trip Saathi</h2>
               <span className="trip-assistant__ai-label">AI assistant</span>
             </div>
             <div className="trip-assistant__header-actions">
@@ -542,7 +542,7 @@ export default function TripAssistant({
                   Undo
                 </button>
               ) : null}
-              <button type="button" className="btn trip-assistant__collapse" aria-label="Collapse trip assistant" onClick={collapse}>
+              <button type="button" className="btn trip-assistant__collapse" aria-label="Collapse Trip Saathi" onClick={collapse}>
                 Close
               </button>
             </div>
@@ -644,7 +644,7 @@ export default function TripAssistant({
 
           <form className="trip-assistant__form" onSubmit={onSubmit}>
             <label className="trip-assistant__input-label" htmlFor={INPUT_ID}>
-              Message the trip assistant <span className="trip-assistant__ai-label">AI assistant</span>
+              Message Trip Saathi <span className="trip-assistant__ai-label">AI assistant</span>
             </label>
             <div className="trip-assistant__input-row">
               <input

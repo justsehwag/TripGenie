@@ -76,6 +76,8 @@ export const AIRPORTS: readonly AirportEntry[] = [
   { code: "CAI", names: ["cairo", "egypt"] },
   { code: "MRU", names: ["mauritius"] },
   { code: "SEZ", names: ["seychelles", "mahe"] },
+  { code: "CPT", names: ["cape town", "capetown"] },
+  { code: "JNB", names: ["johannesburg", "joburg"] },
 ];
 
 /** Trim, collapse internal whitespace runs and lower-case. */

@@ -46,6 +46,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import AuthLanding from "@/components/auth-landing";
+import { usePageAssistantContext } from "@/components/use-page-assistant-context";
 import { illustration } from "@/lib/illustrations";
 import type { IdentityProviderPolicy, IdentitySession } from "@/lib/identity";
 import type { StoredTrip } from "@/lib/trip-retention";
@@ -130,6 +131,27 @@ function bookingDetails(trip: StoredTrip): string | null {
   if (total) parts.push(/^[^0-9]/.test(total) ? total : `Total ${total}`);
 
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** Minimal, non-PII trip view for the site assistant (title, destination, dates, status). */
+function assistantTripSummary(trip: StoredTrip) {
+  const payload = (trip.payload ?? {}) as Record<string, unknown>;
+  const ctx =
+    payload.context !== null && typeof payload.context === "object"
+      ? (payload.context as Record<string, unknown>)
+      : {};
+  const dates =
+    payload.dates !== null && typeof payload.dates === "object"
+      ? (payload.dates as Record<string, unknown>)
+      : {};
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 120) : undefined);
+  return {
+    title: String(trip.name ?? "").slice(0, 120),
+    destination: str(ctx.destination),
+    startDate: str(dates.departDate) ?? str(dates.checkIn),
+    endDate: str(dates.returnDate) ?? str(dates.checkOut),
+    status: String(trip.status ?? "").slice(0, 40),
+  };
 }
 
 type LoadState =
@@ -239,6 +261,21 @@ export default function MyTripsClient({ providerPolicy, session }: MyTripsClient
     }
     return { bookings, itineraries };
   }, [trips]);
+
+  // Site-wide assistant context: up to 20 saved trips, no PII beyond
+  // title, destination, dates and status.
+  const assistantTrips = useMemo(
+    () => trips.slice(0, 20).map(assistantTripSummary),
+    [trips],
+  );
+  usePageAssistantContext({
+    page: "trips",
+    slot: "list",
+    summary: signedIn
+      ? `My Trips: ${assistantTrips.length} saved trip${assistantTrips.length === 1 ? "" : "s"}.`
+      : "My Trips: signed out, no trips shown.",
+    data: { trips: assistantTrips },
+  });
 
   // ── Owner-scoped Trip_Store actions (Req 27.4–27.7) ──────────────────────
 

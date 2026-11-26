@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shuffledPlaces, searchPlaces, type WorldPlace } from "@/lib/world-places";
 import { suggestReducer } from "@/lib/suggest-nav";
-import { didYouMean } from "@/lib/fuzzy-match";
+import { didYouMean } from "@/lib/fuzzy-match"; import { usePageAssistantContext } from "@/components/use-page-assistant-context";
 import { WORLD_PLACES } from "@/lib/world-places";
 
 /* ----------------------------- live data hooks --------------------------- */
@@ -543,6 +543,33 @@ export default function DiscoverSights() {
     }, 3500);
     return () => window.clearInterval(id);
   }, []);
+
+  const assistantVisible = (results ?? places).slice(0, 20);
+  usePageAssistantContext({
+    page: "discover",
+    slot: "sights",
+    summary: query.trim() ? `Discover places, searching "${query.trim()}"` : "Discover places",
+    data: {
+      query: query.trim(),
+      places: assistantVisible.map((p) => ({ id: p.id, name: p.name, country: p.country, category: p.tags && p.tags.length > 0 ? p.tags[0] : p.region })),
+    },
+    actions: {
+      searchPlace: (params: unknown) => {
+        const q = typeof (params as { query?: unknown } | null)?.query === "string" ? (params as { query: string }).query.trim() : "";
+        if (!q) return;
+        setQuery(q);
+        const local = searchPlaces(q);
+        setResults(null);
+        setOpen(local.length > 0 ? local[0] : makeQueryPlace(q));
+      },
+      openPlace: (params: unknown) => {
+        const id = typeof (params as { id?: unknown } | null)?.id === "string" ? (params as { id: string }).id : "";
+        const found = id ? (WORLD_PLACES.find((p) => p.id === id) ?? places.find((p) => p.id === id)) : undefined;
+        if (!found) return;
+        setOpen(found);
+      },
+    },
+  });
 
   function runSearch(e: React.FormEvent) {
     e.preventDefault();

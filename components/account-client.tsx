@@ -26,6 +26,7 @@ import {
   subscribeSession,
   type SessionUser,
 } from "@/lib/client/account-session";
+import { usePageAssistantContext } from "@/components/use-page-assistant-context";
 import { useSyncStatus } from "@/lib/client/use-sync-status";
 import { useAccountXp } from "@/lib/client/use-account-xp";
 import { LEVEL_BANDS, XP_POINTS, levelFor, type XpEvent } from "@/lib/gamification";
@@ -184,6 +185,20 @@ export default function AccountClient({ policy }: { policy: IdentityProviderPoli
       alive = false;
     };
   }, [signedInEmail]);
+
+  // Site assistant context: first name and signed-in state only (no email, no tokens).
+  const assistantSignedIn = !!user;
+  const assistantFirstName = user?.name?.trim().split(/\s+/)[0] ?? "";
+  usePageAssistantContext({
+    page: "account",
+    slot: "profile",
+    summary: assistantSignedIn
+      ? assistantFirstName
+        ? `Account page. Signed in as ${assistantFirstName}.`
+        : "Account page. Signed in."
+      : "Account page. The traveller is not signed in.",
+    data: { signedIn: assistantSignedIn, ...(assistantFirstName ? { firstName: assistantFirstName } : {}) },
+  });
 
   async function signOut() {
     await signOutAccount();

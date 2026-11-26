@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import "./globals.css";
 import GlobalNav from "@/components/global-nav";
+import SiteAssistant from "@/components/site-assistant";
 import SiteFooter from "@/components/site-footer";
 import SyncStatus from "@/components/sync-status";
 import { TripContextProvider } from "@/components/trip-context";
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <SyncStatus />
           {children}
           <SiteFooter providerPolicy={PROVIDER_POLICY} session={SESSION} />
+          <SiteAssistant />
         </TripContextProvider>
       </body>
     </html>
